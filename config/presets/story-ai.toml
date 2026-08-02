@@ -1,0 +1,38 @@
+# ฉบับสั้น 10–12 นาที แบ่งบทตามการเดินทาง — ใช้ AI ช่วยคัดและจัดลำดับ (Phase 4)
+#
+# ต่างจาก story-cut ตรงที่ story-cut คัดด้วย "ความหลากหลายของคำ + ความนิ่งของภาพ"
+# ซึ่งไม่รู้เรื่องราว ส่วนสูตรนี้ให้ AI อ่านคำพูดทั้งหมด + ดู contact sheet
+# แล้วบอกว่าเรื่องดำเนินไปยังไง ช็อตไหนเล่าอะไรใหม่ ช็อตไหนพูดวนซ้ำ
+#
+# ต้องทำตามลำดับ:
+#   ./vcut thumbs -c story-ai                        ← AI ต้องมีภาพดู
+#   ./vcut ai -c story-ai --goal "ตัดเหลือ 10 นาที เล่าตามลำดับการเดินทาง"
+#   ./vcut decide -c story-ai                        ← อ่าน ai.json ไม่เรียก AI ซ้ำ
+#
+# ปรับสูตรกี่รอบก็ได้โดยไม่เสียเงินเพิ่ม ตราบใดที่ไม่รัน `vcut ai` ใหม่
+
+extends = "story-cut"
+
+[project]
+name = "story-ai"
+
+[ai]
+enabled = true
+model   = "sonnet"
+tasks   = ["story_arc", "shot_scoring", "trim_suggest"]
+
+[ai.apply]
+order        = true
+drop         = true
+trim         = true
+score_weight = 0.6     # เชื่อ AI 60% ผสมกับคะแนนจากกฎอีก 40%
+
+[broll]
+# AI คัดช็อตวิวให้แล้วจากภาพจริง ตัวกรองด้วยตัวเลขจึงคลายลงได้
+# ไม่งั้นช็อตสวยที่บังเอิญ motion สูง (แพนช้า ๆ บนสันเขา) จะถูกทิ้งก่อน AI ได้เห็น
+drop_above_motion = 24.0
+drop_below_bright = 10.0
+
+[select]
+target_minutes = 10.5
+talk_ratio     = 0.78

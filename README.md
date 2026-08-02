@@ -32,7 +32,8 @@
 | `vcut scan` | ฟุตเทจ | `.vcut/manifest.json` | ffprobe + motion + ความสว่าง + ความดัง ทุกคลิป |
 | `vcut listen` | manifest | `.vcut/transcript.json` | แยกเสียง 16k → whisper.cpp → คำพูดพร้อมเวลา |
 | `vcut thumbs` | manifest | `.vcut/thumbs/` | ภาพตัวอย่าง + contact sheet 5×5 |
-| `vcut decide` | manifest + transcript | `.vcut/edl.json` | **★ ตัดสินใจว่าเอาช็อตไหน ยาวเท่าไร เรียงยังไง** |
+| `vcut ai` | manifest + transcript + sheets | `.vcut/ai.json` | ถาม AI: แบ่งบท · ให้คะแนนช็อต · ช่วงที่ควรเก็บ |
+| `vcut decide` | manifest + transcript (+ ai.json) | `.vcut/edl.json` | **★ ตัดสินใจว่าเอาช็อตไหน ยาวเท่าไร เรียงยังไง** |
 | `vcut render` | edl | `.vcut/segments/` | ตัด + แก้ภาพ/เสียงในพาสเดียว (cache ด้วย content hash) |
 | `vcut assemble` | segments | `final.mp4` | ต่อเป็นไฟล์เดียว ไม่เข้ารหัสซ้ำ |
 | `vcut gc` | — | — | ลบ segment ที่ EDL ปัจจุบันไม่ได้ใช้ |
@@ -154,6 +155,54 @@ gain = min( เป้าความดัง − ความดังจริ
 
 ---
 
+## AI — ชั้นที่ปรึกษา ไม่ใช่ชั้นที่ลงมือ
+
+กฎในเอนจินคัดช็อตได้ แต่ไม่รู้ว่าเรื่องเล่าถึงไหน — งานแบบ "เล่าตามลำดับการเดินทาง"
+หรือ "เอาช่วงที่พูดวนซ้ำออก" ต้องมีคนอ่านเนื้อหาจริง
+
+```bash
+./vcut thumbs -c story-ai                 # AI ต้องมีภาพดูก่อน
+./vcut ai -c story-ai --goal "ตัดเหลือ 10 นาที เล่าตามลำดับการเดินทาง"
+./vcut decide -c story-ai                 # อ่าน ai.json — ไม่เรียก AI ซ้ำ
+```
+
+**AI เขียนได้ไฟล์เดียวคือ `.vcut/ai.json`** ซึ่งเป็นความเห็นล้วน ๆ:
+
+```
+chapters[]        แบ่งบท + ลำดับคลิปในบท
+clips[].score     คะแนนความน่าเก็บ 0–1
+clips[].keep      ช่วงวินาทีที่ควรเก็บ
+clips[].drop      ควรทิ้งทั้งคลิป
+```
+
+`decide.py` เอาไปใช้ด้วยกฎที่เขียนตายตัวใน `[ai.apply]` ตัว AI ไม่เคยแตะ `edl.json` เอง
+
+| คีย์ | ทำอะไร |
+|---|---|
+| `order` | เรียงคลิปตามบทที่ AI แบ่ง (`false` = เรียงตาม `[order]` เหมือนเดิม) |
+| `drop` | ทิ้งคลิปที่ AI บอกว่าใช้ไม่ได้ |
+| `trim` | ช่วงพูด: ตัดร่วมกับ VAD · ช่วงวิว: AI เลือกตำแหน่ง **แต่กฎยังคุมความยาว** |
+| `score_weight` | น้ำหนักคะแนน AI ตอน `[select]` คัดช็อต (0 = กฎล้วน · 1 = AI ล้วน) |
+
+ผลที่ได้จึงยังคาดเดาได้:
+
+```
+รัน decide ซ้ำกี่ครั้งก็ไม่เสียเงินเรียก AI ใหม่   →  ปรับสูตรได้ฟรีไม่จำกัด
+commit ai.json เข้า git                        →  คนอื่นได้ผลเดียวกัน ไม่ต้องมี API key
+--set ai.enabled=false                         →  กลับไปเป็นผลของ Phase 3 เป๊ะ ๆ
+```
+
+AI เห็นแค่ **ข้อความ + contact sheet 11 ภาพ** — ไม่มีการส่งไฟล์วิดีโอออกไปไหน
+ทุกอย่างที่ส่งไปเก็บไว้อ่านย้อนหลังได้ที่ `.vcut/ai/<task>.prompt.md`
+
+### พิมพ์ในแชท Claude Code ก็ได้
+
+`.claude/skills/video-edit/SKILL.md` สอน Claude Code ให้แปลคำสั่งภาษาไทยเป็น
+คำสั่ง `vcut` ให้เอง — พิมพ์ว่า *"ตัดเหลือ 10 นาที เล่าตามลำดับการเดินทาง"*
+หรือ *"วิวติดกันเยอะไป"* แล้วมันจะเลือกคีย์ config ที่ถูกให้
+
+---
+
 ## cache
 
 ```
@@ -161,6 +210,8 @@ gain = min( เป้าความดัง − ความดังจริ
 ├─ manifest.json      คุณสมบัติคลิป — cache ด้วย (ขนาด + mtime)
 ├─ transcript.json    คำพูด — cache รายคลิป
 ├─ loudness.json      ผลวัดเสียงรายช่วง
+├─ ai.json            ★ ความเห็น AI (commit ได้)
+├─ ai/                prompt ที่ส่งไป + คำตอบดิบรายงาน
 ├─ edl.json           ★ สัญญากลาง
 ├─ render.json        map ชิ้น → ไฟล์ segment
 ├─ whisper/           ผลดิบจาก whisper.cpp

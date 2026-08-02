@@ -1,0 +1,95 @@
+---
+name: video-edit
+description: ตัดต่อวิดีโอจากฟุตเทจดิบทั้งโฟลเดอร์ด้วยเอนจิน vcut — ใช้เมื่อผู้ใช้พูดถึงการตัดต่อคลิป/ฟุตเทจ/วิดีโอเป็นภาษาไทยหรืออังกฤษ เช่น "ตัดเหลือ 10 นาที", "เล่าตามลำดับการเดินทาง", "ทำให้กระชับกว่านี้", "เอาช็อตสั่นออก", "แบ่งบท", "ปรับเสียงให้สม่ำเสมอ", "render ใหม่", "ต่อไฟล์", หรือขอแก้ EDL. Also triggers on "vcut", "edl.json", "contact sheet", "b-roll pacing".
+---
+
+# ตัดต่อวิดีโอด้วย vcut
+
+แปลงคำสั่งภาษาคนเป็นคำสั่ง `vcut` — **อย่าเขียนสคริปต์ ffmpeg เอง** เอนจินจัดการ
+rotation ผิด · คลิปกลับหัว · HEVC full range · fps ผสม · mono · เสียงเบา ให้หมดแล้ว
+
+## กฎเหล็ก 3 ข้อ
+
+1. **ไม่แก้ไฟล์ใน `vcut_engine/` เพื่อเปลี่ยนผลลัพธ์** — ทุกอย่างปรับได้จาก config
+   ถ้าคิดว่าต้องแก้โค้ด แปลว่ายังหาคีย์ config ไม่เจอ ให้รัน `./vcut config -c <preset>` ดูก่อน
+2. **`vcut ai` เสียเงินจริง · `vcut decide` ไม่เสีย** — ปรับสูตรกี่รอบก็ได้ด้วย `decide`
+   เรียก `ai` ใหม่เฉพาะเมื่อโจทย์การเล่าเรื่องเปลี่ยน
+3. **`render` ครั้งแรกใช้เวลา ~40 นาที** — บอกผู้ใช้ก่อนเสมอ ส่วน `assemble` ~1 นาที
+
+## ทำอะไรก่อน
+
+```bash
+./vcut info -c <preset>       # ดูก่อนทุกครั้ง — บอกว่าขั้นไหนทำไปแล้ว
+./vcut presets                # ดูสูตรที่มี
+./vcut config -c <preset>     # ดูค่า config ที่ merge เสร็จแล้ว
+```
+
+## แปลคำสั่ง → คำสั่ง vcut
+
+| ผู้ใช้พูดว่า | ทำอะไร |
+|---|---|
+| "ตัดเหลือ N นาที" | `decide --set select.enabled=true --set select.target_minutes=N` |
+| "เล่าตามลำดับการเดินทาง" / "แบ่งบท" | ต้องใช้ AI → ดูหัวข้อถัดไป |
+| "กระชับกว่านี้" / "ตัดถี่ขึ้น" | `--set talk.gap_merge=1.0 --set talk.min_shot=2.5` |
+| "อย่าตัดถี่" / "ให้พูดจบประโยค" | `--set talk.gap_merge=2.0 --set talk.min_shot=6.0` |
+| "เอาช็อตสั่นออก" | `--set broll.drop_above_motion=18` |
+| "วิวติดกันเยอะไป" | `--set broll.run_max=2` |
+| "วิวสั้นไป" | `--set broll.durations=5.0,4.0,2.0` (ต้องมี = motion_bands + 1 ค่า) |
+| "เสียงพูดดังไม่เท่ากัน" | `--set audio.compressor=true` หรือเพิ่ม `audio.allow_limit` |
+| "เสียงซ่า/มีลม" | `--set audio.denoise=true` |
+| "สลับลำดับ / เอาช็อตนี้ออก" | แก้ `.vcut/edl.json` ตรง ๆ แล้ว `assemble` — **ไม่ต้อง render ใหม่** |
+| "ดูผลก่อนได้ไหม" | `./vcut decide` แล้วอ่านสรุป — ยังไม่ต้อง render |
+
+หลังปรับค่าทุกครั้ง: `decide` → รายงานผล → ถามผู้ใช้ก่อนค่อย `render`
+
+## เมื่อโจทย์ต้องใช้ความเข้าใจเนื้อเรื่อง
+
+กฎในเอนจินไม่รู้ว่าเรื่องเล่าถึงไหน — คำขอพวกนี้ต้องผ่าน `vcut ai`:
+
+- "เล่าตามลำดับการเดินทาง" · "แบ่งเป็นบท" · "เอาช่วงที่พูดวนซ้ำออก"
+- "เก็บเฉพาะตอนที่เล่าอะไรใหม่" · "ช็อตไหนสวยที่สุด"
+
+```bash
+./vcut thumbs -c story-ai                    # ต้องมีก่อน AI ถึงจะเห็นภาพ
+./vcut ai -c story-ai --goal "<โจทย์ของผู้ใช้ คำต่อคำ>"
+./vcut decide -c story-ai                    # อ่าน ai.json ไม่เรียก AI ซ้ำ
+```
+
+`vcut ai` เขียนได้ไฟล์เดียวคือ `.vcut/ai.json` (บท · คะแนน 0–1 ต่อคลิป · ช่วงที่ควรเก็บ)
+การตัดสินใจจริงอยู่ที่ `decide.py` ตามกฎใน `[ai.apply]` — ปรับน้ำหนักได้:
+
+```bash
+./vcut decide -c story-ai --set ai.apply.score_weight=0.3   # เชื่อ AI น้อยลง
+./vcut decide -c story-ai --set ai.apply.order=false        # ไม่เอาลำดับบทของ AI
+./vcut decide -c story-ai --set ai.enabled=false            # ปิด AI กลับไปใช้กฎล้วน
+```
+
+เลือกเฉพาะบางงานได้: `--task story_arc` · `--task shot_scoring` · `--task trim_suggest`
+ทำใหม่ทั้งหมด: `-f`
+
+## ทำครบวงจร
+
+```bash
+./vcut run -c <preset> --ai --goal "<โจทย์>"    # scan → listen → ai → decide → render → assemble
+./vcut run -c <preset> --from decide             # ข้ามขั้นที่ทำไปแล้ว
+```
+
+## อ่านผลให้ผู้ใช้ฟัง
+
+หลัง `decide` สรุปให้ครบ 4 อย่าง: **ความยาวรวม · จำนวนชิ้น (พูด/วิว) · จำนวนบท ·
+แถววิวติดกันยาวสุด** ถ้ามีบรรทัด `SELECT ข้าม` แปลว่า `target_minutes` ไม่ได้ผล
+เพราะไทม์ไลน์สั้นกว่าเป้าอยู่แล้ว — บอกผู้ใช้ตรง ๆ อย่าปล่อยผ่าน
+
+`target_minutes` เป็น **เพดาน ไม่ใช่การรับประกัน** ถ้าได้สั้นกว่าเป้ามาก แปลว่า
+B-roll ที่ผ่านตัวกรองมีไม่พอ → เพิ่ม `select.talk_ratio` หรือคลาย
+`broll.drop_above_motion` / `broll.drop_below_bright`
+
+## ข้อควรระวัง
+
+- อย่าปิด `audio.limiter_level_disabled` — ออปชัน `level` ของ `alimiter` จะ
+  auto-normalize ทับค่า gain ที่คำนวณมา แล้ว true peak ทะลุ 0 dBFS
+- เปลี่ยนค่าใน `[encode]` แล้ว **ต้อง render ใหม่ทั้งหมด** เพราะ `assemble`
+  ต่อไฟล์แบบ stream copy ซึ่งต้องการพารามิเตอร์เดียวกันทุกชิ้น
+- `[listen] workers` ห้ามเกิน 1 บนเครื่อง RAM 8 GB
+- ดิสก์ต้องเหลือ > 5 GB ก่อน render (`vcut gc` ล้าง segment ที่ไม่ได้ใช้)
+- commit `.vcut/edl.json` + `.vcut/ai.json` เข้า git ได้ → reproduce ผลได้ 100%

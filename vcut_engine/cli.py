@@ -5,6 +5,7 @@
   scan     →  .vcut/manifest.json     คุณสมบัติทุกคลิป
   listen   →  .vcut/transcript.json   คำพูดพร้อมเวลา
   thumbs   →  .vcut/thumbs/           ภาพตัวอย่าง + contact sheet
+  ai       →  .vcut/ai.json           ความเห็น AI (บท · คะแนน · ช่วงที่ควรเก็บ)
   decide   →  .vcut/edl.json          ★ สัญญากลาง แก้ด้วยมือได้
   render   →  .vcut/segments/         ชิ้นที่ตัดแล้ว (cache ด้วย content hash)
   assemble →  final.mp4
@@ -15,7 +16,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import assemble, config, decide, listen, render, scan, thumbs
+from . import ai, assemble, config, decide, listen, render, scan, thumbs
 from .util import (c, die, disk_free_gb, hhmmss, info, read_json,
                    require_tools, warn)
 
@@ -25,6 +26,7 @@ USAGE = """vcut — ตัดต่อวิดีโออัตโนมัต
   vcut scan                       อ่านคุณสมบัติทุกคลิป
   vcut listen                     ถอดเสียง (whisper.cpp)
   vcut thumbs                     ภาพตัวอย่าง + contact sheet
+  vcut ai                         ถาม AI → .vcut/ai.json (บท · คะแนน · ช่วงที่ควรเก็บ)
   vcut decide                     สร้าง EDL ตามกติกาใน config
   vcut render                     ตัด+แก้ภาพ/เสียงเป็นชิ้น ๆ (มี cache)
   vcut assemble                   ต่อเป็นไฟล์เดียว
@@ -36,6 +38,9 @@ USAGE = """vcut — ตัดต่อวิดีโออัตโนมัต
   vcut run -c hiking-vlog
   vcut decide -c hiking-vlog --set broll.run_max=4 --set talk.min_shot=6
   vcut assemble -o cut_a.mp4          # ต่อใหม่จาก cache ไม่กี่วินาที
+
+  vcut ai -c story-ai --goal "ตัดเหลือ 10 นาที เล่าตามลำดับการเดินทาง"
+  vcut decide -c story-ai --ai         # ใช้ ai.json ที่มีอยู่ ไม่เรียก AI ซ้ำ
 """
 
 
@@ -53,19 +58,28 @@ def build_parser():
     ap.add_argument("-h", "--help", action="store_true")
     sub = ap.add_subparsers(dest="cmd")
 
-    for name in ("scan", "listen", "thumbs", "decide", "render", "assemble",
+    for name in ("scan", "listen", "thumbs", "ai", "decide", "render", "assemble",
                  "run", "info", "gc", "presets", "config"):
         p = sub.add_parser(name, add_help=False)
         p.add_argument("-h", "--help", action="store_true")
         add_common(p)
-        if name in ("scan", "listen", "render", "run"):
+        if name in ("scan", "listen", "ai", "render", "run"):
             p.add_argument("-f", "--force", action="store_true",
                            help="ไม่ใช้ cache ทำใหม่ทั้งหมด")
         if name in ("assemble", "run"):
             p.add_argument("-o", "--out", help="ไฟล์ผลลัพธ์")
+        if name in ("ai", "run"):
+            p.add_argument("--goal", default="",
+                           help="โจทย์ภาษาไทยที่จะบอก AI เช่น 'ตัดเหลือ 10 นาที'")
+            p.add_argument("--task", dest="tasks", action="append",
+                           choices=list(ai.TASKS),
+                           help="เลือกเฉพาะบางงานของ AI ใช้ซ้ำได้")
+        if name in ("decide", "run"):
+            p.add_argument("--ai", dest="use_ai", action="store_true",
+                           help="ใช้ความเห็นจาก .vcut/ai.json (= --set ai.enabled=true)")
         if name == "run":
             p.add_argument("--from", dest="start_at", default="scan",
-                           choices=["scan", "listen", "decide", "render", "assemble"],
+                           choices=["scan", "listen", "ai", "decide", "render", "assemble"],
                            help="เริ่มจากขั้นไหน (ข้ามขั้นก่อนหน้า)")
             p.add_argument("--no-thumbs", action="store_true")
         if name == "gc":
@@ -80,6 +94,8 @@ def make_ctx(args):
         sets.append(f"project.source={args.source}")
     if getattr(args, "work", None):
         sets.append(f"project.work={args.work}")
+    if getattr(args, "use_ai", False):
+        sets.append("ai.enabled=true")
     cfg = config.load(getattr(args, "config", None), sets)
     return config.Ctx(cfg)
 
@@ -90,6 +106,7 @@ def cmd_info(ctx):
     files = [
         ("manifest.json", ctx.manifest, "คุณสมบัติคลิป"),
         ("transcript.json", ctx.transcript, "คำพูด"),
+        ("ai.json", ctx.work / "ai.json", "ความเห็น AI"),
         ("edl.json", ctx.edl, "★ EDL"),
         ("render.json", ctx.work / "render.json", "รายการ segment"),
     ]
@@ -112,11 +129,18 @@ def cmd_info(ctx):
     if man:
         cl = man["clips"]
         info(f"      {len(cl)} คลิป · {sum(x['duration'] for x in cl) / 60:.1f} นาที")
+    adv = read_json(ctx.work / "ai.json")
+    if adv:
+        scored = sum(1 for v in adv.get("clips", {}).values() if "score" in v)
+        info(f"      AI {len(adv.get('chapters', []))} บท · ให้คะแนน {scored} คลิป"
+             + (f" · โจทย์: {adv['goal']}" if adv.get("goal") else ""))
     edl = read_json(ctx.edl)
     if edl:
         s = edl["summary"]
         info(f"      EDL {s['segments']} ชิ้น · {s['duration_total'] / 60:.1f} นาที "
              f"({s['segments_talk']} พูด + {s['segments_broll']} วิว)")
+        if edl.get("chapters"):
+            info(f"      แบ่งเป็น {len(edl['chapters'])} บท")
     if ctx.seg_dir.exists():
         segs = list(ctx.seg_dir.glob("*.mp4"))
         sz = sum(f.stat().st_size for f in segs) / 1e9
@@ -161,7 +185,7 @@ def cmd_presets():
 
 def cmd_run(ctx, args):
     t0 = time.time()
-    order = ["scan", "listen", "decide", "render", "assemble"]
+    order = ["scan", "listen", "ai", "decide", "render", "assemble"]
     start = order.index(args.start_at)
     steps = order[start:]
 
@@ -171,6 +195,8 @@ def cmd_run(ctx, args):
             thumbs.run(ctx)
     if "listen" in steps:
         listen.run(ctx, force=args.force)
+    if "ai" in steps and ctx.get("ai.enabled", False):
+        ai.run(ctx, tasks=args.tasks, goal=args.goal, force=args.force)
     if "decide" in steps:
         decide.run(ctx)
     if "render" in steps:
@@ -214,6 +240,8 @@ def main(argv=None):
         listen.run(ctx, force=args.force)
     elif args.cmd == "thumbs":
         thumbs.run(ctx)
+    elif args.cmd == "ai":
+        ai.run(ctx, tasks=args.tasks, goal=args.goal, force=args.force)
     elif args.cmd == "decide":
         decide.run(ctx)
     elif args.cmd == "render":

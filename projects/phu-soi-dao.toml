@@ -7,8 +7,8 @@ extends = "hiking-vlog"
 [project]
 name   = "phu-soi-dao"
 source = "/Users/macbook3lf1/web work/ตัดต่อ vido/vido"
-work   = "/Users/macbook3lf1/web work/โปรแกรม ตัดต่อ/.vcut"
-out    = "/Users/macbook3lf1/web work/โปรแกรม ตัดต่อ/final.mp4"
+work   = "/Users/macbook3lf1/web work/CutVideo-vcut_engine/.vcut"
+out    = "/Users/macbook3lf1/web work/CutVideo-vcut_engine/final.mp4"
 
 [listen]
 # มี transcript จากรอบก่อนอยู่แล้ว — ดึงมาใช้ ไม่ต้องถอดเสียงใหม่ 12 นาที

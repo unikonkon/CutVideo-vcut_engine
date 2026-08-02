@@ -162,8 +162,25 @@ sheet_cols = 5
 sheet_rows = 5           # 25 ภาพ/แผ่น → 273 คลิปเหลือ 11 แผ่นให้ AI ดู
 
 
-# ─────────────────────────── AI (Phase 4 — ยังไม่เปิด) ───────────────────────────
+# ─────────────────────────── AI ───────────────────────────
+# AI เขียนได้ไฟล์เดียวคือ .vcut/ai.json (ความเห็น: บท · คะแนน · ช่วงที่ควรเก็บ)
+# ส่วนที่เอาความเห็นไปใช้จริงคือ decide.py ตามกฎใน [ai.apply] ข้างล่าง
+# ปิด enabled เมื่อไหร่ ผลลัพธ์กลับไปเหมือน Phase 3 ทุกประการ
 [ai]
 enabled  = false
 provider = "claude_code_cli"
-model    = "sonnet"
+binary   = "claude"
+model    = "sonnet"         # sonnet = คุ้มสุดสำหรับงานนี้ | opus ถ้าอยากให้แบ่งบทละเอียดกว่า
+tasks    = ["story_arc", "shot_scoring", "trim_suggest"]
+timeout  = 2400             # วินาที ต่อหนึ่ง task — story_arc กับ 273 คลิปใช้ ~15 นาที
+sheets   = true             # ส่ง contact sheet ให้ AI ดูภาพด้วย (ต้องรัน vcut thumbs ก่อน)
+transcript_chars = 600      # ตัดคำพูดต่อคลิปไม่ให้ยาวเกินนี้ กันโปรมป์บวม
+allowed_tools   = "Read,Write"
+permission_mode = "acceptEdits"
+
+# กฎว่าจะเอาความเห็นของ AI ไปใช้แค่ไหน — ปรับได้ทีละข้อ
+[ai.apply]
+order        = true    # จัดลำดับคลิปตามบทที่ AI แบ่ง (false = เรียงตาม [order] เหมือนเดิม)
+drop         = true    # ทิ้งคลิปที่ AI บอกว่าใช้ไม่ได้
+trim         = true    # ใช้ช่วงที่ AI แนะนำ (ช่วงพูด = ตัดร่วมกับ VAD · วิว = เลือกตำแหน่ง)
+score_weight = 0.6     # น้ำหนักคะแนน AI ตอน [select] คัดช็อต (0 = กฎล้วน, 1 = AI ล้วน)
