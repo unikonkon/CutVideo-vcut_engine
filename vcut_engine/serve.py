@@ -313,6 +313,23 @@ def build_plan(ctx):
             "phases": settings.phase_view(ctx, ctx.cfg)}
 
 
+def build_review(ctx):
+    """ข้อเสนอล่าสุดของ AI ที่ดูหนังตัดแล้ว + บอกว่ามันเก่าไปหรือยัง
+
+    ถ้า EDL ถูกแก้หลังจากที่ AI ดู ตำแหน่งที่มันอ้างจะเลื่อนหมด — ต้องบอกให้รู้
+    ไม่ใช่ปล่อยให้กดรับแล้วไปตัดผิดช็อต
+    """
+    from . import review as rv
+    st = read_json(ctx.work / "review.json", {}) or {}
+    edl = read_json(ctx.edl, {}) or {}
+    tl = edl.get("timeline", [])
+    now = rv.fingerprint(tl) if tl else ""
+    st["stale"] = bool(st.get("ops") is not None and st.get("fingerprint") != now)
+    st["context_default"] = str(ctx.get("review.context", "") or "")
+    st["has"] = bool(st.get("version"))
+    return st
+
+
 def probe_dir(ctx, path):
     """ตรวจโฟลเดอร์ฟุตเทจให้ก่อนกดรัน scan จริง — เบราว์เซอร์เลือกโฟลเดอร์เองไม่ได้"""
     p = Path(path).expanduser()
@@ -420,6 +437,9 @@ def make_handler(ctx, job):
             if p == "/api/plan":
                 return self._json(build_plan(ctx))
 
+            if p == "/api/review":
+                return self._json(build_review(ctx))
+
             if p == "/api/probe_dir":
                 q = dict(x.split("=", 1) for x in u.query.split("&") if "=" in x)
                 return self._json(probe_dir(ctx, unquote(q.get("path", ""))))
@@ -509,6 +529,20 @@ def make_handler(ctx, job):
                     return self._json(settings.estimate(ctx2))
                 except SystemExit:
                     return self._json({"error": "ประเมินไม่ได้ด้วยค่าชุดนี้"}, 400)
+
+            if p == "/api/review":
+                if job.running:
+                    return self._json({"error": "มีงานกำลังรันอยู่"}, 409)
+                if not ctx.edl.exists():
+                    return self._json({"error": "ยังไม่มี edl.json"}, 400)
+                argv = [sys.executable, str(ctx.launcher), "review"] + ctx.argv_tail
+                ctxt = str(payload.get("context") or "").strip()
+                if ctxt:
+                    argv += ["--context", ctxt]
+                if payload.get("force"):
+                    argv.append("--force")
+                job.start(argv, "review", ctx.launcher.parent)
+                return self._json({"ok": True})
 
             if p == "/api/job":
                 step = payload.get("step")

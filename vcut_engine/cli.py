@@ -16,8 +16,8 @@ import sys
 import time
 from pathlib import Path
 
-from . import (ai, assemble, config, decide, listen, render, scan, serve,
-               settings, thumbs)
+from . import (ai, assemble, config, decide, listen, render, review, scan,
+               serve, settings, thumbs)
 from .util import (c, die, disk_free_gb, hhmmss, info, read_json,
                    require_tools, warn)
 
@@ -31,6 +31,7 @@ USAGE = """vcut — ตัดต่อวิดีโออัตโนมัต
   vcut decide                     สร้าง EDL ตามกติกาใน config
   vcut render                     ตัด+แก้ภาพ/เสียงเป็นชิ้น ๆ (มี cache)
   vcut assemble                   ต่อเป็นไฟล์เดียว
+  vcut review                     ให้ AI ดูหนังที่ตัดแล้ว → เสนอให้เอาออก/สลับที่
   vcut view                       เปิดหน้าเว็บดู/แก้ EDL ในเครื่อง
   vcut info                       สรุปสถานะโปรเจกต์
   vcut presets                    ดู preset ที่มี
@@ -61,7 +62,7 @@ def build_parser():
     sub = ap.add_subparsers(dest="cmd")
 
     for name in ("scan", "listen", "thumbs", "ai", "decide", "render", "assemble",
-                 "view", "run", "info", "gc", "presets", "config"):
+                 "review", "view", "run", "info", "gc", "presets", "config"):
         p = sub.add_parser(name, add_help=False)
         p.add_argument("-h", "--help", action="store_true")
         add_common(p)
@@ -70,6 +71,11 @@ def build_parser():
                            help="ไม่ใช้ cache ทำใหม่ทั้งหมด")
         if name in ("assemble", "run"):
             p.add_argument("-o", "--out", help="ไฟล์ผลลัพธ์")
+        if name == "review":
+            p.add_argument("--context", default="",
+                           help="บอก AI ว่าอยากให้ดูอะไรเป็นพิเศษ")
+            p.add_argument("-f", "--force", action="store_true",
+                           help="ถามใหม่แม้ EDL กับโจทย์ไม่เปลี่ยน")
         if name in ("ai", "run"):
             p.add_argument("--goal", default="",
                            help="โจทย์ภาษาไทยที่จะบอก AI เช่น 'ตัดเหลือ 10 นาที'")
@@ -279,6 +285,8 @@ def main(argv=None):
         render.run(ctx, force=args.force)
     elif args.cmd == "assemble":
         assemble.run(ctx, out=args.out)
+    elif args.cmd == "review":
+        review.run(ctx, context=args.context, force=args.force)
     elif args.cmd == "view":
         serve.run(ctx, port=args.port, open_browser=not args.no_open,
                   config_args=config_args(args), config_name=args.config,

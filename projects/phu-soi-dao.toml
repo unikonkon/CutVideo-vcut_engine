@@ -16,3 +16,9 @@ import_dir = "/Users/macbook3lf1/web work/ตัดต่อ vido/v2_transcripts
 
 [render]
 min_free_gb = 4.0        # ดิสก์เหลือน้อย เตือนไว้ต่ำหน่อยแต่ยังกันพลาด
+
+[run]
+advise = true
+
+[ai]
+enabled = true

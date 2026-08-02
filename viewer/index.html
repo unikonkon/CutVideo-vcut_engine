@@ -97,6 +97,26 @@ video{width:100%;border-radius:5px;background:#000;display:block}
   background:var(--fg);color:var(--bg);padding:.55em 1.1em;border-radius:100px;
   font-size:13px;box-shadow:0 4px 20px rgba(0,0,0,.25)}
 .toast.err{background:var(--warn);color:#fff}
+
+/* แผง AI ติชมหนังที่ตัดแล้ว */
+textarea{width:100%;font:inherit;color:inherit;background:var(--bg);
+  border:1px solid var(--line);border-radius:5px;padding:.4em .55em;resize:vertical}
+textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.rvacts{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.5rem;align-items:center}
+.summary{font-size:12.5px;border-left:2px solid var(--accent);padding-left:.6rem;
+  margin:.6rem 0}
+.ops{display:flex;flex-direction:column;gap:.35rem;max-height:22em;overflow:auto;
+  margin-top:.5rem}
+.op{display:grid;grid-template-columns:auto 1fr;gap:.5rem;font-size:12px;
+  border:1px solid var(--line);border-radius:5px;padding:.4rem .5rem}
+.op.taken{opacity:.45;border-style:dashed}
+.op .t{font-weight:700}
+.op .t.drop{color:var(--warn)} .op .t.move{color:var(--accent)}
+.op .w{color:var(--dim);font-size:11.5px}
+.op .jump{background:none;border:0;color:var(--accent);cursor:pointer;padding:0;
+  font-size:11.5px;text-align:left}
+.stale{font-size:12px;color:var(--warn);border:1px solid var(--warn);
+  border-radius:5px;padding:.4em .6em;margin-top:.5rem}
 </style>
 </head>
 <body>
@@ -133,6 +153,15 @@ video{width:100%;border-radius:5px;background:#000;display:block}
   </section>
 
   <aside>
+    <div class="card">
+      <h3>ให้ AI ดูหนังที่ตัดแล้ว</h3>
+      <textarea id="ctx" rows="3" placeholder="อยากให้ดูอะไรเป็นพิเศษ? เช่น &quot;ช่วงกลางเรื่องยืดไป อยากได้กระชับกว่านี้&quot; · เว้นว่างก็ได้"></textarea>
+      <div class="rvacts">
+        <button id="analyze" class="primary">วิเคราะห์</button>
+        <span class="sub" id="rvmeta"></span>
+      </div>
+      <div id="rv"></div>
+    </div>
     <div class="card">
       <h3>ตัวอย่าง</h3>
       <div id="preview"><p class="empty">คลิกช็อตทางซ้าย</p></div>
@@ -175,6 +204,7 @@ async function load(){
   $('#title').textContent = S.project + (S.ai.goal ? ' · ' + S.ai.goal : '');
   $('#c-render').textContent = '';
   render();
+  loadReview();
 }
 
 function stats(){
@@ -433,12 +463,135 @@ async function poll(){
     el.scrollTop = el.scrollHeight;
   }
   $('#build').disabled = j.running;
+  $('#analyze').disabled = j.running;
   $('#build').textContent = j.running ? 'กำลังทำงาน…' : 'สร้างไฟล์';
+  $('#analyze').textContent = j.running && j.step === 'review' ? 'กำลังดู…' : 'วิเคราะห์';
   if (j.running) polling = setTimeout(poll, 700);
   else if (j.code === 0){ toast('เสร็จแล้ว'); load(); }
   else if (j.code != null) toast('งานล้มเหลว — ดูบันทึกการทำงาน', true);
 }
 
+// ── AI ติชมหนังที่ตัดแล้ว ────────────────────────────────────────
+//
+// AI เสนอได้แค่ "เอาออก" กับ "สลับที่" ซึ่งเป็นสองอย่างที่หน้านี้ทำได้อยู่แล้ว
+// การรับข้อเสนอจึงเป็นแค่การขยับ items ในเบราว์เซอร์ แล้วกดบันทึกตามปกติ
+// — ไม่มีเส้นทางเขียน EDL เส้นใหม่ ผู้ใช้เห็นผลในไทม์ไลน์ก่อนบันทึกเสมอ
+
+let RV = null, taken = new Set();
+
+async function loadReview(){
+  try { RV = await api('/api/review'); } catch(e){ return; }
+  if (RV.context_default && !$('#ctx').value) $('#ctx').value = RV.context_default;
+  renderReview();
+}
+
+function renderReview(){
+  const box = $('#rv'), meta = $('#rvmeta');
+  box.innerHTML = ''; meta.textContent = '';
+  if (!RV || !RV.has) return;
+
+  const ops = RV.ops || [];
+  meta.textContent = `${ops.length} ข้อเสนอ`
+    + (RV.cost_usd ? ` · เทียบเท่า $${RV.cost_usd.toFixed(2)}` : '');
+
+  if (RV.summary){
+    const p = document.createElement('div');
+    p.className = 'summary'; p.textContent = RV.summary;
+    box.appendChild(p);
+  }
+  if (RV.stale){
+    const w = document.createElement('div');
+    w.className = 'stale';
+    w.textContent = 'EDL เปลี่ยนไปหลังจาก AI ดู — ตำแหน่งที่มันอ้างเลื่อนไปแล้ว '
+                  + 'กดวิเคราะห์ใหม่ก่อนรับข้อเสนอ';
+    box.appendChild(w);
+    return;                       // ไม่ให้กดรับตอนตำแหน่งเลื่อน จะตัดผิดช็อต
+  }
+  if (!ops.length){
+    const p = document.createElement('p');
+    p.className = 'sub'; p.textContent = 'AI ไม่เสนอให้แก้อะไร';
+    box.appendChild(p);
+    return;
+  }
+
+  const list = document.createElement('div');
+  list.className = 'ops';
+  ops.forEach(o => {
+    const el = document.createElement('div');
+    el.className = 'op' + (taken.has(o.id) ? ' taken' : '');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.checked = !taken.has(o.id); cb.disabled = taken.has(o.id);
+    cb.dataset.id = o.id;
+    const mid = document.createElement('div');
+    const t = document.createElement('span');
+    t.className = 't ' + o.op;
+    t.textContent = o.op === 'drop' ? 'เอาออก' : `ย้ายไปที่ ${o.to + 1}`;
+    const jump = document.createElement('button');
+    jump.className = 'jump';
+    jump.textContent = `#${o.at + 1} ${o.name} · ${o.dur.toFixed(1)}ว`;
+    jump.onclick = () => { sel = o.at; render();
+      document.querySelectorAll('li.row')[o.at]?.scrollIntoView({block:'center'}); };
+    const w = document.createElement('div');
+    w.className = 'w'; w.textContent = o.why;
+    mid.append(t, document.createTextNode(' '), jump, w);
+    el.append(cb, mid);
+    list.appendChild(el);
+  });
+  box.appendChild(list);
+
+  const acts = document.createElement('div');
+  acts.className = 'rvacts';
+  const apply = document.createElement('button');
+  apply.textContent = 'ใส่ที่ติ๊กไว้';
+  apply.onclick = () => applyOps(list);
+  const none = document.createElement('button');
+  none.textContent = 'ล้างที่ติ๊ก';
+  none.onclick = () => list.querySelectorAll('input:not(:disabled)')
+                           .forEach(i => i.checked = false);
+  acts.append(apply, none);
+  box.appendChild(acts);
+}
+
+function applyOps(list){
+  const ids = [...list.querySelectorAll('input:checked')].map(i => +i.dataset.id);
+  const ops = (RV.ops || []).filter(o => ids.includes(o.id));
+  if (!ops.length) return toast('ยังไม่ได้ติ๊กข้อไหนเลย', true);
+
+  // ทำงานกับ "ตัวช็อต" ไม่ใช่ตำแหน่ง เพราะพอย้ายข้อแรกแล้วเลขตำแหน่งของข้อ
+  // ถัด ๆ ไปจะเลื่อนหมด — จับตัวไว้ก่อนค่อยลงมือทีเดียว
+  const bad = ops.filter(o => items[o.at]?.name !== o.name);
+  if (bad.length) return toast(`ตำแหน่งไม่ตรงกับตอนที่ AI ดู ${bad.length} ข้อ — วิเคราะห์ใหม่`, true);
+
+  const drops = ops.filter(o => o.op === 'drop');
+  const moves = ops.filter(o => o.op === 'move')
+                   .map(o => ({item: items[o.at], to: o.to}));
+  drops.forEach(o => { items[o.at].off = true; });
+  moves.sort((a, b) => a.to - b.to).forEach(({item, to}) => {
+    const from = items.indexOf(item);
+    if (from < 0) return;
+    items.splice(from, 1);
+    items.splice(Math.min(to, items.length), 0, item);
+  });
+
+  ops.forEach(o => taken.add(o.id));
+  sel = -1;
+  render(); renderReview();
+  toast(`ใส่แล้ว ${drops.length} เอาออก + ${moves.length} ย้าย — กดบันทึก EDL เพื่อยืนยัน`);
+}
+
+async function analyze(){
+  if (dirty() && !confirm('ยังไม่ได้บันทึก EDL — AI จะดูจากฉบับที่บันทึกไว้ ไปต่อไหม?')) return;
+  try {
+    await post('/api/review', {context: $('#ctx').value.trim()});
+    taken.clear();
+    logSince = 0; $('#log').textContent = '';
+    poll();
+  } catch(e){ toast(e.message, true); }
+}
+const post = (p, body) => api(p, {method:'POST', headers:{'Content-Type':'application/json'},
+                                  body: JSON.stringify(body || {})});
+
+$('#analyze').onclick = analyze;
 $('#save').onclick = save;
 $('#build').onclick = buildFromPlan;
 $('#reload').onclick = () => load().then(() => toast('โหลดใหม่แล้ว'));

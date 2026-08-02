@@ -262,14 +262,22 @@ def _extract_json(text):
     return None
 
 
-def call_claude(ctx, prompt, out_path):
-    """เรียก claude -p แบบไม่โต้ตอบ · คำตอบมาทางไฟล์ ถ้าไม่มีค่อยแกะจาก stdout"""
-    binary = ctx.get("ai.binary", "claude")
+def call_claude(ctx, prompt, out_path, section="ai"):
+    """เรียก claude -p แบบไม่โต้ตอบ · คำตอบมาทางไฟล์ ถ้าไม่มีค่อยแกะจาก stdout
+
+    section เลือกว่าอ่านค่าจาก [ai] หรือ [review] — สอง AI คนละบทบาท
+    ตั้งโมเดล/เวลารอคนละค่าได้ ค่าไหนไม่ได้ตั้งใน [review] จะตกมาใช้ของ [ai]
+    """
+    def cfg(key, default=None):
+        v = ctx.get(f"{section}.{key}")
+        return ctx.get(f"ai.{key}", default) if v is None or v == "" else v
+
+    binary = cfg("binary", "claude")
     cmd = [binary, "-p", "--output-format", "json"]
-    if ctx.get("ai.model"):
-        cmd += ["--model", str(ctx.get("ai.model"))]
-    cmd += ["--permission-mode", str(ctx.get("ai.permission_mode", "acceptEdits"))]
-    tools = str(ctx.get("ai.allowed_tools", "Read,Write")).strip()
+    if cfg("model"):
+        cmd += ["--model", str(cfg("model"))]
+    cmd += ["--permission-mode", str(cfg("permission_mode", "acceptEdits"))]
+    tools = str(cfg("allowed_tools", "Read,Write")).strip()
     if tools:
         cmd += ["--allowedTools", tools]
 
@@ -278,11 +286,11 @@ def call_claude(ctx, prompt, out_path):
     try:
         r = subprocess.run(cmd, input=prompt, capture_output=True, text=True,
                            cwd=str(ctx.work),
-                           timeout=float(ctx.get("ai.timeout", 900)))
+                           timeout=float(cfg("timeout", 1800)))
     except FileNotFoundError:
-        die(f"ไม่พบคำสั่ง '{binary}' — ติดตั้ง Claude Code ก่อน หรือตั้ง [ai] binary")
+        die(f"ไม่พบคำสั่ง '{binary}' — ติดตั้ง Claude Code ก่อน หรือตั้ง [{section}] binary")
     except subprocess.TimeoutExpired:
-        die(f"AI ไม่ตอบภายใน {ctx.get('ai.timeout', 900)} วินาที — เพิ่ม [ai] timeout")
+        die(f"AI ไม่ตอบภายใน {cfg('timeout', 1800)} วินาที — เพิ่ม [{section}] timeout")
 
     meta = {"seconds": round(time.time() - t0, 1)}
     raw_path = out_path.with_name(out_path.stem + ".raw.txt")
