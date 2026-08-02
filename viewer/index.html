@@ -190,6 +190,17 @@ video{width:100%;border-radius:5px;background:#000;display:block}
   font-size:10.5px;color:var(--dim);background:var(--panel)}
 .cl .cap b{color:var(--fg);font-weight:600;font-size:11px}
 
+/* คลังชิ้นในขั้น 2 */
+li.row.kept{border-color:var(--ok);
+  background:color-mix(in srgb,var(--ok) 8%,transparent)}
+li.row.bad .why{color:var(--warn)}
+.why{font-size:11.5px}
+.back{width:16px;height:16px;margin:0;accent-color:var(--ok);cursor:pointer}
+.track{position:relative;height:5px;border-radius:3px;background:var(--off);
+  margin:.5rem 0 .1rem;overflow:hidden}
+.track .on{position:absolute;top:0;bottom:0;background:var(--accent);border-radius:3px;
+  min-width:2px}
+
 /* กล่องดูคลิปทีละตัว */
 .vwrap{background:#000;border-radius:6px;overflow:hidden;display:grid;place-items:center}
 .vwrap video{display:block;max-width:100%;max-height:46vh;width:auto}
@@ -257,6 +268,21 @@ dialog .df{padding:.7rem 1rem;border-top:1px solid var(--line);display:flex;gap:
   <div class="steps" id="steps"></div>
 </header>
 
+<dialog id="piece">
+  <div class="dh">
+    <h2 id="pc-title">ชิ้น</h2>
+    <div class="m" id="pc-sub"></div>
+  </div>
+  <div class="db" id="pc-body"></div>
+  <div class="df">
+    <label class="ck"><input type="checkbox" id="pc-only" checked> เล่นเฉพาะช่วงที่ตัด</label>
+    <span class="spacer"></span>
+    <button id="pc-prev">← ก่อนหน้า</button>
+    <button id="pc-next">ถัดไป →</button>
+    <button id="pc-close">ปิด</button>
+  </div>
+</dialog>
+
 <dialog id="clip">
   <div class="dh">
     <h2 id="cl-title">คลิป</h2>
@@ -311,6 +337,7 @@ const el = (t, cls, txt) => { const e = document.createElement(t);
 let D = null, POOL = null, S = null, RV = null, RST = null, CL = null;
 let clFilter = 'all', clOpen = -1;
 let clEdits = {pick: {}, rot: {}, vmode: {}};
+let poolFilter = 'all', poolKeep = null, pcOpen = null;
 let step = 1, edits = {}, items = [], sel = -1, dragFrom = -1;
 let logSince = 0, polling = null, estTimer = null, taken = new Set();
 
@@ -357,7 +384,9 @@ async function load(keepEdits){
     api('/api/state').catch(() => null),
     api('/api/clips').catch(() => ({clips:[], summary:{total:0}}))]);
   D = d; POOL = pool; S = st; CL = cl;
-  if (!keepEdits) edits = {};
+  if (!keepEdits){
+    edits = {}; poolKeep = null; clEdits = {pick: {}, rot: {}, vmode: {}};
+  }
   if (S && S.timeline){ items = S.timeline.map(x => ({...x, off:false})); sel = -1; }
   $('#title').textContent = D.values['project.name'] || 'vcut';
   $('#c-proj').textContent = D.project.path || 'ยังไม่มีไฟล์โปรเจกต์';
@@ -402,7 +431,7 @@ function renderSteps(){
 function render(){
   const b = $('#body'); b.innerHTML = '';
   $('#side-est').hidden = step !== 3;
-  $('#side-prev').hidden = step === 1;
+  $('#side-prev').hidden = step !== 3;
   if (step === 1) stepSource(b);
   if (step === 2) stepPrepare(b);
   if (step === 3) stepCompose(b);
@@ -688,43 +717,191 @@ function stepPrepare(box){
   if (POOL.has) box.appendChild(poolView());
 }
 
+// ── คลังชิ้น · ดูชิ้นที่ถูกกรองออก แล้วดึงกลับมาได้ ────────────────
+//
+// ตัวกรองใน [broll]/[ai.apply] ตัดสินจากตัวเลข (motion · ความสว่าง · คะแนน AI)
+// ซึ่งพลาดได้เสมอ — ชิ้นที่มันคัดออกจึงยังอยู่ในคลังพร้อมเหตุผล กดดึงกลับได้
+// ทีละชิ้นโดยไม่ต้องไปคลายค่าตัวกรองจนชิ้นอื่นที่ไม่อยากได้หลุดเข้ามาด้วย
+
+const poolPieces = () => (POOL && POOL.pieces) || [];
+const poolTouched = p => !p.ok || p.forced;   // ตัวกรองแตะชิ้นนี้ไหม
+const poolInit = () => new Set(poolPieces().filter(p => p.forced).map(p => p.name));
+
+function poolDirty(){
+  if (!poolKeep) return 0;
+  const was = poolInit();
+  return [...new Set([...was, ...poolKeep])]
+    .filter(n => was.has(n) !== poolKeep.has(n)).length;
+}
+function poolVisible(){
+  return poolPieces().filter(p =>
+    poolFilter === 'all' || (poolFilter === 'ok' ? p.ok : !p.ok));
+}
+
 function poolView(){
+  if (!poolKeep) poolKeep = poolInit();
   const c = el('div', 'card');
   const s = POOL.summary || {};
-  c.append(el('h3', null, `คลังชิ้น — ${s.usable} ชิ้นใช้ได้`
-    + (s.excluded ? ` · ${s.excluded} ชิ้นถูกกรองออก` : '')));
+  c.append(el('h3', null, `คลังชิ้น — ใช้ได้ ${s.usable} ชิ้น · ${mmss(s.duration_total || 0)}`
+    + (s.excluded ? ` · ตัวกรองคัดออก ${s.excluded}` : '')
+    + (s.forced ? ` · ดึงกลับเอง ${s.forced}` : '')));
+
+  const bar = el('div', 'bar');
+  const seg = el('div', 'seg');
+  [['all', `ทั้งหมด ${s.pieces || 0}`], ['ok', `ใช้ได้ ${s.usable || 0}`],
+   ['bad', `ถูกกรองออก ${s.excluded || 0}`]].forEach(([k, lab]) => {
+    const b = el('button', null, lab);
+    b.setAttribute('aria-pressed', poolFilter === k);
+    b.onclick = () => { poolFilter = k; render(); };
+    seg.appendChild(b);
+  });
+  bar.append(seg);
+  const bad = poolPieces().filter(p => !p.ok);
+  if (bad.length)
+    bar.append(btn('ดึงกลับทั้งหมดที่เห็น',
+      () => { poolVisible().filter(p => !p.ok).forEach(p => poolKeep.add(p.name));
+              render(); }));
+  bar.append(el('span', 'spacer'));
+  const n = poolDirty();
+  const sv = el('button', 'primary', n ? `บันทึก + เตรียมคลังใหม่ (${n})` : 'ไม่มีอะไรให้บันทึก');
+  sv.disabled = !n; sv.onclick = savePool;
+  bar.append(sv);
+  if (n) bar.append(btn('ทิ้งที่แก้', () => { poolKeep = poolInit(); render(); }));
+  c.appendChild(bar);
+
+  const shown = poolVisible();
   const two = el('div', 'two');
-  [['TALK', 'วิดีโอพูด', s.talk, s.duration_talk],
-   ['BROLL', 'วิดีโอวิว', s.broll, s.duration_broll]].forEach(([k, lab, n, dur]) => {
+  [['TALK', 'วิดีโอพูด'], ['BROLL', 'วิดีโอวิว']].forEach(([k, lab]) => {
+    const mine = shown.filter(p => p.kind === k);
     const col = el('div');
     const h = el('div', 'colhead');
     h.append(el('span', 'kind ' + k, lab), el('span', 'sub',
-      `${n} ชิ้น · ${mmss(dur || 0)}`));
+      `${mine.length} ชิ้น · ${mmss(mine.reduce((a, p) => a + p.dur, 0))}`));
     col.appendChild(h);
     const wrap = el('div', 'scroll'), ul = el('ul');
-    (POOL.pieces || []).filter(p => p.kind === k).slice(0, 400)
-      .forEach(p => ul.appendChild(poolRow(p)));
+    mine.slice(0, 500).forEach(p => ul.appendChild(poolRow(p)));
+    if (!mine.length) ul.appendChild(el('li', 'empty', 'ไม่มีชิ้นในหมวดนี้'));
     wrap.appendChild(ul); col.appendChild(wrap);
     two.appendChild(col);
   });
   c.appendChild(two);
+  c.appendChild(el('p', 'note',
+    'กดที่ชิ้นเพื่อดูช่วงที่จะตัดจริง · ติ๊กช่องเขียวเพื่อดึงชิ้นที่ตัวกรองคัดออกกลับเข้าคลัง'));
   return c;
 }
 
 function poolRow(p){
-  const li = el('li', 'row' + (p.ok ? '' : ' bad'));
-  li.append(el('div', 'idx', ''));
+  const back = poolKeep.has(p.name);
+  const li = el('li', 'row' + (p.ok ? '' : ' bad') + (back && poolTouched(p) ? ' kept' : ''));
+  if (poolTouched(p)){
+    const cb = el('input'); cb.type = 'checkbox'; cb.className = 'back'; cb.checked = back;
+    cb.title = 'ดึงกลับเข้าคลัง — ข้ามตัวกรองให้ชิ้นนี้';
+    cb.onclick = e => { e.stopPropagation();
+      cb.checked ? poolKeep.add(p.name) : poolKeep.delete(p.name); render(); };
+    li.append(cb);
+  } else {
+    li.append(el('div', 'idx', ''));
+  }
   const img = el('img', 'thumb'); img.loading = 'lazy'; img.src = `/thumb/${p.name}.jpg`;
   li.append(img);
   const mid = el('div', 'mid');
-  const nm = el('div', 'name'); nm.append(p.name);
+  const nm = el('div', 'name'); nm.append(p.id || p.name);
   if (p.used) nm.append(el('span', 'sub', '· อยู่ในหนังแล้ว'));
-  if (!p.ok) nm.append(el('span', 'sub', '· ' + (p.why || 'ถูกกรองออก')));
-  mid.append(nm, el('div', 'sub', p.meaning || p.text
-    || `motion ${p.motion ?? '—'} · สว่าง ${p.bright ?? '—'}`));
+  if (p.forced) nm.append(el('span', 'sub', '· ดึงกลับเอง'));
+  mid.append(nm);
+  mid.append(el('div', !p.ok ? 'sub why' : 'sub',
+    !p.ok ? '✕ ' + (p.why || 'ถูกกรองออก')
+      : (p.meaning || p.text || `motion ${p.motion ?? '—'} · สว่าง ${p.bright ?? '—'}`)));
   li.append(mid, el('div', 'dur', p.dur.toFixed(1) + 'ว'));
-  li.onclick = () => previewPiece(p);
+  li.onclick = () => openPiece(p.id);
   return li;
+}
+
+async function savePool(){
+  try {
+    const r = await post('/api/pool', {keep: [...poolKeep]});
+    poolKeep = null;
+    const s = r.pool.summary;
+    toast(`เตรียมคลังใหม่แล้ว · ใช้ได้ ${s.usable} ชิ้น · ${mmss(s.duration_total)}`
+      + (s.forced ? ` (ดึงกลับเอง ${s.forced})` : ''));
+    await load(true);
+  } catch(e){ toast(e.message, true); }
+}
+
+// ── ดูชิ้นทีละชิ้น · เล่นเฉพาะช่วงที่จะตัดจริง ────────────────────
+
+function openPiece(id){ pcOpen = id; drawPiece(); $('#piece').showModal(); }
+
+function drawPiece(){
+  const list = poolVisible();
+  const i = list.findIndex(x => x.id === pcOpen), p = list[i];
+  if (!p) return $('#piece').close();
+  $('#pc-title').textContent = p.id || p.name;
+  $('#pc-sub').textContent = `${p.kind === 'TALK' ? 'ช่วงพูด' : 'ช่วงวิว'} · `
+    + `${p.start.toFixed(2)}–${p.end.toFixed(2)} วิ ของคลิปยาว ${p.clip_duration.toFixed(1)} วิ`;
+  const b = $('#pc-body'); b.innerHTML = '';
+
+  const w = el('div', 'vwrap');
+  const v = el('video');
+  v.controls = true; v.preload = 'metadata'; v.playsInline = true;
+  v.src = `/clip/${p.name}`;
+  v.addEventListener('loadedmetadata', () => { v.currentTime = p.start; });
+  v.addEventListener('timeupdate', () => {
+    // หยุดที่ปลายช่วง แล้วถอยกลับไปต้นช่วง — กดเล่นซ้ำได้เลยโดยไม่ต้องลากเอง
+    if ($('#pc-only').checked && v.currentTime >= p.end){
+      v.pause(); v.currentTime = p.start;
+    }
+  });
+  v.onerror = () => { w.innerHTML = '';
+    w.append(el('p', 'note', 'เบราว์เซอร์เล่นไฟล์นี้ไม่ได้ — ลองเปิดด้วย Safari')); };
+  w.append(v); b.append(w);
+
+  // ช่วงที่ตัดอยู่ตรงไหนของคลิป
+  const tr = el('div', 'track');
+  const on = el('div', 'on');
+  on.style.left = (p.start / Math.max(p.clip_duration, 0.01) * 100) + '%';
+  on.style.width = (p.dur / Math.max(p.clip_duration, 0.01) * 100) + '%';
+  tr.append(on); b.append(tr);
+  b.append(el('p', 'note', `ตัดเอา ${p.dur.toFixed(2)} วิ จากทั้งคลิป `
+    + `${p.clip_duration.toFixed(1)} วิ`));
+
+  if (poolTouched(p)){
+    const s = el('div', 'sect');
+    s.append(el('h4', null, p.ok ? 'ชิ้นนี้ถูกดึงกลับมาเอง' : 'ตัวกรองคัดชิ้นนี้ออก'));
+    if (p.why) s.append(el('div', 'stale', p.why));
+    const l = el('label', 'ck');
+    const cb = el('input'); cb.type = 'checkbox'; cb.checked = poolKeep.has(p.name);
+    cb.onchange = () => { cb.checked ? poolKeep.add(p.name) : poolKeep.delete(p.name);
+                          drawPiece(); render(); };
+    l.append(cb, document.createTextNode('ดึงกลับเข้าคลัง — ข้ามตัวกรองให้คลิปนี้'));
+    s.append(l);
+    s.append(el('p', 'note', 'ติ๊กแล้วกด "บันทึก + เตรียมคลังใหม่" ที่หัวคลัง '
+      + 'ระบบจะเตรียมคลังใหม่ให้ทันที (ไม่ถึงวินาที)'));
+    b.append(s);
+  }
+
+  const kv = [['ประเภท', p.kind === 'TALK' ? 'ช่วงพูด' : 'ช่วงวิว'],
+              ['ช่วง', `${p.start.toFixed(2)} – ${p.end.toFixed(2)} วิ`],
+              ['ยาว', p.dur.toFixed(2) + ' วิ']];
+  if (p.motion != null) kv.push(['ความสั่น', p.motion]);
+  if (p.bright != null) kv.push(['ความสว่าง', p.bright]);
+  if (p.meaning) kv.push(['ความหมาย', p.meaning]);
+  if (p.chapter_title) kv.push(['บท', p.chapter_title]);
+  if (p.ai_score != null) kv.push(['คะแนน AI', (+p.ai_score).toFixed(2)]);
+  if (p.used) kv.push(['สถานะ', 'อยู่ในหนังปัจจุบันแล้ว']);
+  const dl = el('dl', 'kv'); dl.style.marginTop = '.7rem';
+  kv.forEach(([k, val]) => dl.append(el('dt', null, k), el('dd', null, String(val))));
+  b.append(dl);
+  if (p.text) b.append(el('div', 'quote', p.text));
+
+  $('#pc-prev').disabled = i <= 0;
+  $('#pc-next').disabled = i >= list.length - 1;
+}
+
+function pieceStep(d){
+  const list = poolVisible();
+  const i = list.findIndex(x => x.id === pcOpen) + d;
+  if (list[i]){ pcOpen = list[i].id; drawPiece(); }
 }
 
 // ── ขั้น 3 · รวมเป็นหนัง ─────────────────────────────────────────
@@ -1324,6 +1501,16 @@ async function doRestore(id){
   } catch(e){ toast(e.message, true); }
 }
 
+$('#pc-close').onclick = () => $('#piece').close();
+$('#pc-prev').onclick = () => pieceStep(-1);
+$('#pc-next').onclick = () => pieceStep(1);
+$('#piece').addEventListener('click', e => {
+  if (e.target === $('#piece')) $('#piece').close(); });
+$('#piece').addEventListener('close', () => {
+  $('#pc-body').querySelectorAll('video').forEach(v => { v.pause(); v.removeAttribute('src'); });
+  pcOpen = null;
+});
+
 $('#cl-close').onclick = () => $('#clip').close();
 $('#cl-prev').onclick = () => { clOpen--; drawClip(); render(); };
 $('#cl-next').onclick = () => { clOpen++; drawClip(); render(); };
@@ -1346,7 +1533,7 @@ $('#rst').addEventListener('click', e => { if (e.target === $('#rst')) $('#rst')
 $('#save').onclick = saveConfig;
 $('#run').onclick = () => runStep('plan');
 window.addEventListener('beforeunload', e => {
-  if (Object.keys(edits).length || tlDirty() || clDirty()){
+  if (Object.keys(edits).length || tlDirty() || clDirty() || poolDirty()){
     e.preventDefault(); e.returnValue = ''; }
 });
 

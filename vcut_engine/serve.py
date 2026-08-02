@@ -315,6 +315,32 @@ def project_rel(ctx):
         return ""
 
 
+def save_pool(ctx, rel, names):
+    """เขียน [prepare] keep แล้วเตรียมคลังใหม่ทันที
+
+    prepare อ่านจากไฟล์ที่ทำไว้แล้วล้วน ๆ (manifest + transcript + ai.json)
+    ใช้เวลาไม่ถึงวินาที จึงทำสด ๆ ในคำขอนี้เลย ไม่ต้องผ่านคิวงานให้ผู้ใช้รอดู log
+    """
+    from . import prepare
+    if not rel:
+        return None, "ยังไม่มีไฟล์โปรเจกต์ให้บันทึก"
+    pool = read_json(ctx.work / "pool.json", {}) or {}
+    known = {p["name"] for p in pool.get("pieces", [])}
+    if not known:
+        return None, "ยังไม่มีคลัง — สั่ง 'ตัดทีละคลิป' ก่อน"
+
+    keep = sorted(n for n in (names or []) if n in known)
+    _, err = clips.write_keys(rel, {"prepare.keep": keep})
+    if err:
+        return None, err
+    reload_ctx(ctx)
+    try:
+        prepare.run(ctx)
+    except SystemExit:
+        return None, "เตรียมคลังใหม่ไม่สำเร็จ — ดูข้อความในเทอร์มินัล"
+    return {"kept": len(keep)}, None
+
+
 def build_pool(ctx):
     """คลังชิ้นที่ขั้น "เตรียม" ทำไว้ + บอกว่าชิ้นไหนถูกใช้ในหนังปัจจุบันแล้ว"""
     pool = read_json(ctx.work / "pool.json", {}) or {}
@@ -615,6 +641,14 @@ def make_handler(ctx, job):
                 # manifest ต้องตามหลัง config เสมอ ไม่ใช่ล่วงหน้า
                 out["retagged"] = clips.sync_manifest(ctx)
                 return self._json({"ok": True, **out, "clips": clips.view(ctx)})
+
+            if p == "/api/pool":
+                if job.running:
+                    return self._json({"error": "มีงานกำลังรันอยู่ — หยุดก่อน"}, 409)
+                out, err = save_pool(ctx, project_rel(ctx), payload.get("keep"))
+                if err:
+                    return self._json({"error": err}, 400)
+                return self._json({"ok": True, **out, "pool": build_pool(ctx)})
 
             if p == "/api/estimate":
                 try:

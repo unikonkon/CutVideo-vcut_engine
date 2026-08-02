@@ -201,6 +201,8 @@ FIELDS = [
     # ── เตรียมวิดีโอ: ตัดคลิปที่ไม่มีเสียงพูดออก ──
     F("prepare.drop_silent", "ตัดคลิปที่ไม่มีเสียงพูดออก", "bool", "edl", "prepare",
       help="เอาคลิปวิวออกจากคลังทั้งหมด เหลือแต่คลิปที่มีคนพูด"),
+    # ดึงกลับด้วยการติ๊กที่ตัวชิ้นในขั้น 2 ไม่ใช่กรอกในฟอร์ม (ดู type "clips")
+    F("prepare.keep", "ชิ้นที่ดึงกลับมาเอง", "clips", "edl", "prepare"),
 
     # ── รวมเป็นหนัง: วิธีเลือกชิ้นจากคลัง ──
     F("compose.mode", "วิธีเลือกชิ้นจากคลัง", "select", "edl", "compose",
@@ -271,7 +273,7 @@ STEP_PARAMS = {
     "ai": ["ai.model", "ai.tasks", "ai.sheets", "ai.transcript_chars",
            "ai.batch_clips", "ai.goal"],
     "prepare": ["talk", "broll", "classify.min_speech_total", "prepare.drop_silent",
-                "scan.exclude", "ai.enabled", "ai.apply",
+                "prepare.keep", "scan.exclude", "ai.enabled", "ai.apply",
                 "audio.target_lufs_talk", "audio.target_lufs_broll"],
 }
 
@@ -396,6 +398,29 @@ _KEYLINE = re.compile(r"^(\s*)([A-Za-z0-9_\-]+)(\s*)=(.*)$")
 _HEADER = re.compile(r"^\s*\[([^\]]+)\]\s*$")
 
 
+def _drop_empty_tables(lines, tables):
+    """เอาหัวตารางที่คีย์ถูกลบจนหมดออกด้วย
+
+    ไม่งั้นล้างค่าจนหมดแล้วไฟล์จะเหลือ `[prepare]` ลอย ๆ ที่ไม่ได้ตั้งอะไรเลย
+    ถ้ายังมีคอมเมนต์อยู่ในตารางจะไม่แตะ — คอมเมนต์คือเอกสาร ไม่ใช่ขยะ
+    """
+    out, i = [], 0
+    while i < len(lines):
+        h = _HEADER.match(lines[i])
+        if h and h.group(1).strip() in tables:
+            j = i + 1
+            while j < len(lines) and not _HEADER.match(lines[j]):
+                j += 1
+            if not any(x.strip() for x in lines[i + 1:j]):
+                while out and not out[-1].strip():
+                    out.pop()               # เก็บบรรทัดว่างที่เหลือค้างข้างบน
+                i = j
+                continue
+        out.append(lines[i])
+        i += 1
+    return out
+
+
 def _trailing_comment(rest):
     """แยกคอมเมนต์ท้ายบรรทัดออกจากค่า โดยไม่หลงเครื่องหมาย # ที่อยู่ในสตริง
 
@@ -493,6 +518,10 @@ def patch_toml(text, changes, drop=()):
             out.append(f"[{tbl}]" if tbl else "")
             out += [f"{k} = {_atom(v)}" for k, v in kv.items()]
             last_of[tbl] = len(out) - 1
+
+    # ทำหลังแทรกเสมอ — ถ้าทำก่อน เลขบรรทัดใน last_of จะเลื่อนแล้วแทรกผิดที่
+    if kill:
+        out = _drop_empty_tables(out, {k.rpartition(".")[0] for k in kill} - set(rest))
     return "\n".join(out).rstrip() + "\n"
 
 

@@ -13,6 +13,7 @@
    "pieces": 280,
    "usable": 234,
    "excluded": 46,
+   "forced": 0,
    "talk": 78,
    "broll": 156,
    "duration_talk": 479.5,

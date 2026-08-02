@@ -111,14 +111,23 @@ def view(ctx):
 
 # ─────────────────────────── เขียน ───────────────────────────
 
-def _clean(base, dotted, value):
-    """ค่าว่างที่ preset ก็ว่างอยู่แล้ว = ไม่ต้องเขียนอะไรลงไฟล์ ให้ลบทิ้งแทน
+def write_keys(rel, values):
+    """เขียนคีย์ลงไฟล์โปรเจกต์ โดยไม่ทิ้งขยะไว้
 
-    ถ้าไม่แยกกรณีนี้ ไฟล์โปรเจกต์จะบวมด้วย IMG_xxxx = "" นับร้อยบรรทัดที่
-    ไม่ได้ทำอะไรเลย แต่ถ้า preset ตั้งค่าไว้จริง ต้องเขียน "" ทับ ไม่งั้นลบ
-    บรรทัดออกแล้วค่าเดิมจาก preset จะกลับมา
+    ค่าว่างที่ preset ก็ว่างอยู่แล้ว = ลบบรรทัดทิ้งแทนที่จะเขียน `x = ""` หรือ
+    `x = []` ค้างไว้ ถ้าไม่แยกกรณีนี้ ไฟล์โปรเจกต์จะบวมด้วยบรรทัดที่ไม่ได้ทำ
+    อะไรเลยนับร้อย — แต่ถ้า preset ตั้งค่าไว้จริง ต้องเขียนค่าว่างทับ ไม่งั้น
+    ลบบรรทัดออกแล้วค่าเดิมจาก preset จะไหลกลับมา
     """
-    return "drop" if not value and not settings.get_at(base, dotted) else "set"
+    base = _base(rel)
+    changes, drop = {}, []
+    for dotted, v in values.items():
+        if not v and not settings.get_at(base, dotted):
+            drop.append(dotted)
+        else:
+            changes[dotted] = v
+    body = settings.patch_toml(settings.read_raw(rel), changes, drop=drop)
+    return settings.save_project(rel, {}, raw=body)
 
 
 def save(ctx, rel, payload):
@@ -146,18 +155,13 @@ def save(ctx, rel, payload):
     if bad_v:
         return None, f"โหมดแนวตั้งไม่ถูกต้อง: {', '.join(bad_v)}"
 
-    base = _base(rel)
-    changes = {"scan.exclude": excl}
-    drop = []
+    values = {"scan.exclude": excl}
     for tbl, vals in (("scan.rotation_overrides", rots),
                       ("video.vertical_overrides", vmodes)):
         for name, v in vals.items():
-            dotted = f"{tbl}.{name}"
-            (changes.__setitem__(dotted, v) if _clean(base, dotted, v) == "set"
-             else drop.append(dotted))
+            values[f"{tbl}.{name}"] = v
 
-    body = settings.patch_toml(settings.read_raw(rel), changes, drop=drop)
-    path, err = settings.save_project(rel, {}, raw=body)
+    path, err = write_keys(rel, values)
     if err:
         return None, err
     return {"path": path, "excluded": len(excl),

@@ -140,6 +140,10 @@ def run(ctx, write=True):
     # เพราะมันคือ "ไม่เอา" ไม่ใช่ "ตัวกรองคัดออก" ที่ยังหยิบกลับได้ในขั้น 3
     excl = set(ctx.get("scan.exclude", []) or [])
 
+    # คลิปที่ผู้ใช้ดึงกลับมาเองในขั้น 2 — ข้ามตัวกรองทุกตัว
+    # ไม่ข้าม scan.exclude เพราะขั้น 1 พูดว่า "ไม่เอาคลิปนี้เลย" ซึ่งแรงกว่า
+    force = set(ctx.get("prepare.keep", []) or []) - excl
+
     ch_title = {ch["id"]: ch["title"] for ch in (adv or {}).get("chapters", [])}
     pieces, trim_empty = [], []
 
@@ -165,6 +169,10 @@ def run(ctx, write=True):
             elif min_dur > 0 and cl["duration"] < min_dur:
                 why = f"คลิปสั้นกว่า {min_dur:g} วิ"
 
+        forced = bool(why) and cl["name"] in force
+        if forced:
+            why = None
+
         base = {
             "name": cl["name"], "num": cl.get("num", 0), "src": cl["src"],
             "orient": cl["orient"], "rot_override": cl["rot_override"],
@@ -175,6 +183,8 @@ def run(ctx, write=True):
         }
         if why:
             base["why"] = why
+        if forced:
+            base["forced"] = True
         if adv:
             if hint.get("chapter"):
                 base["chapter"] = hint["chapter"]
@@ -226,6 +236,7 @@ def run(ctx, write=True):
             "pieces": len(pieces),
             "usable": len(ok),
             "excluded": len(pieces) - len(ok),
+            "forced": sum(1 for p in pieces if p.get("forced")),
             "talk": sum(1 for p in ok if p["kind"] == "TALK"),
             "broll": sum(1 for p in ok if p["kind"] == "BROLL"),
             "duration_talk": round(sum(p["dur"] for p in ok if p["kind"] == "TALK"), 1),
@@ -252,14 +263,18 @@ def report(pool):
     info(f"  ช่วงวิว            {s['duration_broll'] / 60:>6.1f} นาที")
     total = c(f"{s['duration_total'] / 60:>6.1f} นาที", "g")
     info(f"  {c('รวมในคลัง', 'g')}         {total}")
+    if s["excluded"] or s.get("forced"):
+        info("─" * 62)
     if s["excluded"]:
         why = {}
         for p in pool["pieces"]:
             if not p["ok"]:
                 k = p["why"].split(" (")[0]
                 why[k] = why.get(k, 0) + 1
-        info("─" * 62)
         info(f"  ตัวกรองคัดออก       {s['excluded']:>4} ชิ้น  "
              f"({', '.join(f'{k} {v}' for k, v in why.items())})")
-        info(f"  {c('ยังอยู่ในคลัง หยิบกลับมาใส่เองได้ที่ขั้นรวมคลิป', 'd')}")
+        info(f"  {c('ยังอยู่ในคลัง ดึงกลับมาใส่เองได้ที่ขั้น 2', 'd')}")
+    if s.get("forced"):
+        info(f"  ดึงกลับมาเอง       {s['forced']:>4} ชิ้น  "
+             f"{c('([prepare] keep — ข้ามตัวกรองให้)', 'd')}")
     info("─" * 62)
