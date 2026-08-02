@@ -16,7 +16,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import ai, assemble, config, decide, listen, render, scan, thumbs
+from . import ai, assemble, config, decide, listen, render, scan, serve, thumbs
 from .util import (c, die, disk_free_gb, hhmmss, info, read_json,
                    require_tools, warn)
 
@@ -30,6 +30,7 @@ USAGE = """vcut — ตัดต่อวิดีโออัตโนมัต
   vcut decide                     สร้าง EDL ตามกติกาใน config
   vcut render                     ตัด+แก้ภาพ/เสียงเป็นชิ้น ๆ (มี cache)
   vcut assemble                   ต่อเป็นไฟล์เดียว
+  vcut view                       เปิดหน้าเว็บดู/แก้ EDL ในเครื่อง
   vcut info                       สรุปสถานะโปรเจกต์
   vcut presets                    ดู preset ที่มี
   vcut gc                         ล้าง segment ที่ EDL ปัจจุบันไม่ได้ใช้
@@ -59,7 +60,7 @@ def build_parser():
     sub = ap.add_subparsers(dest="cmd")
 
     for name in ("scan", "listen", "thumbs", "ai", "decide", "render", "assemble",
-                 "run", "info", "gc", "presets", "config"):
+                 "view", "run", "info", "gc", "presets", "config"):
         p = sub.add_parser(name, add_help=False)
         p.add_argument("-h", "--help", action="store_true")
         add_common(p)
@@ -82,10 +83,29 @@ def build_parser():
                            choices=["scan", "listen", "ai", "decide", "render", "assemble"],
                            help="เริ่มจากขั้นไหน (ข้ามขั้นก่อนหน้า)")
             p.add_argument("--no-thumbs", action="store_true")
+        if name == "view":
+            p.add_argument("--port", type=int, default=8765)
+            p.add_argument("--no-open", action="store_true",
+                           help="ไม่ต้องเปิดเบราว์เซอร์ให้")
         if name == "gc":
             p.add_argument("--all", action="store_true",
                            help="ลบ cache ทั้งหมดรวมทั้ง manifest/transcript")
     return ap
+
+
+def config_args(args):
+    """ประกอบ -c/--set/--source/--work กลับเป็น argv เพื่อให้ปุ่มในหน้าเว็บ
+    สั่ง render/assemble ด้วย config ชุดเดียวกับที่เปิด view มา"""
+    out = []
+    if getattr(args, "config", None):
+        out += ["-c", args.config]
+    for s in (args.sets or []):
+        out += ["--set", s]
+    if getattr(args, "source", None):
+        out += ["--source", args.source]
+    if getattr(args, "work", None):
+        out += ["--work", args.work]
+    return out
 
 
 def make_ctx(args):
@@ -248,6 +268,9 @@ def main(argv=None):
         render.run(ctx, force=args.force)
     elif args.cmd == "assemble":
         assemble.run(ctx, out=args.out)
+    elif args.cmd == "view":
+        serve.run(ctx, port=args.port, open_browser=not args.no_open,
+                  config_args=config_args(args))
     elif args.cmd == "run":
         cmd_run(ctx, args)
     return 0

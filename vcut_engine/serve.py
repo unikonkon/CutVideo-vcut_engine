@@ -1,0 +1,379 @@
+"""VIEW — เซิร์ฟเวอร์เล็ก ๆ ในเครื่อง สำหรับดูและแก้ EDL ด้วยตา
+
+ไม่ใช่โปรแกรมตัดต่อในเบราว์เซอร์ — เบราว์เซอร์ทำได้แค่ 2 อย่าง:
+เอาช็อตออก กับ สลับลำดับ ซึ่งเป็นสองอย่างที่ *ไม่ต้อง render ใหม่*
+ทุกอย่างที่เหลือยังเป็นงานของ config + engine เหมือนเดิม
+
+  GET  /                 หน้าเว็บ (ไฟล์เดียว ไม่มี build step ไม่มี dependency)
+  GET  /api/state        manifest + edl + ai + map ชิ้น→ไฟล์ segment
+  GET  /thumb/<ชื่อ>      ภาพตัวอย่างคลิป
+  GET  /sheet/<n>        contact sheet
+  GET  /seg/<i>          ดูชิ้นที่ render แล้วจริง ๆ (รองรับ Range = เลื่อนดูได้)
+  POST /api/edl          เขียน edl.json ทับ (สำรองของเดิมไว้ก่อน)
+  POST /api/job          สั่ง render / assemble
+  GET  /api/job          อ่าน log ที่ไหลออกมาสด ๆ
+
+ผูกกับ 127.0.0.1 อย่างเดียว และเช็ก Host ทุกครั้ง — เครื่องอื่นในวงแลนต่อไม่ได้
+"""
+import json
+import mimetypes
+import re
+import shutil
+import subprocess
+import sys
+import threading
+import time
+import webbrowser
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import unquote, urlparse
+
+from .util import c, die, info, read_json, warn, write_json
+
+VIEWER = Path(__file__).resolve().parent.parent / "viewer" / "index.html"
+SAFE_NAME = re.compile(r"^[A-Za-z0-9_.\-]+$")
+
+
+# ─────────────────────────── งานที่สั่งจากหน้าเว็บ ───────────────────────────
+
+class Job:
+    """รันได้ทีละงาน — log ไหลเข้ามาทางบรรทัด ให้หน้าเว็บ poll เอา"""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.lines = []
+        self.step = ""
+        self.proc = None
+        self.code = None
+        self.started = 0.0
+
+    @property
+    def running(self):
+        return self.proc is not None and self.proc.poll() is None
+
+    def start(self, argv, step, cwd):
+        with self.lock:
+            if self.running:
+                return False
+            self.lines = [f"$ {' '.join(argv[1:])}"]
+            self.step, self.code, self.started = step, None, time.time()
+            self.proc = subprocess.Popen(
+                argv, cwd=str(cwd), stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, text=True, bufsize=1)
+        threading.Thread(target=self._pump, daemon=True).start()
+        return True
+
+    def _pump(self):
+        proc = self.proc
+        for raw in proc.stdout:
+            # แถบความคืบหน้าของ engine เขียนทับบรรทัดเดิมด้วย \r — เอาแค่ท่อนหลังสุด
+            line = raw.rstrip("\n").split("\r")[-1].rstrip()
+            if not line:
+                continue
+            with self.lock:
+                self.lines.append(line)
+                if len(self.lines) > 4000:
+                    del self.lines[:1000]
+        proc.wait()
+        with self.lock:
+            self.code = proc.returncode
+            self.lines.append(f"— จบด้วยรหัส {proc.returncode} "
+                              f"({time.time() - self.started:.0f} วินาที) —")
+
+    def state(self, since=0):
+        with self.lock:
+            return {"running": self.running, "step": self.step, "code": self.code,
+                    "total": len(self.lines), "lines": self.lines[since:]}
+
+
+# ─────────────────────────── ตรวจ EDL ที่ส่งกลับมา ───────────────────────────
+
+def apply_edit(ctx, payload):
+    """รับไทม์ไลน์ชุดใหม่จากหน้าเว็บ แล้วเขียน edl.json
+
+    ยอมให้ทำได้แค่ "เอาออก" กับ "สลับลำดับ" เท่านั้น — ทุกชิ้นที่ส่งกลับมา
+    ต้องตรงกับชิ้นที่มีอยู่แล้วใน EDL ทั้ง name/start/dur ถ้าไม่ตรงคือปฏิเสธ
+    (กันทั้งบั๊กฝั่งหน้าเว็บ และกันไม่ให้เกิดชิ้นที่ยังไม่ได้ render)
+    """
+    edl = read_json(ctx.edl)
+    if not edl:
+        return None, "ยังไม่มี edl.json"
+    old = {}
+    for s in edl["timeline"]:
+        old.setdefault((s["name"], round(s["start"], 3), round(s["dur"], 3)), s)
+
+    order = payload.get("keep")
+    if not isinstance(order, list):
+        return None, "payload ต้องมีคีย์ keep เป็น list"
+
+    timeline, seen = [], set()
+    for it in order:
+        try:
+            k = (it["name"], round(float(it["start"]), 3), round(float(it["dur"]), 3))
+        except (KeyError, TypeError, ValueError):
+            return None, f"ชิ้นที่ส่งมาไม่ครบคีย์: {it}"
+        if k not in old:
+            return None, f"ไม่พบชิ้นนี้ใน EDL ปัจจุบัน: {k[0]} @{k[1]}"
+        if k in seen:
+            return None, f"ส่งชิ้นซ้ำ: {k[0]} @{k[1]}"
+        seen.add(k)
+        timeline.append(old[k])
+
+    if not timeline:
+        return None, "เหลือ 0 ชิ้น — ต้องเก็บไว้อย่างน้อย 1 ชิ้น"
+
+    # สำรองของเดิมไว้เสมอ กดพลาดแล้วยังกู้คืนได้
+    if ctx.edl.exists():
+        shutil.copy2(ctx.edl, ctx.work / "edl.prev.json")
+
+    d_t = sum(s["dur"] for s in timeline if s["kind"] == "TALK")
+    d_b = sum(s["dur"] for s in timeline if s["kind"] == "BROLL")
+    edl["summary"].update({
+        "segments": len(timeline),
+        "segments_talk": sum(1 for s in timeline if s["kind"] == "TALK"),
+        "segments_broll": sum(1 for s in timeline if s["kind"] == "BROLL"),
+        "segments_vertical": sum(1 for s in timeline if s["orient"] == "V"),
+        "duration_talk": round(d_t, 1),
+        "duration_broll": round(d_b, 1),
+        "duration_total": round(d_t + d_b, 1),
+        "edited_in_viewer": True,
+    })
+    for ch in edl.get("chapters", []):
+        segs = [s for s in timeline if s.get("chapter") == ch["id"]]
+        ch["segments"] = len(segs)
+        ch["duration"] = round(sum(s["dur"] for s in segs), 1)
+    edl["chapters"] = [ch for ch in edl.get("chapters", []) if ch["segments"]]
+    edl["timeline"] = timeline
+    write_json(ctx.edl, edl)
+    return edl, None
+
+
+# ─────────────────────────── สถานะที่ส่งให้หน้าเว็บ ───────────────────────────
+
+def build_state(ctx):
+    man = read_json(ctx.manifest, {}) or {}
+    edl = read_json(ctx.edl, {}) or {}
+    adv = read_json(ctx.work / "ai.json", {}) or {}
+    rman = read_json(ctx.work / "render.json", {}) or {}
+
+    # ชิ้นไหน render แล้วอยู่ที่ไฟล์ไหน — ผูกด้วยเนื้อของชิ้น ไม่ใช่ลำดับ
+    # สลับลำดับในหน้าเว็บแล้วภาพตัวอย่างจึงไม่หาย
+    by_key = {}
+    for s in rman.get("segments", []):
+        by_key[(s["name"], round(s.get("start", -1), 3), round(s["dur"], 3))] = s
+    tl = []
+    for i, s in enumerate(edl.get("timeline", [])):
+        r = by_key.get((s["name"], round(s["start"], 3), round(s["dur"], 3))) or {}
+        rendered = bool(r.get("file")) and (ctx.seg_dir / r["file"]).exists()
+        tl.append({
+            "i": i, "name": s["name"], "kind": s["kind"],
+            "start": s["start"], "end": s["end"], "dur": s["dur"],
+            "orient": s.get("orient", "H"),
+            "text": s.get("text", ""),
+            "motion": s.get("motion"), "bright": s.get("bright"),
+            "chapter": s.get("chapter", ""), "chapter_title": s.get("chapter_title", ""),
+            "ai_score": s.get("ai_score"),
+            "gain": r.get("gain"), "limiter": r.get("limiter"),
+            "seg": r.get("file") if rendered else None,
+        })
+
+    sheets = sorted((ctx.thumb_dir / "sheets").glob("sheet_*.jpg"))
+    return {
+        "project": ctx.get("project.name", "untitled"),
+        "out": str(ctx.out),
+        "out_exists": ctx.out.exists(),
+        "out_size": round(ctx.out.stat().st_size / 1e9, 2) if ctx.out.exists() else 0,
+        "config": [Path(p).name for p in ctx.get("_meta.config_files", [])],
+        "clips_total": len(man.get("clips", [])),
+        "footage_minutes": round(sum(x["duration"] for x in man.get("clips", [])) / 60, 1),
+        "summary": edl.get("summary", {}),
+        "chapters": edl.get("chapters", []),
+        "ai": {"goal": adv.get("goal", ""), "chapters": len(adv.get("chapters", [])),
+               "enabled": bool(adv)},
+        "sheets": [p.name for p in sheets],
+        "timeline": tl,
+        "rendered": sum(1 for x in tl if x["seg"]),
+    }
+
+
+# ─────────────────────────── HTTP ───────────────────────────
+
+def make_handler(ctx, job):
+    class H(BaseHTTPRequestHandler):
+        server_version = "vcut"
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *a):
+            pass                                   # เงียบไว้ ไม่งั้น log ท่วมจอ
+
+        # ── ตัวช่วยตอบกลับ ──
+        def _guard(self):
+            host = (self.headers.get("Host") or "").split(":")[0]
+            if host not in ("127.0.0.1", "localhost", "[::1]"):
+                self._send(403, b"forbidden", "text/plain")
+                return False
+            return True
+
+        def _send(self, code, body, ctype, extra=None):
+            if isinstance(body, str):
+                body = body.encode("utf-8")
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            for k, v in (extra or {}).items():
+                self.send_header(k, v)
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(body)
+
+        def _json(self, obj, code=200):
+            self._send(code, json.dumps(obj, ensure_ascii=False), "application/json")
+
+        def _file(self, path, ctype=None):
+            if not path.exists():
+                return self._send(404, b"not found", "text/plain")
+            ctype = ctype or mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+            self._send(200, path.read_bytes(), ctype)
+
+        def _range_file(self, path):
+            """วิดีโอต้องรองรับ Range ไม่งั้นเบราว์เซอร์เลื่อนดูไม่ได้"""
+            if not path.exists():
+                return self._send(404, b"not found", "text/plain")
+            size = path.stat().st_size
+            rng = self.headers.get("Range", "")
+            m = re.match(r"bytes=(\d*)-(\d*)", rng)
+            if not m:
+                return self._file(path, "video/mp4")
+            a = int(m.group(1)) if m.group(1) else 0
+            b = int(m.group(2)) if m.group(2) else size - 1
+            a, b = max(0, a), min(size - 1, b)
+            if a > b:
+                return self._send(416, b"", "video/mp4")
+            with path.open("rb") as f:
+                f.seek(a)
+                chunk = f.read(b - a + 1)
+            self.send_response(206)
+            self.send_header("Content-Type", "video/mp4")
+            self.send_header("Content-Range", f"bytes {a}-{b}/{size}")
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Content-Length", str(len(chunk)))
+            self.end_headers()
+            self.wfile.write(chunk)
+
+        # ── เส้นทาง ──
+        def do_GET(self):
+            if not self._guard():
+                return
+            u = urlparse(self.path)
+            p = unquote(u.path)
+
+            if p in ("/", "/index.html"):
+                if not VIEWER.exists():
+                    return self._send(500, f"ไม่พบ {VIEWER}", "text/plain; charset=utf-8")
+                return self._send(200, VIEWER.read_bytes(), "text/html; charset=utf-8")
+
+            if p == "/api/state":
+                return self._json(build_state(ctx))
+
+            if p == "/api/job":
+                since = 0
+                q = dict(x.split("=", 1) for x in u.query.split("&") if "=" in x)
+                try:
+                    since = int(q.get("since", 0))
+                except ValueError:
+                    pass
+                return self._json(job.state(since))
+
+            if p.startswith("/thumb/"):
+                name = p[len("/thumb/"):]
+                if not SAFE_NAME.match(name):
+                    return self._send(400, b"bad name", "text/plain")
+                return self._file(ctx.thumb_dir / name)
+
+            if p.startswith("/sheet/"):
+                name = p[len("/sheet/"):]
+                if not SAFE_NAME.match(name):
+                    return self._send(400, b"bad name", "text/plain")
+                return self._file(ctx.thumb_dir / "sheets" / name)
+
+            if p.startswith("/seg/"):
+                name = p[len("/seg/"):]
+                if not SAFE_NAME.match(name):
+                    return self._send(400, b"bad name", "text/plain")
+                return self._range_file(ctx.seg_dir / name)
+
+            return self._send(404, b"not found", "text/plain")
+
+        def do_HEAD(self):
+            self.do_GET()
+
+        def do_POST(self):
+            if not self._guard():
+                return
+            p = urlparse(self.path).path
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+                payload = json.loads(self.rfile.read(n) or b"{}")
+            except (ValueError, json.JSONDecodeError):
+                return self._json({"error": "อ่าน JSON ที่ส่งมาไม่ได้"}, 400)
+
+            if p == "/api/edl":
+                edl, err = apply_edit(ctx, payload)
+                if err:
+                    return self._json({"error": err}, 400)
+                return self._json({"ok": True, "summary": edl["summary"]})
+
+            if p == "/api/undo":
+                prev = ctx.work / "edl.prev.json"
+                if not prev.exists():
+                    return self._json({"error": "ไม่มีฉบับก่อนหน้าให้ย้อนกลับ"}, 404)
+                shutil.copy2(prev, ctx.edl)
+                prev.unlink()
+                return self._json({"ok": True})
+
+            if p == "/api/job":
+                step = payload.get("step")
+                steps = {"decide": ["decide"], "render": ["render"],
+                         "assemble": ["assemble"], "build": ["render", "assemble"]}
+                if step not in steps:
+                    return self._json({"error": f"ไม่รู้จักงาน '{step}'"}, 400)
+                if job.running:
+                    return self._json({"error": "มีงานกำลังรันอยู่"}, 409)
+                argv = [sys.executable, str(ctx.launcher)] + steps[step][:1] + ctx.argv_tail
+                if step == "build":
+                    argv = [sys.executable, str(ctx.launcher), "run", "--from", "render"] \
+                        + ctx.argv_tail
+                job.start(argv, step, ctx.launcher.parent)
+                return self._json({"ok": True, "step": step})
+
+            return self._json({"error": "ไม่รู้จักเส้นทางนี้"}, 404)
+
+    return H
+
+
+def run(ctx, port=8765, open_browser=True, config_args=None):
+    if not ctx.edl.exists():
+        die("ยังไม่มี edl.json — รัน `vcut decide` ก่อน")
+    if not list(ctx.thumb_dir.glob("*.jpg")):
+        warn("ยังไม่มีภาพตัวอย่าง — รัน `vcut thumbs` เพื่อให้หน้าเว็บมีรูปให้ดู")
+
+    ctx.launcher = Path(__file__).resolve().parent.parent / "vcut"
+    ctx.argv_tail = list(config_args or [])
+
+    job = Job()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), make_handler(ctx, job))
+    url = f"http://127.0.0.1:{port}/"
+    st = build_state(ctx)
+    info(f"VIEW  {st['summary'].get('segments', 0)} ชิ้น · "
+         f"{st['summary'].get('duration_total', 0) / 60:.1f} นาที · "
+         f"render แล้ว {st['rendered']} ชิ้น")
+    info(f"  {c('→ ' + url, 'g')}   {c('(Ctrl-C เพื่อปิด)', 'd')}")
+    if open_browser:
+        threading.Timer(0.5, lambda: webbrowser.open(url)).start()
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        info("\n  ปิดเซิร์ฟเวอร์แล้ว")
+    finally:
+        httpd.server_close()

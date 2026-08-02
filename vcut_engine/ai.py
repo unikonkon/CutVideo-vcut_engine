@@ -97,20 +97,30 @@ def _timed_speech_block(rows, limit):
     return "\n\n".join(out)
 
 
-def _sheet_block(ctx, rows):
-    """บอก AI ว่า contact sheet แต่ละแผ่นมีคลิปอะไรอยู่ — เรียงตามลำดับใน manifest"""
+def sheet_map(ctx, rows):
+    """แผ่น contact sheet ไหนมีคลิปอะไร — thumbs.py เรียงตามลำดับใน manifest"""
     sheets = sorted((ctx.thumb_dir / "sheets").glob("sheet_*.jpg"))
-    if not sheets:
-        return "", []
     per = int(ctx.get("thumbs.sheet_cols", 5)) * int(ctx.get("thumbs.sheet_rows", 5))
-    lines = [f"contact sheet {len(sheets)} แผ่น แผ่นละ {per} ภาพ เรียงซ้ายไปขวา บนลงล่าง",
-             "อ่านภาพด้วย Read tool ทีละแผ่น แล้วเทียบกับรายชื่อนี้:"]
+    out = []
     for i, sh in enumerate(sheets):
-        batch = [r["name"] for r in rows[i * per:(i + 1) * per]]
-        if not batch:
-            continue
-        lines.append(f"  {sh.name}  →  {', '.join(batch)}")
-    return "\n".join(lines), sheets
+        names = [r["name"] for r in rows[i * per:(i + 1) * per]]
+        if names:
+            out.append((sh.name, names))
+    return out
+
+
+def _sheet_block(smap, want):
+    """ส่งเฉพาะแผ่นที่มีคลิปในก้อนนี้ — ก้อนละ 3–4 แผ่นแทนที่จะเป็น 11 แผ่นทุกครั้ง"""
+    want = set(want)
+    rel = [(n, names) for n, names in smap if want.intersection(names)]
+    if not rel:
+        return ""
+    lines = [f"contact sheet ที่เกี่ยวกับก้อนนี้ {len(rel)} แผ่น "
+             "(เรียงซ้ายไปขวา บนลงล่าง)",
+             "อ่านภาพด้วย Read tool ทีละแผ่น แล้วเทียบกับรายชื่อนี้:"]
+    for n, names in rel:
+        lines.append(f"  {n}  →  {', '.join(names)}")
+    return "\n".join(lines)
 
 
 # ─────────────────────────── prompt ต่อ task ───────────────────────────
@@ -145,12 +155,15 @@ _SCHEMA = {
 }
 
 
-def build_prompt(task, ctx, rows, goal, out_name):
+def build_prompt(task, ctx, rows, goal, out_name, smap=(), total=None, part=None):
     limit = int(ctx.get("ai.transcript_chars", 600))
-    sheet_txt, sheets = _sheet_block(ctx, rows) if ctx.get("ai.sheets", True) else ("", [])
+    sheet_txt = _sheet_block(smap, [r["name"] for r in rows]) \
+        if ctx.get("ai.sheets", True) else ""
     n_talk = sum(1 for r in rows if r["kind"] == "TALK")
-    head = [f"คุณกำลังช่วยตัดต่อวิดีโอจากฟุตเทจดิบ {len(rows)} คลิป "
-            f"({n_talk} คลิปมีคนพูด ที่เหลือเป็นภาพวิว)"]
+    head = [f"คุณกำลังช่วยตัดต่อวิดีโอจากฟุตเทจดิบ {total or len(rows)} คลิป "
+            f"({n_talk} คลิปในก้อนนี้มีคนพูด)"]
+    if part:
+        head.append(f"\nนี่คือก้อนที่ {part} — ตอบเฉพาะ {len(rows)} คลิปที่อยู่ในก้อนนี้เท่านั้น")
     if goal:
         head.append(f"\nสิ่งที่เจ้าของงานสั่ง: {goal}")
 
@@ -308,6 +321,10 @@ def _clamp(x, lo, hi, default=None):
         return default
 
 
+def _chunk(rows, n):
+    return [rows[i:i + n] for i in range(0, len(rows), max(1, n))] or [rows]
+
+
 def _merge_ranges(rs):
     rs = sorted(rs)
     out = []
@@ -431,6 +448,8 @@ def run(ctx, tasks=None, goal="", force=False):
     if bad:
         die(f"ไม่รู้จัก task: {', '.join(bad)}  (มีให้เลือก: {', '.join(TASKS)})")
 
+    smap = sheet_map(ctx, rows)
+    batch = int(ctx.get("ai.batch_clips", 80)) or len(rows)
     ai_dir = ctx.work / "ai"
     ai_dir.mkdir(parents=True, exist_ok=True)
     if ctx.get("ai.sheets", True) and not list((ctx.thumb_dir / "sheets").glob("*.jpg")):
@@ -453,32 +472,47 @@ def run(ctx, tasks=None, goal="", force=False):
             info(f"  {c('·', 'd')} {TASK_LABEL[task]:<20} {c('ใช้ผลเดิมจาก ai.json', 'd')}")
             continue
 
-        out_path = ai_dir / f"{task}.json"
-        prompt = build_prompt(task, ctx, rows, goal, f"ai/{task}.json")
-        (ai_dir / f"{task}.prompt.md").write_text(prompt, encoding="utf-8")
-        info(f"  {c('→', 'b')} {TASK_LABEL[task]:<20} กำลังถาม AI "
-             f"({len(prompt) // 1000} KB) …")
+        # story_arc ต้องเห็นทั้งเรื่องพร้อมกันถึงจะแบ่งบทได้ ห้ามซอย
+        # อีกสองงานตอบทีละคลิปอยู่แล้ว ซอยได้ และควรซอย — คำตอบยาว 273 บรรทัด
+        # ในครั้งเดียวทั้งช้าและหลุดง่าย
+        chunks = [rows] if task == "story_arc" else _chunk(rows, batch)
+        agg = {"clips": {}, "chapters": []}
+        secs, cost, nwarn = 0.0, 0.0, 0
+        info(f"  {c('→', 'b')} {TASK_LABEL[task]:<20} "
+             + (f"{len(chunks)} ก้อน × ~{batch} คลิป" if len(chunks) > 1 else "ทีเดียวทั้งชุด"))
 
-        data, meta = call_claude(ctx, prompt, out_path)
-        part, warns = validate(task, data, rows)
-        for w in warns[:6]:
-            warn(f"  {task}: {w}")
-        if len(warns) > 6:
-            warn(f"  {task}: … อีก {len(warns) - 6} รายการ")
+        for n, chunk in enumerate(chunks, 1):
+            tag = task if len(chunks) == 1 else f"{task}_{n:02d}"
+            out_path = ai_dir / f"{tag}.json"
+            prompt = build_prompt(task, ctx, chunk, goal, f"ai/{tag}.json", smap,
+                                  total=len(rows),
+                                  part=f"{n}/{len(chunks)}" if len(chunks) > 1 else None)
+            (ai_dir / f"{tag}.prompt.md").write_text(prompt, encoding="utf-8")
+            info(f"    {c('·', 'd')} ก้อน {n}/{len(chunks)} ({len(prompt) // 1000} KB) …")
 
-        _merge_into(store, task, part)
+            data, meta = call_claude(ctx, prompt, out_path)
+            part, warns = validate(task, data, chunk)
+            for w in warns[:4]:
+                warn(f"  {tag}: {w}")
+            if len(warns) > 4:
+                warn(f"  {tag}: … อีก {len(warns) - 4} รายการ")
+            agg["clips"].update(part["clips"])
+            agg["chapters"] += part["chapters"]
+            secs += meta.get("seconds") or 0
+            cost += meta.get("cost_usd") or 0
+            nwarn += len(warns)
+
+        _merge_into(store, task, agg)
         store["tasks"][task] = {
-            "goal": goal, "seconds": meta.get("seconds"),
-            "cost_usd": meta.get("cost_usd"), "warnings": len(warns),
-            "chapters": len(part["chapters"]), "clips": len(part["clips"]),
+            "goal": goal, "seconds": round(secs, 1), "cost_usd": round(cost, 4),
+            "warnings": nwarn, "batches": len(chunks),
+            "chapters": len(agg["chapters"]), "clips": len(agg["clips"]),
         }
         # เขียนทุกครั้งที่จบ task — ถ้า task ถัดไปพัง จะได้ไม่เสียเงินที่จ่ายไปแล้วฟรี ๆ
         write_json(ctx.work / "ai.json", store)
-        cost = meta.get("cost_usd")
-        info(f"    {c('✓', 'g')} {len(part['clips'])} คลิป"
-             + (f" · {len(part['chapters'])} บท" if part["chapters"] else "")
-             + f"  ({meta.get('seconds')} วิ"
-             + (f" · ${cost:.3f}" if isinstance(cost, (int, float)) else "") + ")")
+        info(f"    {c('✓', 'g')} {len(agg['clips'])} คลิป"
+             + (f" · {len(agg['chapters'])} บท" if agg["chapters"] else "")
+             + f"  ({secs:.0f} วิ" + (f" · ${cost:.3f}" if cost else "") + ")")
 
     write_json(ctx.work / "ai.json", store)
     report(store)

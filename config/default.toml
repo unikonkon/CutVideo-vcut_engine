@@ -172,7 +172,10 @@ provider = "claude_code_cli"
 binary   = "claude"
 model    = "sonnet"         # sonnet = คุ้มสุดสำหรับงานนี้ | opus ถ้าอยากให้แบ่งบทละเอียดกว่า
 tasks    = ["story_arc", "shot_scoring", "trim_suggest"]
-timeout  = 2400             # วินาที ต่อหนึ่ง task — story_arc กับ 273 คลิปใช้ ~15 นาที
+timeout  = 1800             # วินาที ต่อหนึ่งครั้งที่เรียก
+# ให้คะแนน/แนะนำช่วง ตอบทีละคลิป จึงซอยเป็นก้อนได้ — ก้อนเล็กเร็วกว่าและหลุดยากกว่า
+# (0 = ไม่ซอย) ส่วน story_arc ต้องเห็นทั้งเรื่องพร้อมกัน จะไม่ถูกซอยไม่ว่าตั้งเท่าไร
+batch_clips = 80
 sheets   = true             # ส่ง contact sheet ให้ AI ดูภาพด้วย (ต้องรัน vcut thumbs ก่อน)
 transcript_chars = 600      # ตัดคำพูดต่อคลิปไม่ให้ยาวเกินนี้ กันโปรมป์บวม
 allowed_tools   = "Read,Write"

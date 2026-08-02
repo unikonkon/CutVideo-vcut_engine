@@ -1,0 +1,1181 @@
+{
+ "version": 1,
+ "goal": "ตัดเหลือ 10 นาที เล่าตามลำดับการเดินทาง",
+ "clips": {
+  "IMG_7068": {
+   "chapter": "ch1"
+  },
+  "IMG_7070": {
+   "chapter": "ch1"
+  },
+  "IMG_7074": {
+   "chapter": "ch1"
+  },
+  "IMG_7075": {
+   "chapter": "ch1"
+  },
+  "IMG_7076": {
+   "chapter": "ch1"
+  },
+  "IMG_7077": {
+   "chapter": "ch1"
+  },
+  "IMG_7079": {
+   "chapter": "ch1"
+  },
+  "IMG_7080": {
+   "chapter": "ch1"
+  },
+  "IMG_7082": {
+   "chapter": "ch1"
+  },
+  "IMG_7084": {
+   "chapter": "ch1"
+  },
+  "IMG_7085": {
+   "chapter": "ch1"
+  },
+  "IMG_7094": {
+   "chapter": "ch2"
+  },
+  "IMG_7097": {
+   "chapter": "ch2"
+  },
+  "IMG_7099": {
+   "chapter": "ch2"
+  },
+  "IMG_7100": {
+   "chapter": "ch2"
+  },
+  "IMG_7102": {
+   "chapter": "ch2"
+  },
+  "IMG_7103": {
+   "chapter": "ch2"
+  },
+  "IMG_7104": {
+   "chapter": "ch2"
+  },
+  "IMG_7105": {
+   "chapter": "ch2"
+  },
+  "IMG_7106": {
+   "chapter": "ch2"
+  },
+  "IMG_7118": {
+   "chapter": "ch2"
+  },
+  "IMG_7128": {
+   "chapter": "ch2"
+  },
+  "IMG_7142": {
+   "chapter": "ch2"
+  },
+  "IMG_7151": {
+   "chapter": "ch2"
+  },
+  "IMG_7152": {
+   "chapter": "ch2"
+  },
+  "IMG_7155": {
+   "chapter": "ch3"
+  },
+  "IMG_7156": {
+   "chapter": "ch3"
+  },
+  "IMG_7157": {
+   "chapter": "ch3"
+  },
+  "IMG_7158": {
+   "chapter": "ch3"
+  },
+  "IMG_7159": {
+   "chapter": "ch3"
+  },
+  "IMG_7162": {
+   "chapter": "ch3"
+  },
+  "IMG_7164": {
+   "chapter": "ch3"
+  },
+  "IMG_7165": {
+   "chapter": "ch3"
+  },
+  "IMG_7168": {
+   "chapter": "ch3"
+  },
+  "IMG_7170": {
+   "chapter": "ch3"
+  },
+  "IMG_7173": {
+   "chapter": "ch3"
+  },
+  "IMG_7175": {
+   "chapter": "ch3"
+  },
+  "IMG_7176": {
+   "chapter": "ch3"
+  },
+  "IMG_7177": {
+   "chapter": "ch3"
+  },
+  "IMG_7178": {
+   "chapter": "ch3"
+  },
+  "IMG_7179": {
+   "chapter": "ch3"
+  },
+  "IMG_7188": {
+   "chapter": "ch3"
+  },
+  "IMG_7189": {
+   "chapter": "ch3"
+  },
+  "IMG_7190": {
+   "chapter": "ch3"
+  },
+  "IMG_7194": {
+   "chapter": "ch3"
+  },
+  "IMG_7195": {
+   "chapter": "ch3"
+  },
+  "IMG_7201": {
+   "chapter": "ch3"
+  },
+  "IMG_7202": {
+   "chapter": "ch3"
+  },
+  "IMG_7204": {
+   "chapter": "ch3"
+  },
+  "IMG_7207": {
+   "chapter": "ch3"
+  },
+  "IMG_7208": {
+   "chapter": "ch3"
+  },
+  "IMG_7210": {
+   "chapter": "ch3"
+  },
+  "IMG_7213": {
+   "chapter": "ch3"
+  },
+  "IMG_7214": {
+   "chapter": "ch3"
+  },
+  "IMG_7225": {
+   "chapter": "ch3"
+  },
+  "IMG_7230": {
+   "chapter": "ch3"
+  },
+  "IMG_7232": {
+   "chapter": "ch3"
+  },
+  "IMG_7233": {
+   "chapter": "ch3"
+  },
+  "IMG_7234": {
+   "chapter": "ch3"
+  },
+  "IMG_7236": {
+   "chapter": "ch3"
+  },
+  "IMG_7238": {
+   "chapter": "ch3"
+  },
+  "IMG_7247": {
+   "chapter": "ch3"
+  },
+  "IMG_7248": {
+   "chapter": "ch3"
+  },
+  "IMG_7249": {
+   "chapter": "ch3"
+  },
+  "IMG_7262": {
+   "chapter": "ch3"
+  },
+  "IMG_7306": {
+   "chapter": "ch4"
+  },
+  "IMG_7307": {
+   "chapter": "ch4"
+  },
+  "IMG_7309": {
+   "chapter": "ch4"
+  },
+  "IMG_7310": {
+   "chapter": "ch4"
+  },
+  "IMG_7311": {
+   "chapter": "ch4"
+  },
+  "IMG_7312": {
+   "chapter": "ch4"
+  },
+  "IMG_7313": {
+   "chapter": "ch4"
+  },
+  "IMG_7360": {
+   "chapter": "ch4"
+  },
+  "IMG_7363": {
+   "chapter": "ch4"
+  },
+  "IMG_7364": {
+   "chapter": "ch4"
+  },
+  "IMG_7365": {
+   "chapter": "ch5"
+  },
+  "IMG_7366": {
+   "chapter": "ch5"
+  },
+  "IMG_7367": {
+   "chapter": "ch5"
+  },
+  "IMG_7369": {
+   "chapter": "ch5"
+  },
+  "IMG_7371": {
+   "chapter": "ch5"
+  },
+  "IMG_7372": {
+   "chapter": "ch5"
+  },
+  "IMG_7373": {
+   "chapter": "ch5"
+  },
+  "IMG_7374": {
+   "chapter": "ch5"
+  },
+  "IMG_7375": {
+   "chapter": "ch5"
+  },
+  "IMG_7378": {
+   "chapter": "ch5"
+  },
+  "IMG_7379": {
+   "chapter": "ch5"
+  },
+  "IMG_7382": {
+   "chapter": "ch5"
+  },
+  "IMG_7384": {
+   "chapter": "ch5"
+  },
+  "IMG_7388": {
+   "chapter": "ch5"
+  },
+  "IMG_7393": {
+   "chapter": "ch5"
+  },
+  "IMG_7394": {
+   "chapter": "ch5"
+  },
+  "IMG_7396": {
+   "chapter": "ch5"
+  },
+  "IMG_7398": {
+   "chapter": "ch5"
+  },
+  "IMG_7399": {
+   "chapter": "ch5"
+  },
+  "IMG_7401": {
+   "chapter": "ch5"
+  },
+  "IMG_7404": {
+   "chapter": "ch5"
+  },
+  "IMG_7405": {
+   "chapter": "ch5"
+  },
+  "IMG_7407": {
+   "chapter": "ch5"
+  },
+  "IMG_7408": {
+   "chapter": "ch5"
+  },
+  "IMG_7411": {
+   "chapter": "ch5"
+  },
+  "IMG_7414": {
+   "chapter": "ch6"
+  },
+  "IMG_7424": {
+   "chapter": "ch6"
+  },
+  "IMG_7425": {
+   "chapter": "ch6"
+  },
+  "IMG_7429": {
+   "chapter": "ch6"
+  },
+  "IMG_7439": {
+   "chapter": "ch6"
+  },
+  "IMG_7440": {
+   "chapter": "ch6"
+  },
+  "IMG_7441": {
+   "chapter": "ch6"
+  },
+  "IMG_7442": {
+   "chapter": "ch6"
+  },
+  "IMG_7444": {
+   "chapter": "ch6"
+  },
+  "IMG_7445": {
+   "chapter": "ch6"
+  },
+  "IMG_7448": {
+   "chapter": "ch6"
+  },
+  "IMG_7449": {
+   "chapter": "ch6"
+  },
+  "IMG_7451": {
+   "chapter": "ch6"
+  },
+  "IMG_7452": {
+   "chapter": "ch6"
+  },
+  "IMG_7453": {
+   "chapter": "ch6"
+  },
+  "IMG_7454": {
+   "chapter": "ch6"
+  },
+  "IMG_7455": {
+   "chapter": "ch6"
+  },
+  "IMG_7456": {
+   "chapter": "ch6"
+  },
+  "IMG_7457": {
+   "chapter": "ch6"
+  },
+  "IMG_7458": {
+   "chapter": "ch6"
+  },
+  "IMG_7459": {
+   "chapter": "ch6"
+  },
+  "IMG_7460": {
+   "chapter": "ch6"
+  },
+  "IMG_7463": {
+   "chapter": "ch6"
+  },
+  "IMG_7468": {
+   "chapter": "ch6"
+  },
+  "IMG_7469": {
+   "chapter": "ch6"
+  },
+  "IMG_7497": {
+   "chapter": "ch7"
+  },
+  "IMG_7498": {
+   "chapter": "ch7"
+  },
+  "IMG_7499": {
+   "chapter": "ch7"
+  },
+  "IMG_7501": {
+   "chapter": "ch7"
+  },
+  "IMG_7502": {
+   "chapter": "ch7"
+  },
+  "IMG_7506": {
+   "chapter": "ch7"
+  },
+  "IMG_7507": {
+   "chapter": "ch7"
+  },
+  "IMG_7508": {
+   "chapter": "ch7"
+  },
+  "IMG_7509": {
+   "chapter": "ch7"
+  },
+  "IMG_7510": {
+   "chapter": "ch7"
+  },
+  "IMG_7511": {
+   "chapter": "ch7"
+  },
+  "IMG_7512": {
+   "chapter": "ch7"
+  },
+  "IMG_7514": {
+   "chapter": "ch7"
+  },
+  "IMG_7515": {
+   "chapter": "ch7"
+  },
+  "IMG_7517": {
+   "chapter": "ch7"
+  },
+  "IMG_7519": {
+   "chapter": "ch7"
+  },
+  "IMG_7529": {
+   "chapter": "ch7"
+  },
+  "IMG_7530": {
+   "chapter": "ch7"
+  },
+  "IMG_7532": {
+   "chapter": "ch7"
+  },
+  "IMG_7535": {
+   "chapter": "ch7"
+  },
+  "IMG_7536": {
+   "chapter": "ch7"
+  },
+  "IMG_7537": {
+   "chapter": "ch7"
+  },
+  "IMG_7538": {
+   "chapter": "ch7"
+  },
+  "IMG_7541": {
+   "chapter": "ch7"
+  },
+  "IMG_7542": {
+   "chapter": "ch7"
+  },
+  "IMG_7545": {
+   "chapter": "ch7"
+  },
+  "IMG_7548": {
+   "chapter": "ch7"
+  },
+  "IMG_7549": {
+   "chapter": "ch7"
+  },
+  "IMG_7550": {
+   "chapter": "ch7"
+  },
+  "IMG_7551": {
+   "chapter": "ch7"
+  },
+  "IMG_7556": {
+   "chapter": "ch7"
+  },
+  "IMG_7557": {
+   "chapter": "ch7"
+  },
+  "IMG_7559": {
+   "chapter": "ch7"
+  },
+  "IMG_7560": {
+   "chapter": "ch7"
+  },
+  "IMG_7563": {
+   "chapter": "ch7"
+  },
+  "IMG_7566": {
+   "chapter": "ch7"
+  },
+  "IMG_7569": {
+   "chapter": "ch7"
+  },
+  "IMG_7571": {
+   "chapter": "ch7"
+  },
+  "IMG_7572": {
+   "chapter": "ch7"
+  },
+  "IMG_7575": {
+   "chapter": "ch7"
+  },
+  "IMG_7576": {
+   "chapter": "ch7"
+  },
+  "IMG_7583": {
+   "chapter": "ch8"
+  },
+  "IMG_7584": {
+   "chapter": "ch8"
+  },
+  "IMG_7585": {
+   "chapter": "ch8"
+  },
+  "IMG_7586": {
+   "chapter": "ch8"
+  },
+  "IMG_7589": {
+   "chapter": "ch8"
+  },
+  "IMG_7594": {
+   "chapter": "ch8"
+  },
+  "IMG_7595": {
+   "chapter": "ch8"
+  },
+  "IMG_7598": {
+   "chapter": "ch8"
+  },
+  "IMG_7599": {
+   "chapter": "ch8"
+  },
+  "IMG_7600": {
+   "chapter": "ch8"
+  },
+  "IMG_7601": {
+   "chapter": "ch8"
+  },
+  "IMG_7605": {
+   "chapter": "ch8"
+  },
+  "IMG_7606": {
+   "chapter": "ch8"
+  },
+  "IMG_7607": {
+   "chapter": "ch8"
+  },
+  "IMG_7608": {
+   "chapter": "ch8"
+  },
+  "IMG_7609": {
+   "chapter": "ch8"
+  },
+  "IMG_7610": {
+   "chapter": "ch8"
+  },
+  "IMG_7611": {
+   "chapter": "ch8"
+  },
+  "IMG_7612": {
+   "chapter": "ch8"
+  },
+  "IMG_7613": {
+   "chapter": "ch8"
+  },
+  "IMG_7614": {
+   "chapter": "ch8"
+  },
+  "IMG_7615": {
+   "chapter": "ch8"
+  },
+  "IMG_7616": {
+   "chapter": "ch8"
+  },
+  "IMG_7618": {
+   "chapter": "ch8"
+  },
+  "IMG_7622": {
+   "chapter": "ch8"
+  },
+  "IMG_7623": {
+   "chapter": "ch8"
+  },
+  "IMG_7632": {
+   "chapter": "ch8"
+  },
+  "IMG_7634": {
+   "chapter": "ch8"
+  },
+  "IMG_7638": {
+   "chapter": "ch8"
+  },
+  "IMG_7640": {
+   "chapter": "ch8"
+  },
+  "IMG_7641": {
+   "chapter": "ch8"
+  },
+  "IMG_7642": {
+   "chapter": "ch8"
+  },
+  "IMG_7643": {
+   "chapter": "ch8"
+  },
+  "IMG_7644": {
+   "chapter": "ch8"
+  },
+  "IMG_7648": {
+   "chapter": "ch9"
+  },
+  "IMG_7649": {
+   "chapter": "ch9"
+  },
+  "IMG_7650": {
+   "chapter": "ch9"
+  },
+  "IMG_7654": {
+   "chapter": "ch9"
+  },
+  "IMG_7656": {
+   "chapter": "ch9"
+  },
+  "IMG_7657": {
+   "chapter": "ch9"
+  },
+  "IMG_7658": {
+   "chapter": "ch9"
+  },
+  "IMG_7660": {
+   "chapter": "ch9"
+  },
+  "IMG_7661": {
+   "chapter": "ch9"
+  },
+  "IMG_7662": {
+   "chapter": "ch9"
+  },
+  "IMG_7667": {
+   "chapter": "ch9"
+  },
+  "IMG_7671": {
+   "chapter": "ch9"
+  },
+  "IMG_7672": {
+   "chapter": "ch9"
+  },
+  "IMG_7673": {
+   "chapter": "ch9"
+  },
+  "IMG_7675": {
+   "chapter": "ch9"
+  },
+  "IMG_7676": {
+   "chapter": "ch9"
+  },
+  "IMG_7678": {
+   "chapter": "ch9"
+  },
+  "IMG_7680": {
+   "chapter": "ch9"
+  },
+  "IMG_7681": {
+   "chapter": "ch9"
+  },
+  "IMG_7682": {
+   "chapter": "ch9"
+  },
+  "IMG_7684": {
+   "chapter": "ch9"
+  },
+  "IMG_7687": {
+   "chapter": "ch9"
+  },
+  "IMG_7688": {
+   "chapter": "ch9"
+  },
+  "IMG_7689": {
+   "chapter": "ch9"
+  },
+  "IMG_7690": {
+   "chapter": "ch9"
+  },
+  "IMG_7691": {
+   "chapter": "ch9"
+  },
+  "IMG_7693": {
+   "chapter": "ch9"
+  },
+  "IMG_7694": {
+   "chapter": "ch9"
+  },
+  "IMG_7695": {
+   "chapter": "ch9"
+  },
+  "IMG_7696": {
+   "chapter": "ch9"
+  },
+  "IMG_7698": {
+   "chapter": "ch9"
+  },
+  "IMG_7699": {
+   "chapter": "ch9"
+  },
+  "IMG_7700": {
+   "chapter": "ch9"
+  },
+  "IMG_7702": {
+   "chapter": "ch9"
+  },
+  "IMG_7703": {
+   "chapter": "ch9"
+  },
+  "IMG_7705": {
+   "chapter": "ch9"
+  },
+  "IMG_7706": {
+   "chapter": "ch9"
+  },
+  "IMG_7713": {
+   "chapter": "ch9"
+  },
+  "IMG_7714": {
+   "chapter": "ch9"
+  },
+  "IMG_7715": {
+   "chapter": "ch9"
+  },
+  "IMG_7716": {
+   "chapter": "ch9"
+  },
+  "IMG_7717": {
+   "chapter": "ch9"
+  },
+  "IMG_7718": {
+   "chapter": "ch9"
+  },
+  "IMG_7719": {
+   "chapter": "ch9"
+  },
+  "IMG_7720": {
+   "chapter": "ch9"
+  },
+  "IMG_7723": {
+   "chapter": "ch9"
+  },
+  "IMG_7724": {
+   "chapter": "ch9"
+  },
+  "IMG_7728": {
+   "chapter": "ch9"
+  },
+  "IMG_7729": {
+   "chapter": "ch9"
+  },
+  "IMG_7730": {
+   "chapter": "ch9"
+  },
+  "IMG_7731": {
+   "chapter": "ch10"
+  },
+  "IMG_7732": {
+   "chapter": "ch10"
+  },
+  "IMG_7734": {
+   "chapter": "ch10"
+  },
+  "IMG_7735": {
+   "chapter": "ch10"
+  },
+  "IMG_7738": {
+   "chapter": "ch10"
+  },
+  "IMG_7739": {
+   "chapter": "ch10"
+  },
+  "IMG_7740": {
+   "chapter": "ch10"
+  },
+  "IMG_7741": {
+   "chapter": "ch10"
+  },
+  "IMG_7742": {
+   "chapter": "ch10"
+  },
+  "IMG_7743": {
+   "chapter": "ch10"
+  },
+  "IMG_7744": {
+   "chapter": "ch10"
+  },
+  "IMG_7745": {
+   "chapter": "ch10"
+  },
+  "IMG_7746": {
+   "chapter": "ch10"
+  },
+  "IMG_7747": {
+   "chapter": "ch10"
+  },
+  "IMG_7748": {
+   "chapter": "ch10"
+  },
+  "IMG_7750": {
+   "chapter": "ch10"
+  },
+  "IMG_7751": {
+   "chapter": "ch10"
+  },
+  "IMG_7755": {
+   "chapter": "ch10"
+  },
+  "IMG_7756": {
+   "chapter": "ch10"
+  },
+  "IMG_7761": {
+   "chapter": "ch10"
+  },
+  "IMG_7762": {
+   "chapter": "ch10"
+  },
+  "IMG_7767": {
+   "chapter": "ch10"
+  },
+  "IMG_7772": {
+   "chapter": "ch10"
+  }
+ },
+ "chapters": [
+  {
+   "id": "ch1",
+   "title": "ออกเดินทาง",
+   "why": "ลานจอดรถและประตูทางเข้า ผู้คนรวมกลุ่มสะพายเป้ เตรียมอุปกรณ์ 7075 พูดว่า 'ไป' บ่งชี้จุดเริ่มต้นการเดินทาง",
+   "clips": [
+    "IMG_7068",
+    "IMG_7070",
+    "IMG_7074",
+    "IMG_7075",
+    "IMG_7076",
+    "IMG_7077",
+    "IMG_7079",
+    "IMG_7080",
+    "IMG_7082",
+    "IMG_7084",
+    "IMG_7085"
+   ]
+  },
+  {
+   "id": "ch2",
+   "title": "เข้าป่า",
+   "why": "เส้นทางป่าทึบช่วงต้น ป้าย 440 ม. ทางแน่นขนัดผู้คน ผ่านสะพานและรากไม้ เข้าสู่ป่าจริง",
+   "clips": [
+    "IMG_7094",
+    "IMG_7097",
+    "IMG_7099",
+    "IMG_7100",
+    "IMG_7102",
+    "IMG_7103",
+    "IMG_7104",
+    "IMG_7105",
+    "IMG_7106",
+    "IMG_7118",
+    "IMG_7128",
+    "IMG_7142",
+    "IMG_7151",
+    "IMG_7152"
+   ]
+  },
+  {
+   "id": "ch3",
+   "title": "ปีนขึ้นเขา",
+   "why": "ดินแดงลาดชันเละ ช่วยกันปีน พักหายใจ ขอน้ำ (7195) บ่งชี้ช่วงหนักที่สุดของการขึ้น ใช้เวลาราว 10 โมงขึ้น (7190)",
+   "clips": [
+    "IMG_7155",
+    "IMG_7156",
+    "IMG_7157",
+    "IMG_7158",
+    "IMG_7159",
+    "IMG_7162",
+    "IMG_7164",
+    "IMG_7165",
+    "IMG_7168",
+    "IMG_7170",
+    "IMG_7173",
+    "IMG_7175",
+    "IMG_7176",
+    "IMG_7177",
+    "IMG_7178",
+    "IMG_7179",
+    "IMG_7188",
+    "IMG_7189",
+    "IMG_7190",
+    "IMG_7194",
+    "IMG_7195",
+    "IMG_7201",
+    "IMG_7202",
+    "IMG_7204",
+    "IMG_7207",
+    "IMG_7208",
+    "IMG_7210",
+    "IMG_7213",
+    "IMG_7214",
+    "IMG_7225",
+    "IMG_7230",
+    "IMG_7232",
+    "IMG_7233",
+    "IMG_7234",
+    "IMG_7236",
+    "IMG_7238",
+    "IMG_7247",
+    "IMG_7248",
+    "IMG_7249",
+    "IMG_7262"
+   ]
+  },
+  {
+   "id": "ch4",
+   "title": "ถึงยอดเขา",
+   "why": "ทิวทัศน์เปิดโล่ง เมฆหมอกปกคลุมสันเขา 7310 พูดว่า 'ไม่เคยดีใจขนาดนี้' เห็นแคมป์สีสันสดใสในระยะ",
+   "clips": [
+    "IMG_7306",
+    "IMG_7307",
+    "IMG_7309",
+    "IMG_7310",
+    "IMG_7311",
+    "IMG_7312",
+    "IMG_7313",
+    "IMG_7360",
+    "IMG_7363",
+    "IMG_7364"
+   ]
+  },
+  {
+   "id": "ch5",
+   "title": "ตั้งแคมป์-กินข้าว",
+   "why": "เลือกที่ตั้งเต็นท์ (7365 'ของเรามีแห่งนี้ใช่มั้ย') จัดอาหารกินมื้อแรก ครอบคลุมถึงคืนแรก (7372-7373 ความสว่าง 16-24) และป้าย 'เขาหลวงอันดับสาม' (7399)",
+   "clips": [
+    "IMG_7365",
+    "IMG_7366",
+    "IMG_7367",
+    "IMG_7369",
+    "IMG_7371",
+    "IMG_7372",
+    "IMG_7373",
+    "IMG_7374",
+    "IMG_7375",
+    "IMG_7378",
+    "IMG_7379",
+    "IMG_7382",
+    "IMG_7384",
+    "IMG_7388",
+    "IMG_7393",
+    "IMG_7394",
+    "IMG_7396",
+    "IMG_7398",
+    "IMG_7399",
+    "IMG_7401",
+    "IMG_7404",
+    "IMG_7405",
+    "IMG_7407",
+    "IMG_7408",
+    "IMG_7411"
+   ]
+  },
+  {
+   "id": "ch6",
+   "title": "สำรวจทุ่งสน",
+   "why": "วันที่สอง เดินสำรวจทุ่งหญ้าต้นสนบนยอดเขา ทิวทัศน์โล่งตา บรรยากาศเบาสบายกว่าวันขึ้น ซื้อของที่ร้านแคมป์",
+   "clips": [
+    "IMG_7414",
+    "IMG_7424",
+    "IMG_7425",
+    "IMG_7429",
+    "IMG_7439",
+    "IMG_7440",
+    "IMG_7441",
+    "IMG_7442",
+    "IMG_7444",
+    "IMG_7445",
+    "IMG_7448",
+    "IMG_7449",
+    "IMG_7451",
+    "IMG_7452",
+    "IMG_7453",
+    "IMG_7454",
+    "IMG_7455",
+    "IMG_7456",
+    "IMG_7457",
+    "IMG_7458",
+    "IMG_7459",
+    "IMG_7460",
+    "IMG_7463",
+    "IMG_7468",
+    "IMG_7469"
+   ]
+  },
+  {
+   "id": "ch7",
+   "title": "อาหารเย็น-คืนที่สอง",
+   "why": "ทอดหมูกินเย็น (7511) ใต้ผ้าใบ ออกดูพระอาทิตย์ตก (7560 'ไปดูกว่าที') เล่าเรื่องเดินป่า (7512 สี่วันสามคืน) นอนคุยในเต็นท์ (7575-7576 ความสว่าง 19-25)",
+   "clips": [
+    "IMG_7497",
+    "IMG_7498",
+    "IMG_7499",
+    "IMG_7501",
+    "IMG_7502",
+    "IMG_7506",
+    "IMG_7507",
+    "IMG_7508",
+    "IMG_7509",
+    "IMG_7510",
+    "IMG_7511",
+    "IMG_7512",
+    "IMG_7514",
+    "IMG_7515",
+    "IMG_7517",
+    "IMG_7519",
+    "IMG_7529",
+    "IMG_7530",
+    "IMG_7532",
+    "IMG_7535",
+    "IMG_7536",
+    "IMG_7537",
+    "IMG_7538",
+    "IMG_7541",
+    "IMG_7542",
+    "IMG_7545",
+    "IMG_7548",
+    "IMG_7549",
+    "IMG_7550",
+    "IMG_7551",
+    "IMG_7556",
+    "IMG_7557",
+    "IMG_7559",
+    "IMG_7560",
+    "IMG_7563",
+    "IMG_7566",
+    "IMG_7569",
+    "IMG_7571",
+    "IMG_7572",
+    "IMG_7575",
+    "IMG_7576"
+   ]
+  },
+  {
+   "id": "ch8",
+   "title": "เช้าวันสุดท้าย",
+   "why": "เช้าวันสาม หมอกปกคลุมแคมป์ เก็บเต็นท์ เช็กเอาต์ที่ศาลาเจ้าหน้าที่ สะพายเป้เตรียมลง (7614 'จะกลับ', 7616 'ไปด้วยกัน 3 วัน')",
+   "clips": [
+    "IMG_7583",
+    "IMG_7584",
+    "IMG_7585",
+    "IMG_7586",
+    "IMG_7589",
+    "IMG_7594",
+    "IMG_7595",
+    "IMG_7598",
+    "IMG_7599",
+    "IMG_7600",
+    "IMG_7601",
+    "IMG_7605",
+    "IMG_7606",
+    "IMG_7607",
+    "IMG_7608",
+    "IMG_7609",
+    "IMG_7610",
+    "IMG_7611",
+    "IMG_7612",
+    "IMG_7613",
+    "IMG_7614",
+    "IMG_7615",
+    "IMG_7616",
+    "IMG_7618",
+    "IMG_7622",
+    "IMG_7623",
+    "IMG_7632",
+    "IMG_7634",
+    "IMG_7638",
+    "IMG_7640",
+    "IMG_7641",
+    "IMG_7642",
+    "IMG_7643",
+    "IMG_7644"
+   ]
+  },
+  {
+   "id": "ch9",
+   "title": "ลงเขา",
+   "why": "ลงผ่านป่าไผ่และป่าทึบ ดินลื่น ผ่านจุดน้ำ นับป้ายบอกทาง (7667 'มันจะพามาสุด') คุยเรื่องวิ่งลง (7656) ฝนตกระหว่างเดิน (7695)",
+   "clips": [
+    "IMG_7648",
+    "IMG_7649",
+    "IMG_7650",
+    "IMG_7654",
+    "IMG_7656",
+    "IMG_7657",
+    "IMG_7658",
+    "IMG_7660",
+    "IMG_7661",
+    "IMG_7662",
+    "IMG_7667",
+    "IMG_7671",
+    "IMG_7672",
+    "IMG_7673",
+    "IMG_7675",
+    "IMG_7676",
+    "IMG_7678",
+    "IMG_7680",
+    "IMG_7681",
+    "IMG_7682",
+    "IMG_7684",
+    "IMG_7687",
+    "IMG_7688",
+    "IMG_7689",
+    "IMG_7690",
+    "IMG_7691",
+    "IMG_7693",
+    "IMG_7694",
+    "IMG_7695",
+    "IMG_7696",
+    "IMG_7698",
+    "IMG_7699",
+    "IMG_7700",
+    "IMG_7702",
+    "IMG_7703",
+    "IMG_7705",
+    "IMG_7706",
+    "IMG_7713",
+    "IMG_7714",
+    "IMG_7715",
+    "IMG_7716",
+    "IMG_7717",
+    "IMG_7718",
+    "IMG_7719",
+    "IMG_7720",
+    "IMG_7723",
+    "IMG_7724",
+    "IMG_7728",
+    "IMG_7729",
+    "IMG_7730"
+   ]
+  },
+  {
+   "id": "ch10",
+   "title": "ถึงเชิงเขา-กลับบ้าน",
+   "why": "ผ่านป้ายทางออก ลงเชิงเขา ถึงรถตู้ที่จอดรอ ขึ้นรถเดินทางกลับ (7772 ความสว่าง 21 = กลางคืนในรถ)",
+   "clips": [
+    "IMG_7731",
+    "IMG_7732",
+    "IMG_7734",
+    "IMG_7735",
+    "IMG_7738",
+    "IMG_7739",
+    "IMG_7740",
+    "IMG_7741",
+    "IMG_7742",
+    "IMG_7743",
+    "IMG_7744",
+    "IMG_7745",
+    "IMG_7746",
+    "IMG_7747",
+    "IMG_7748",
+    "IMG_7750",
+    "IMG_7751",
+    "IMG_7755",
+    "IMG_7756",
+    "IMG_7761",
+    "IMG_7762",
+    "IMG_7767",
+    "IMG_7772"
+   ]
+  }
+ ],
+ "tasks": {
+  "story_arc": {
+   "goal": "ตัดเหลือ 10 นาที เล่าตามลำดับการเดินทาง",
+   "seconds": 450.8,
+   "cost_usd": 0.959,
+   "warnings": 0,
+   "batches": 1,
+   "chapters": 10,
+   "clips": 273
+  }
+ }
+}

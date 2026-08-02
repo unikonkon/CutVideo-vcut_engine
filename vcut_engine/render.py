@@ -243,8 +243,10 @@ def run(ctx, force=False):
         die(f"มี {len(failed)} ชิ้นที่ render ไม่สำเร็จ")
 
     manifest = {
+        # start อยู่ในนี้เพื่อให้ผูกชิ้น → ไฟล์ได้โดยไม่ต้องพึ่งลำดับ i
+        # (viewer สลับลำดับแล้ว i เปลี่ยน แต่ (name, start, dur) ยังเหมือนเดิม)
         "segments": [{"i": p["i"], "name": p["seg"]["name"], "kind": p["seg"]["kind"],
-                      "dur": p["seg"]["dur"], "key": p["key"],
+                      "start": p["seg"]["start"], "dur": p["seg"]["dur"], "key": p["key"],
                       "file": p["path"].name, "gain": p["gain"],
                       "src_lufs": p["src_lufs"], "src_peak": p["src_peak"],
                       "target_lufs": p["seg"]["target_lufs"],
