@@ -1,0 +1,29 @@
+# vlog เดินป่า ฉบับเต็ม — ใช้ทุกคลิป เสียงไม่แต่ง (สูตร v3)
+#
+# เก็บช่วงพูดทั้งหมดแล้วตัดเฉพาะช่องเงียบ · วิวคั่นสั้น ๆ ตามความนิ่งของภาพ
+# ไม่ใส่ compressor ไม่ลด noise แตะแค่ระดับความดังรายคลิป
+# ผลที่คาดไว้จากฟุตเทจ 273 คลิป: ~220 ชิ้น · ~23 นาที
+
+[project]
+name = "hiking-vlog"
+
+[talk]
+gap_merge = 1.50
+min_shot  = 3.00
+
+[broll]
+motion_bands = [8.0, 15.0]
+durations    = [4.0, 3.0, 1.5]
+run_max      = 3
+pick         = "center"
+drop_above_motion = 0.0     # ใช้ทุกคลิป ไม่คัดตัวสั่นทิ้ง
+
+[audio]
+target_lufs_talk  = -19.0
+target_lufs_broll = -26.0
+compressor  = false
+denoise     = false
+allow_limit = 12.0
+
+[select]
+enabled = false

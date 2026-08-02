@@ -1,0 +1,14 @@
+# cache ทั้งหมด สร้างใหม่ได้จากฟุตเทจ + config
+.vcut/
+
+# ไฟล์ผลลัพธ์
+*.mp4
+*.mov
+*.MOV
+
+# ยกเว้น EDL — ตัวนี้ควร commit เพราะเป็นตัวที่ทำให้ reproduce ผลลัพธ์ได้
+!edl.json
+
+__pycache__/
+*.pyc
+.DS_Store

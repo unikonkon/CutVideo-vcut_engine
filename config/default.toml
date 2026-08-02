@@ -1,0 +1,169 @@
+# ═══════════════════════════════════════════════════════════════
+#  vcut — ค่าตั้งต้น
+#  ทุกค่าในไฟล์นี้ทับได้ด้วย preset หรือ --set key.path=value
+# ═══════════════════════════════════════════════════════════════
+
+[project]
+name   = "untitled"
+source = "./vido"        # โฟลเดอร์ฟุตเทจต้นฉบับ
+work   = ".vcut"         # ที่เก็บ cache ทั้งหมด (ลบได้ สร้างใหม่ได้)
+out    = "final.mp4"
+
+
+# ─────────────────────────── SCAN ───────────────────────────
+[scan]
+extensions   = [".MOV", ".mov", ".mp4", ".MP4", ".m4v"]
+workers      = 6         # M3 8GB: 6 กำลังดี เกินนี้เริ่มแย่ง I/O
+motion_window = 20.0     # วิเคราะห์ motion จาก N วินาทีแรกของคลิป
+motion_fps   = 5         # เฟรม/วินาที ที่สุ่มมาคำนวณ motion
+bright_fps   = 2
+
+# metadata rotation โกหก — ตรวจด้วยตาแล้วต้องบังคับหมุนเอง
+# transpose=2 หมุนทวนเข็ม 90° | transpose=1 ตามเข็ม 90° | hflip,vflip กลับหัว
+[scan.rotation_overrides]
+IMG_7189 = "transpose=2"
+IMG_7405 = "transpose=2"
+IMG_7545 = "transpose=2"
+IMG_7694 = "transpose=2"
+IMG_7716 = "transpose=2"
+
+# คลิปที่บันทึกมาเป็น full range ต้องแปลงเป็น tv range ไม่งั้นสีจะจัดกว่าคลิปอื่น
+[scan.color]
+full_range_clips = ["IMG_7372", "IMG_7375", "IMG_7499"]
+
+
+# ─────────────────────────── LISTEN ───────────────────────────
+[listen]
+enabled  = true
+binary   = "whisper-cli"
+model    = "~/.cache/whisper/ggml-large-v3-turbo.bin"
+language = "th"
+threads  = 6
+workers  = 1             # whisper กิน RAM มาก — บน 8GB ห้ามเกิน 1
+keep_wav = false         # true = เก็บ wav 16k ไว้ (กินดิสก์ ~30MB/ชม.)
+
+# ถ้ามี transcript จากรอบก่อนอยู่แล้ว ชี้มาที่นี่เพื่อข้ามขั้นถอดเสียง
+# รองรับรูปแบบ output ของ whisper.cpp (-oj) : <ชื่อคลิป>.wav.json หรือ <ชื่อคลิป>.json
+import_dir = ""
+
+# ข้อความที่ whisper มักหลอนออกมาตอนเจอความเงียบ/เสียงลม
+[listen.filter]
+hallucination = [
+  "^\\s*(ขอบคุณ(ครับ|ค่ะ|ภัย)?|โปรดติดตามตอนต่อไป|สวัสดี(ครับ|ค่ะ)?|บ๊ายบาย|ติดตามชมได้|Thank you|Thanks for watching|\\.|,|…|ๆ)+\\s*$",
+]
+min_chars = 1
+
+
+# ─────────────────────────── CLASSIFY ───────────────────────────
+[classify]
+min_speech_total = 1.0   # พูดรวมเกินกี่วินาทีถึงนับเป็นคลิป TALK
+
+
+# ─────────────────────────── TALK ───────────────────────────
+[talk]
+margin_pre  = 0.40       # เผื่อหัวประโยค
+margin_post = 0.70       # เผื่อท้ายประโยค
+gap_merge   = 1.50       # ช่องเงียบสั้นกว่านี้ไม่ตัด (สูง = ตัดถี่น้อยลง)
+min_shot    = 3.00       # ช็อตพูดสั้นสุด กันตัดจนฟังไม่รู้เรื่อง
+
+
+# ─────────────────────────── B-ROLL ───────────────────────────
+[broll]
+# แบ่งระดับความนิ่งของภาพจากค่า motion แล้วให้ความยาวต่างกัน
+# motion < 8 = นิ่ง | 8–15 = ปานกลาง | >= 15 = สั่น/แพนเร็ว
+motion_bands = [8.0, 15.0]
+durations    = [4.0, 3.0, 1.5]   # ต้องมีจำนวน = motion_bands + 1
+
+run_max      = 3         # วิวติดกันได้ไม่เกินกี่ชิ้น (เกินกว่านี้เก็บตัวที่นิ่งสุด)
+pick         = "center"  # center = ตัดช่วงกลางคลิป | head | tail
+drop_above_motion = 0.0  # > 0 = ทิ้งคลิปที่สั่นเกินค่านี้ (0 = เก็บหมด)
+drop_below_bright = 0.0  # > 0 = ทิ้งคลิปที่มืดกว่าค่านี้ (0 = เก็บหมด)
+min_source_duration = 0.0
+
+
+# ─────────────────────────── ORDER ───────────────────────────
+[order]
+mode = "filename"        # filename = เรียงเลขไฟล์ | mtime | duration
+reverse = false
+
+
+# ─────────── SELECT (ตัดให้สั้นลงตามเป้าความยาว — ปิดโดยดีฟอลต์) ───────────
+[select]
+enabled        = false
+target_minutes = 0.0     # 0 = ไม่จำกัด
+talk_ratio     = 0.62    # สัดส่วนเวลาที่ให้ช่วงพูด (ที่เหลือเป็นวิว)
+min_unique_words = 2     # ช็อตพูดที่มีคำไม่ซ้ำน้อยกว่านี้ ตัดทิ้งก่อนเพื่อน
+avoid_adjacent = true    # ห้ามเลือกวิวสองชิ้นที่อยู่ติดกันในไทม์ไลน์
+
+
+# ─────────────────────────── VIDEO ───────────────────────────
+[video]
+width  = 1920
+height = 1080
+fps    = "60000/1001"    # 59.94 CFR — บังคับให้ทุกคลิปเท่ากัน กัน sync หลุด
+vertical_mode = "blur_pad"   # blur_pad | pillarbox | crop
+scale_flags   = "lanczos"
+
+# พื้นหลังเบลอสำหรับคลิปแนวตั้ง — ย่อก่อนเบลอแล้วค่อยขยายกลับ เร็วกว่าเบลอที่ 1080p หลายเท่า
+[video.blur]
+scale      = "480:270"
+sigma      = 9
+brightness = -0.10
+saturation = 0.85
+
+
+# ─────────────────────────── ENCODE ───────────────────────────
+[encode]
+vcodec   = "h264_videotoolbox"   # ฮาร์ดแวร์ M3 | ใช้ libx264 ถ้าต้องการคุณภาพสูงกว่า
+bitrate  = "20M"
+maxrate  = "26M"
+bufsize  = "52M"
+profile  = "high"
+crf      = 18            # ใช้เฉพาะเมื่อ vcodec = libx264
+preset   = "medium"      # ใช้เฉพาะเมื่อ vcodec = libx264
+gop      = 60
+keyframe_sec = 1.0       # บังคับ keyframe ทุก N วินาที — จำเป็นต่อ stream copy concat
+acodec   = "aac"
+abitrate = "192k"
+arate    = 48000
+achannels = 2            # mono -> stereo ให้เท่ากันทุกชิ้น
+
+
+# ─────────────────────────── AUDIO ───────────────────────────
+[audio]
+target_lufs_talk  = -19.0
+target_lufs_broll = -26.0
+tp_ceiling  = -4.0       # เพดาน true peak ต่อชิ้น (เผื่อ AAC overshoot)
+allow_limit = 12.0       # ยอมให้ limiter กดยอดคลื่นได้กี่ dB (0 = ไม่ให้ทำงานเลย)
+cap_up      = 32.0       # เร่งได้สูงสุดกี่ dB
+cap_down    = 15.0       # ลดได้สูงสุดกี่ dB
+fade        = 0.02       # fade in/out ตรงรอยต่อ กันเสียงป๊อก
+compressor  = false      # true = ใส่ acompressor ก่อน limiter
+denoise     = false      # true = ใส่ afftdn ลดเสียงซ่า
+master_lufs = 0.0        # > -70 = ทำ loudnorm ทั้งไฟล์ตอนท้าย (0 = ไม่ทำ)
+
+# ⚠️ alimiter ของ ffmpeg มีออปชัน level ที่เปิดโดยดีฟอลต์ ซึ่ง auto-normalize
+#    สัญญาณขึ้นชนเพดานเสมอ ทับค่า gain ที่คำนวณไว้ทั้งหมด ต้องปิดเสมอ
+limiter_level_disabled = true
+
+
+# ─────────────────────────── RENDER ───────────────────────────
+[render]
+workers   = 2            # M3 8GB: 2 พอ videotoolbox เป็นคอขวดอยู่แล้ว
+min_free_gb = 5.0        # ถ้าดิสก์เหลือน้อยกว่านี้ หยุดก่อนเริ่ม
+concat_mode = "copy"     # copy = ต่อโดยไม่เข้ารหัสซ้ำ (เร็วมาก) | encode
+
+
+# ─────────────────────────── THUMBS ───────────────────────────
+[thumbs]
+per_clip   = 1
+width      = 320
+sheet_cols = 5
+sheet_rows = 5           # 25 ภาพ/แผ่น → 273 คลิปเหลือ 11 แผ่นให้ AI ดู
+
+
+# ─────────────────────────── AI (Phase 4 — ยังไม่เปิด) ───────────────────────────
+[ai]
+enabled  = false
+provider = "claude_code_cli"
+model    = "sonnet"

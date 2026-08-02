@@ -1,0 +1,29 @@
+# จังหวะช้า ภาพนิ่ง — คัดคลิปสั่นทิ้ง ทุกช็อตยาวเท่ากัน (สูตร v2)
+#
+# เหมาะกับงานที่เน้นความสบายตา ไม่ตัดถี่ ยอมเสียคลิปสั่นไป
+# ผลที่คาดไว้จากฟุตเทจ 273 คลิป: ~194 ชิ้น · ~27 นาที
+
+[project]
+name = "v2-classic"
+
+[talk]
+gap_merge = 1.50
+min_shot  = 6.00            # ช็อตพูดยาวขึ้น ตัดถี่น้อยลง
+
+[broll]
+motion_bands = [8.0, 15.0]
+durations    = [6.0, 6.0, 6.0]   # ทุกช็อตวิวยาวเท่ากัน
+run_max      = 4
+pick         = "center"
+drop_above_motion = 15.0    # ทิ้งคลิปที่สั่น/แพนเร็ว
+
+[audio]
+target_lufs_talk  = -19.0
+target_lufs_broll = -26.0
+compressor  = true          # v2 ใส่ compressor + noise reduction
+denoise     = true
+allow_limit = 12.0
+master_lufs = -16.0         # ทำ loudnorm ทั้งไฟล์ตอนท้าย
+
+[select]
+enabled = false

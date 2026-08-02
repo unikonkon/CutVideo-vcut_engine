@@ -1,0 +1,18 @@
+# โปรเจกต์จริง: เดินป่าภูสอยดาว — ฟุตเทจ 273 คลิป 51 นาที
+#
+# ใช้:  ./vcut run -c projects/phu-soi-dao.toml
+#       ./vcut decide -c projects/phu-soi-dao.toml --set broll.run_max=4
+extends = "hiking-vlog"
+
+[project]
+name   = "phu-soi-dao"
+source = "/Users/macbook3lf1/web work/ตัดต่อ vido/vido"
+work   = "/Users/macbook3lf1/web work/โปรแกรม ตัดต่อ/.vcut"
+out    = "/Users/macbook3lf1/web work/โปรแกรม ตัดต่อ/final.mp4"
+
+[listen]
+# มี transcript จากรอบก่อนอยู่แล้ว — ดึงมาใช้ ไม่ต้องถอดเสียงใหม่ 12 นาที
+import_dir = "/Users/macbook3lf1/web work/ตัดต่อ vido/v2_transcripts"
+
+[render]
+min_free_gb = 4.0        # ดิสก์เหลือน้อย เตือนไว้ต่ำหน่อยแต่ยังกันพลาด
