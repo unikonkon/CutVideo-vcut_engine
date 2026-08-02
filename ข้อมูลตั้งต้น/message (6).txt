@@ -1,0 +1,100 @@
+ผมเช็คจากเครื่องคุณแล้ว — คุณเคยรัน HyperFrames ไป 18 คำสั่งเมื่อ 21 พ.ค. 2026 ผ่าน npx (config อยู่ที่ ~/.hyperframes/config.json)
+
+HyperFrames คือ HTML → MP4 renderer ของ HeyGen (Apache-2.0, Node 22+ + FFmpeg) — เทียบได้กับ Remotion แต่ใช้ HTML/CSS แทน React มันไม่มีเอนจิน lip-sync อยู่ในตัวเลย มีแค่ skill ชื่อ /talking-head-recut ที่เอาไว้ ใส่กราฟิกทับวิดีโอ talking-head ที่ sync มาแล้ว
+
+ตัวที่ทำ lip-sync จริงคือ HeyGen Cloud API (POST /v3/hyperframes/renders) ซึ่ง ปิด + เสียเงิน ไม่ใช่ open source
+
+เพราะฉะนั้นคำถาม "MuseTalk vs LatentSync vs Easy-Wav2Lip vs HyperFrames" เทียบกันไม่ได้ครับ — มันคนละชั้นของ pipeline HyperFrames เป็นเพื่อนร่วมงาน ไม่ใช่คู่แข่ง
+
+
+[ Lip-sync engine ]          →  [ Compositor / ตัดต่อ ]
+MuseTalk / LatentSync / W2L      HyperFrames / Remotion / ffmpeg
+เทียบ 3 ตัวจริงสำหรับ re-sync ปาก (.MOV → .MP4)
+MuseTalk 1.5	LatentSync 1.5 / 1.6	Easy-Wav2Lip
+License เชิงพาณิชย์	✅ MIT ทั้ง code + weights	⚠️ Apache-2.0 (code) แต่ weights = openrail++	❌ ห้าม (LRS2 dataset)
+คุณภาพภาพปาก	ดีมาก (256×256 inpainting)	ดีที่สุด (v1.6 = 512×512)	ซอฟต์/เบลอ (96×96 upscale)
+ความแม่นของ sync	ดีมาก	ดี	แม่นที่สุด แต่ภาพแย่
+VRAM	4–8 GB	8 GB (1.5) / 18 GB (1.6)	~4 GB
+ความเร็ว	30fps+ (เร็วสุด)	ช้า (diffusion 20–50 steps)	เร็ว
+คลิปยาว / หลายช็อต	เสถียร	v1.6 ดี, v1.5 หน้าอาจ drift	หน้าสั่นเมื่อยาว
+หน้าเอียง/ด้านข้าง	รับได้ปานกลาง	รับได้ดีสุด	พังบ่อย
+รันบน M3 8GB ของคุณ	❌ (Colab/HF)	❌ (Colab/HF)	⚠️ ได้ แต่ช้ามาก
+Colab ฟรี T4 16GB	✅ สบาย	✅ v1.5 / ❌ v1.6	✅
+🏆 คำตอบสำหรับงานคุณ
+MuseTalk 1.5 — เพราะ:
+
+MIT ทั้งก้อน = งานลูกค้า/งานขายได้ ไม่ต้องกลัวโดนทวง (LatentSync weights เป็น openrail++ มีข้อจำกัดการใช้ผลลัพธ์, Wav2Lip ห้ามชัดเจน)
+เร็วที่สุด → ลองซ้ำหลายรอบได้ถูก ทั้งบน Colab ฟรีและ HF Space
+รองรับเสียงไทยดี
+ใช้ LatentSync 1.6 เฉพาะเมื่อ: ต้องการหน้าคมระดับ 512px, มีช็อตหันข้าง, หรือฉายจอใหญ่ — และต้องหา GPU 18 GB (Colab Pro L4/A100) + ยอมรับ openrail++
+
+Easy-Wav2Lip: ใช้ได้แค่ทดลอง/งานส่วนตัว — ตัดออกจากงาน production ครับ
+
+🎥 ข้อควรระวังเฉพาะไฟล์ .MOV (สำคัญมาก)
+ทั้ง 3 โมเดลไม่รับ .MOV ตรง ๆ ได้ดี ต้องแปลงก่อนเสมอ เพราะ:
+
+ปัญหาของ .MOV	ผลที่เกิด
+ProRes 422 / 4444 (จากกล้อง/Final Cut)	OpenCV/decord อ่านไม่ออก → crash
+HEVC/H.265 (จาก iPhone)	face detector อ่านเฟรมพลาด
+Rotation metadata (ถ่ายแนวตั้งด้วยมือถือ)	โมเดลเห็นภาพนอนตะแคง → หาหน้าไม่เจอ ปากเพี้ยน
+Alpha channel (4444)	ช่องสีเกิน → tensor shape ผิด
+VFR (variable frame rate จาก iPhone)	เสียงกับปากเลื่อนออกจากกันเรื่อย ๆ ยิ่งคลิปยาวยิ่งเพี้ยน
+คำสั่งเตรียมไฟล์ (รันบน M3 คุณได้เลย — ffmpeg 8.1 มีแล้ว)
+
+# 1) ตรวจก่อนว่าไฟล์เป็นอะไร
+ffprobe -v error -select_streams v:0 \
+  -show_entries stream=codec_name,pix_fmt,r_frame_rate,avg_frame_rate,width,height \
+  -show_entries stream_side_data=rotation \
+  -of default=nw=1 input.MOV
+
+# 2) แปลงเป็น MP4 มาตรฐาน — บังคับ CFR 25fps, ล้าง rotation, ตัด alpha
+ffmpeg -i input.MOV \
+  -vf "scale=-2:720,format=yuv420p" \
+  -r 25 -vsync cfr \
+  -c:v libx264 -crf 18 -preset slow \
+  -c:a aac -ar 16000 -ac 1 \
+  -movflags +faststart \
+  clean.mp4
+
+# 3) แยกเสียงพากย์ใหม่เป็น 16kHz mono (โมเดลต้องการแบบนี้)
+ffmpeg -i voice_new.wav -ar 16000 -ac 1 -c:a pcm_s16le voice.wav
+-r 25 -vsync cfr คือบรรทัดที่สำคัญที่สุด — ถ้าข้ามไป คลิป iPhone VFR จะ sync หลุดสะสมเรื่อย ๆ นี่คือสาเหตุอันดับ 1 ที่คนบ่นว่า "ปากไม่ตรงตอนท้ายคลิป"
+
+หลัง lip-sync เสร็จ ถ้าต้นฉบับเป็น ProRes และต้องส่งงานกลับเป็น .MOV:
+
+
+ffmpeg -i lipsynced.mp4 -c:v prores_ks -profile:v 3 -c:a pcm_s16le final.MOV
+(แต่ปากที่ผ่านโมเดลจะเป็น 8-bit อยู่ดี — แปลงกลับได้แค่ให้เข้า timeline เดิม ไม่ได้คุณภาพคืน)
+
+Pipeline ที่แนะนำ (ใช้ HyperFrames ที่คุณมีอยู่แล้วให้คุ้ม)
+
+input.MOV ──ffmpeg (M3, ฟรี)──→ clean.mp4 + voice.wav
+                                      │
+                                      ▼
+                          MuseTalk 1.5 (Colab T4 ฟรี / HF Space)   ← ตรงนี้ตัวเดียวที่ต้องมี GPU
+                                      │
+                                      ▼
+                              lipsynced.mp4
+                                      │
+                     ┌────────────────┴────────────────┐
+                     ▼                                 ▼
+        whisper.cpp (M3) → captions.srt      HyperFrames (M3, Node 24 ✅)
+                     └────────────→ ใส่ซับ/โลโก้/โลเวอร์เธิร์ด/ทรานซิชัน
+                                      │
+                                      ▼
+                                  final.MOV
+HyperFrames เหมาะกับขั้นตอนสุดท้ายมาก เพราะ:
+
+Apache-2.0 ฟรีจริง ไม่มีค่า render ต่อครั้ง (ถ้ารัน local ไม่แตะ HeyGen cloud)
+Node 24.9 + ffmpeg 8.1 ในเครื่องคุณครบแล้ว → รันบน M3 ได้ 100% ไม่ต้องใช้ GPU
+non-interactive by default ออกแบบมาให้ Claude Code สั่งงานโดยตรง + มี 20 skills ให้ agent โหลดใช้
+มี skill /talking-head-recut ตรงกับงานคุณพอดี
+
+npx hyperframes init my-video
+npx hyperframes preview      # live reload ในเบราว์เซอร์
+npx hyperframes render       # → MP4
+สรุปสั้น: ใช้ MuseTalk 1.5 ทำ lip-sync (MIT, ปลอดภัยเชิงพาณิชย์, Colab ฟรีพอ) + HyperFrames ทำขั้นตัดต่อ/กราฟิกในเครื่อง — และ ต้องแปลง .MOV → MP4 CFR ก่อนเข้าโมเดลเสมอ
+
+ให้ผม scaffold โปรเจกต์นี้ใน ตัดต่อ vido ให้เลยไหมครับ (สคริปต์ prep .MOV + client เรียก MuseTalk + โปรเจกต์ HyperFrames เชื่อมกันพร้อมรัน)
+
+Sources:
