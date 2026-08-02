@@ -22,6 +22,7 @@ TIERS = {
     "edl":    {"label": "decide + ต่อไฟล์ใหม่", "rank": 1},
     "thumbs": {"label": "ทำภาพตัวอย่างใหม่", "rank": 2},
     "ai":     {"label": "ถาม AI ใหม่ (เสียเงิน)", "rank": 3},
+    "silence": {"label": "หาช่วงเงียบใหม่", "rank": 3},
     "listen": {"label": "ถอดเสียงใหม่", "rank": 4},
     "scan":   {"label": "อ่านคลิปใหม่ทั้งหมด", "rank": 5},
     "render": {"label": "render ใหม่ทุกชิ้น", "rank": 6},
@@ -33,6 +34,7 @@ STEPS = [
     {"id": "thumbs",   "label": "ภาพตัวอย่าง"},
     {"id": "listen",   "label": "ดึงบทพูด"},
     {"id": "ai",       "label": "ดึงความหมาย"},
+    {"id": "silence",  "label": "หาช่วงเงียบ"},
     {"id": "prepare",  "label": "ตัดทีละคลิป"},
     {"id": "compose",  "label": "เรียงเป็นหนัง"},
     {"id": "render",   "label": "ตัดเป็นชิ้น"},
@@ -53,7 +55,7 @@ PHASES = [
     {"id": "prepare", "no": 2, "label": "เตรียมวิดีโอ",
      "why": "ดูทีละคลิป — แยกคลิปพูดกับคลิปวิว ตัดเอาเฉพาะช่วงที่ใช้ได้ "
             "เก็บเข้าคลังไว้รอประกอบในขั้นถัดไป",
-     "steps": ["listen", "ai", "prepare"], "key": "run.prepare"},
+     "steps": ["listen", "ai", "silence", "prepare"], "key": "run.prepare"},
     {"id": "compose", "no": 3, "label": "รวมเป็นหนัง",
      "why": "หยิบชิ้นจากคลังมาเรียง แล้วผลิตเป็นไฟล์เดียว",
      "steps": ["compose", "render", "assemble"], "key": "run.compose"},
@@ -199,8 +201,18 @@ FIELDS = [
     F("select.avoid_adjacent", "ห้ามเลือกวิวสองชิ้นที่ติดกัน", "bool", "edl", "prepare"),
 
     # ── เตรียมวิดีโอ: ตัดคลิปที่ไม่มีเสียงพูดออก ──
-    F("prepare.drop_silent", "ตัดคลิปที่ไม่มีเสียงพูดออก", "bool", "edl", "prepare",
-      help="เอาคลิปวิวออกจากคลังทั้งหมด เหลือแต่คลิปที่มีคนพูด"),
+    F("jumpcut.enabled", "ตัดช่วงเงียบในคลิปพูดออก (cut ชน)", "bool", "edl", "prepare",
+      help="ฟังคลื่นเสียงจริงแล้วคว้านช่วงที่ไม่มีคนพูดออก ประโยคต่อประโยคจะชนกัน"),
+    F("jumpcut.noise_db", "เบากว่านี้ถือว่าเงียบ", "float", "silence", "prepare",
+      min=-60, max=-10, step=1, unit="dB",
+      help="−45 = เข้มงวด ตัดน้อย · −25 = ตัดเยอะ เสี่ยงกินเสียงเบา ๆ"),
+    F("jumpcut.min_silence", "เงียบนานเกินนี้ถึงตัดออก", "float", "silence", "prepare",
+      min=0.1, max=3, step=0.05, unit="วิ",
+      help="สั้นกว่านี้คือจังหวะหายใจปกติ ตัดออกแล้วฟังกระชาก"),
+    F("jumpcut.pad", "เผื่อไว้ข้างละ", "float", "edl", "prepare",
+      min=0, max=0.5, step=0.01, unit="วิ", help="กันตัดโดนพยัญชนะต้น/ท้ายคำ"),
+    F("jumpcut.min_piece", "ชิ้นสั้นกว่านี้ทิ้ง", "float", "edl", "prepare",
+      min=0, max=3, step=0.05, unit="วิ"),
     # ดึงกลับด้วยการติ๊กที่ตัวชิ้นในขั้น 2 ไม่ใช่กรอกในฟอร์ม (ดู type "clips")
     F("prepare.keep", "ชิ้นที่ดึงกลับมาเอง", "clips", "edl", "prepare"),
 
@@ -272,7 +284,8 @@ STEP_PARAMS = {
     "thumbs": ["thumbs.width", "thumbs.sheet_cols", "thumbs.sheet_rows"],
     "ai": ["ai.model", "ai.tasks", "ai.sheets", "ai.transcript_chars",
            "ai.batch_clips", "ai.goal"],
-    "prepare": ["talk", "broll", "classify.min_speech_total", "prepare.drop_silent",
+    "silence": ["jumpcut.noise_db", "jumpcut.min_silence"],
+    "prepare": ["talk", "broll", "classify.min_speech_total", "jumpcut",
                 "prepare.keep", "scan.exclude", "ai.enabled", "ai.apply",
                 "audio.target_lufs_talk", "audio.target_lufs_broll"],
 }
@@ -335,6 +348,8 @@ def plan(cfg, start=None, no_thumbs=False):
             skip = "สั่ง --no-thumbs"
         elif sid == "ai" and not get_at(cfg, "ai.enabled", False):
             skip = "ปิด [ai] enabled ไว้"
+        elif sid == "silence" and not get_at(cfg, "jumpcut.enabled", False):
+            skip = "ปิด [jumpcut] enabled ไว้"
         elif sid == "listen" and not get_at(cfg, "listen.enabled", True):
             skip = "ปิด [listen] enabled ไว้"
         out.append({"id": sid, "label": STEP_LABEL[sid], "phase": ph["id"],
@@ -598,6 +613,7 @@ def step_status(ctx, cfg):
             "thumbs": ctx.thumb_dir / "sheets",
             "listen": work / "transcript.json",
             "ai": work / "ai.json",
+            "silence": work / "silence.json",
             "prepare": work / "pool.json",
             "compose": work / "edl.json",
             "render": work / "render.json",
@@ -613,6 +629,7 @@ def step_status(ctx, cfg):
                    "listen": work / "transcript.json",
                    "thumbs": ctx.thumb_dir / "params.json",
                    "ai": work / "ai.json",
+                   "silence": work / "silence.json",
                    "prepare": work / "pool.json"}[sid]
             saved = (read_json(src, {}) or {}).get("params")
             if saved is not None:

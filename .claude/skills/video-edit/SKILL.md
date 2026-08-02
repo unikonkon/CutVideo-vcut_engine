@@ -20,7 +20,7 @@ rotation ผิด · คลิปกลับหัว · HEVC full range · fp
 
 ```
 ขั้น 1  เลือกฟุตเทจ   scan + thumbs          → manifest.json
-ขั้น 2  เตรียมวิดีโอ  listen + ai + prepare  → pool.json   (คลังชิ้น)
+ขั้น 2  เตรียมวิดีโอ  listen + ai + silence + prepare  → pool.json
 ขั้น 3  รวมเป็นหนัง   compose + render       → edl.json → final.mp4
 ```
 
@@ -54,6 +54,7 @@ rotation ผิด · คลิปกลับหัว · HEVC full range · fp
 | "ตัดเหลือ N นาที" | `decide --set select.enabled=true --set select.target_minutes=N` |
 | "เล่าตามลำดับการเดินทาง" / "แบ่งบท" | ต้องใช้ AI → ดูหัวข้อถัดไป |
 | "กระชับกว่านี้" / "ตัดถี่ขึ้น" | `--set talk.gap_merge=1.0 --set talk.min_shot=2.5` |
+| "ตัดช่วงเงียบออก" / "cut ชน" / "เอาช่วงที่ไม่พูดออก" | เปิด `[jumpcut]` → ดูหัวข้อถัดไป |
 | "อย่าตัดถี่" / "ให้พูดจบประโยค" | `--set talk.gap_merge=2.0 --set talk.min_shot=6.0` |
 | "เอาช็อตสั่นออก" | `--set broll.drop_above_motion=18` |
 | "วิวติดกันเยอะไป" | `--set broll.run_max=2` |
@@ -87,6 +88,31 @@ IMG_7162 = "pillarbox"        # blur_pad | pillarbox | crop เฉพาะค�
 
 `exclude` ต่างจากตัวกรองใน `[broll]`: `exclude` = ไม่เข้าคลังเลย · ตัวกรอง = เข้าคลัง
 แต่ติดป้ายไว้ ยังดึงกลับมาได้
+
+## ตัดช่วงเงียบให้ประโยคชนกัน — cut ชน (ขั้น 2)
+
+```bash
+./vcut silence -c <preset>                 # ฟังคลื่นเสียง → silence.json (ไม่กี่วินาที)
+./vcut prepare -c <preset> --set jumpcut.enabled=true
+```
+
+**อย่าไปแก้ `talk.gap_merge` เพื่อการนี้** — มันตัดตาม transcript ซึ่ง whisper คืนมา
+หยาบมาก (คลิปหนึ่งมักได้ช่วงเดียวยาวทั้งคลิป) ปรับเท่าไรก็ไม่เจอความเงียบข้างใน
+`[jumpcut]` วัดจากคลื่นเสียงจริงจึงตัดได้
+
+```toml
+[jumpcut]
+enabled = true
+noise_db = -32.0     # −45 เข้มงวด ตัดน้อย · −25 ตัดเยอะ เสี่ยงกินเสียงเบา
+min_silence = 0.45   # เงียบนานกว่านี้ถึงตัด
+pad = 0.10           # เผื่อข้างละเท่านี้ กันตัดโดนพยัญชนะ
+min_piece = 0.60     # เศษสั้นกว่านี้ทิ้ง
+```
+
+`enabled` เปิดครั้งแรก **ต้องรัน `silence` ก่อน `prepare`** ไม่งั้นจะเตือนแล้วข้ามให้
+· แก้ `noise_db`/`min_silence` = ต้องรัน `silence` ใหม่ · แก้ `pad`/`min_piece` = แค่ `prepare`
+
+ชิ้นที่มาจากประโยคเดียวกันถูกล็อกให้ติดกันเสมอ ขั้น 3 แทรกวิวคั่นกลางประโยคไม่ได้
 
 ## ดึงชิ้นที่ตัวกรองคัดออกกลับมา (ขั้น 2)
 

@@ -53,6 +53,38 @@ def talk_ranges(segs, clip_len, cfg):
     return [[round(s, 3), round(e, 3)] for s, e in merged if e - s > 0.05]
 
 
+def cut_silence(ranges, quiet, cfg):
+    """คว้านช่วงเงียบออกจากช่วงพูด → ชิ้นย่อยที่ตัดชนกัน (jump cut)
+
+    คืน [(a, b, gi)] โดย gi คือเลขช่วงพูดต้นทาง — ใช้ล็อกให้ชิ้นที่มาจาก
+    ประโยคเดียวกันอยู่ติดกันตอนรวมเป็นหนัง ไม่งั้นขั้น 3 จะเอาช่วงวิวไปแทรก
+    กลางประโยค ซึ่งไม่ใช่ cut ชน แต่เป็นประโยคขาด
+
+    ถ้าคว้านแล้วไม่เหลืออะไรเลย (เช่นตั้ง min_piece สูงไป) จะคืนช่วงเดิม —
+    ตัดจนคลิปหายไม่ใช่สิ่งที่ใครตั้งใจ
+    """
+    pad = max(0.0, float(cfg.get("pad", 0.10)))
+    minp = max(0.0, float(cfg.get("min_piece", 0.60)))
+    out = []
+    for gi, (a, b) in enumerate(ranges):
+        cur, parts = a, []
+        for qa, qb in sorted(quiet):
+            # หดช่วงเงียบเข้าข้างละ pad — กันตัดโดนพยัญชนะต้น/ท้ายคำ
+            s, e = max(a, qa + pad), min(b, qb - pad)
+            if e <= s:
+                continue
+            if s > cur:
+                parts.append([cur, s])
+            cur = max(cur, e)
+        if cur < b:
+            parts.append([cur, b])
+        parts = [p for p in parts if p[1] - p[0] >= minp]
+        if not parts:
+            parts = [[a, b]]
+        out += [(round(s, 3), round(e, 3), gi) for s, e in parts]
+    return out
+
+
 def text_in(segs, a, b):
     return " ".join(t for s, e, t in segs if e > a and s < b).strip()
 
@@ -134,7 +166,16 @@ def run(ctx, write=True):
     drop_m = float(bcfg.get("drop_above_motion", 0) or 0)
     drop_b = float(bcfg.get("drop_below_bright", 0) or 0)
     min_dur = float(bcfg.get("min_source_duration", 0) or 0)
-    drop_silent = bool(ctx.get("prepare.drop_silent", False))
+
+    # ตัดช่วงเงียบในคลิปพูดออกให้ประโยคชนกัน — ต้องมี silence.json จากขั้น "หาช่วงเงียบ"
+    jcfg = ctx.get("jumpcut", {}) or {}
+    jump_on = bool(jcfg.get("enabled", False))
+    quiet_of = ((read_json(ctx.work / "silence.json", {}) or {}).get("clips", {})
+                if jump_on else {})
+    if jump_on and not quiet_of and write:
+        warn("เปิด [jumpcut] ไว้แต่ยังไม่มี silence.json — สั่ง 'หาช่วงเงียบ' ก่อน "
+             "รอบนี้ยังไม่ตัดช่วงเงียบให้")
+    jump_saved, jump_pieces = 0.0, 0
 
     # คลิปที่ผู้ใช้เอาออกตั้งแต่ขั้น 1 — ไม่เข้าคลังเลย ไม่ใช่เข้ามาแล้วติดป้าย
     # เพราะมันคือ "ไม่เอา" ไม่ใช่ "ตัวกรองคัดออก" ที่ยังหยิบกลับได้ในขั้น 3
@@ -160,9 +201,7 @@ def run(ctx, write=True):
         if ai_drop and hint.get("drop"):
             why = "AI บอกว่าใช้ไม่ได้"
         elif kind == "BROLL":
-            if drop_silent:
-                why = "ไม่มีเสียงพูด"
-            elif drop_m > 0 and cl["motion"] >= drop_m:
+            if drop_m > 0 and cl["motion"] >= drop_m:
                 why = f"ภาพสั่น (motion {cl['motion']} ≥ {drop_m:g})"
             elif drop_b > 0 and cl["bright"] < drop_b:
                 why = f"ภาพมืด (สว่าง {cl['bright']} < {drop_b:g})"
@@ -207,11 +246,27 @@ def run(ctx, write=True):
                     ranges = cut
                 else:
                     trim_empty.append(cl["name"])
-            for i, (a, b) in enumerate(ranges):
-                pieces.append({**base, "id": f"{cl['name']}#{i}",
-                               "start": a, "end": b, "dur": round(b - a, 3),
-                               "target_lufs": lufs_t,
-                               "text": text_in(segs, a, b)[:400]})
+
+            parts = [(a, b, i) for i, (a, b) in enumerate(ranges)]
+            gaps = quiet_of.get(cl["name"]) or []
+            if gaps:
+                cut = cut_silence(ranges, gaps, jcfg)
+                jump_saved += sum(b - a for a, b in ranges) \
+                    - sum(b - a for a, b, _ in cut)
+                jump_pieces += len(cut) - len(parts)
+                parts = cut
+
+            # ชิ้นที่มาจากช่วงพูดเดียวกันหลายชิ้น = ประโยคที่ถูกตัดชน ต้องอยู่ติดกัน
+            multi = {gi for gi in {g for _, _, g in parts}
+                     if sum(1 for _, _, g in parts if g == gi) > 1}
+            for i, (a, b, gi) in enumerate(parts):
+                pc = {**base, "id": f"{cl['name']}#{i}",
+                      "start": a, "end": b, "dur": round(b - a, 3),
+                      "target_lufs": lufs_t,
+                      "text": text_in(segs, a, b)[:400]}
+                if gi in multi:
+                    pc["jump"] = f"{cl['name']}~{gi}"
+                pieces.append(pc)
         else:
             ln = broll_duration(cl["motion"], bands, durs)
             a, b = ai_broll_window(cl["duration"], ln, pick, keeps)
@@ -237,6 +292,8 @@ def run(ctx, write=True):
             "usable": len(ok),
             "excluded": len(pieces) - len(ok),
             "forced": sum(1 for p in pieces if p.get("forced")),
+            "jump_pieces": jump_pieces,
+            "jump_saved": round(jump_saved, 1),
             "talk": sum(1 for p in ok if p["kind"] == "TALK"),
             "broll": sum(1 for p in ok if p["kind"] == "BROLL"),
             "duration_talk": round(sum(p["dur"] for p in ok if p["kind"] == "TALK"), 1),
@@ -263,6 +320,10 @@ def report(pool):
     info(f"  ช่วงวิว            {s['duration_broll'] / 60:>6.1f} นาที")
     total = c(f"{s['duration_total'] / 60:>6.1f} นาที", "g")
     info(f"  {c('รวมในคลัง', 'g')}         {total}")
+    if s.get("jump_saved"):
+        note = f"(ประโยคถูกซอยเพิ่ม {s['jump_pieces']} ชิ้น — ตัดชนกัน)"
+        info("─" * 62)
+        info(f"  ตัดช่วงเงียบออก      {s['jump_saved'] / 60:>6.1f} นาที   {c(note, 'd')}")
     if s["excluded"] or s.get("forced"):
         info("─" * 62)
     if s["excluded"]:

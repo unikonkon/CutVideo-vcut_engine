@@ -6,6 +6,8 @@
   listen   →  .vcut/transcript.json   คำพูดพร้อมเวลา
   thumbs   →  .vcut/thumbs/           ภาพตัวอย่าง + contact sheet
   ai       →  .vcut/ai.json           ความเห็น AI (บท · คะแนน · ช่วงที่ควรเก็บ)
+  silence  →  .vcut/silence.json      ช่วงที่ไม่มีคนพูด (ใช้ตัดชน)
+  prepare  →  .vcut/pool.json         คลังชิ้นที่ตัดไว้แล้ว
   decide   →  .vcut/edl.json          ★ สัญญากลาง แก้ด้วยมือได้
   render   →  .vcut/segments/         ชิ้นที่ตัดแล้ว (cache ด้วย content hash)
   assemble →  final.mp4
@@ -18,7 +20,7 @@ import time
 from pathlib import Path
 
 from . import (ai, assemble, compose, config, decide, listen, prepare, render,
-               reset, review, scan, serve, settings, thumbs)
+               reset, review, scan, serve, settings, silence, thumbs)
 from .util import (c, die, disk_free_gb, hhmmss, info, read_json,
                    require_tools, warn)
 
@@ -29,6 +31,7 @@ USAGE = """vcut — ตัดต่อวิดีโออัตโนมัต
   vcut listen                     ถอดเสียง (whisper.cpp)
   vcut thumbs                     ภาพตัวอย่าง + contact sheet
   vcut ai                         ถาม AI → .vcut/ai.json (บท · คะแนน · ช่วงที่ควรเก็บ)
+  vcut silence                    หาช่วงเงียบในคลิปพูด → ตัดชนได้ใน prepare
   vcut prepare                    ขั้น 2 · เตรียมวิดีโอทีละคลิป → pool.json
   vcut compose                    ขั้น 3 · หยิบจากคลังมาเรียงเป็นหนัง → edl.json
   vcut decide                     ทำ prepare + compose รวดเดียว (ของเดิม)
@@ -69,13 +72,13 @@ def build_parser():
     ap.add_argument("-h", "--help", action="store_true")
     sub = ap.add_subparsers(dest="cmd")
 
-    for name in ("scan", "listen", "thumbs", "ai", "prepare", "compose", "decide",
-                 "render", "assemble", "review", "view", "run", "info", "gc",
-                 "presets", "config", "reset"):
+    for name in ("scan", "listen", "thumbs", "ai", "silence", "prepare",
+                 "compose", "decide", "render", "assemble", "review", "view",
+                 "run", "info", "gc", "presets", "config", "reset"):
         p = sub.add_parser(name, add_help=False)
         p.add_argument("-h", "--help", action="store_true")
         add_common(p)
-        if name in ("scan", "listen", "ai", "render", "run"):
+        if name in ("scan", "listen", "ai", "silence", "render", "run"):
             p.add_argument("-f", "--force", action="store_true",
                            help="ไม่ใช้ cache ทำใหม่ทั้งหมด")
         if name in ("assemble", "run"):
@@ -369,6 +372,7 @@ def cmd_run(ctx, args):
         "thumbs": lambda: thumbs.run(ctx),
         "listen": lambda: listen.run(ctx, force=args.force),
         "ai": lambda: ai.run(ctx, tasks=args.tasks, goal=args.goal, force=args.force),
+        "silence": lambda: silence.run(ctx, force=args.force),
         "prepare": lambda: prepare.run(ctx),
         "compose": lambda: compose.run(ctx),
         "render": lambda: render.run(ctx, force=args.force),
@@ -418,6 +422,8 @@ def main(argv=None):
         thumbs.run(ctx)
     elif args.cmd == "ai":
         ai.run(ctx, tasks=args.tasks, goal=args.goal, force=args.force)
+    elif args.cmd == "silence":
+        silence.run(ctx, force=args.force)
     elif args.cmd == "prepare":
         prepare.run(ctx)
     elif args.cmd == "compose":

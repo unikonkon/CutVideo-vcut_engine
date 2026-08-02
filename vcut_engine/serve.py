@@ -37,7 +37,8 @@ SAFE_NAME = re.compile(r"^[A-Za-z0-9_.\-]+$")
 # ทุกขั้นที่ปุ่มในหน้าเว็บสั่งได้ — ชื่อ → argv ของ vcut
 JOB_STEPS = {
     "scan": ["scan"], "listen": ["listen"], "thumbs": ["thumbs"], "ai": ["ai"],
-    "prepare": ["prepare"], "compose": ["compose"], "decide": ["decide"],
+    "silence": ["silence"], "prepare": ["prepare"],
+    "compose": ["compose"], "decide": ["decide"],
     "render": ["render"], "assemble": ["assemble"],
     "plan": ["run"],          # ทำตามแผนใน [run] — ปุ่ม "ทำทุกขั้น" ใช้ตัวนี้
 }
@@ -76,6 +77,7 @@ class Job:
         self.code = None
         self.started = 0.0
         self.active = False        # True ตั้งแต่รับงานจนคิวคำสั่งหมด
+        self.stopped = False       # True เมื่อคนกดหยุดเอง (ไม่ใช่งานพัง)
         self._queue, self._cwd = [], "."
 
     @property
@@ -94,12 +96,35 @@ class Job:
             self._queue = list(argvs)
             self._cwd = cwd
             self.active = True
+            self.stopped = False
         threading.Thread(target=self._pump, daemon=True).start()
+        return True
+
+    def stop(self):
+        """สั่งหยุดงานที่กำลังรัน — ล้างคิวก่อนแล้วค่อยฆ่าคำสั่งปัจจุบัน
+
+        ทุกขั้นเขียนผลลัพธ์แบบ atomic (เขียนไฟล์ .tmp แล้วค่อย replace) การถูก
+        ฆ่ากลางคันจึงไม่ทำให้ไฟล์เก่าเสีย — อย่างแย่คือรอบนั้นไม่มีผลอะไรเลย
+        """
+        with self.lock:
+            if not self.active:
+                return False
+            self._queue = []          # ไม่ต้องรันคำสั่งที่เหลือในคิวต่อ
+            self.stopped = True
+            self.lines.append("— สั่งหยุด กำลังปิดคำสั่งที่รันอยู่ —")
+            proc = self.proc
+        if proc and proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()           # ไม่ยอมตายด้วยดีก็ต้องบังคับ
         return True
 
     def _pump(self):
         code = 0
-        for argv in self._queue:
+        while self._queue:
+            argv = self._queue.pop(0)
             with self.lock:
                 self.lines.append(f"$ {' '.join(argv[1:])}")
                 self.proc = subprocess.Popen(
@@ -117,17 +142,19 @@ class Job:
                         del self.lines[:1000]
             proc.wait()
             code = proc.returncode
-            if code != 0:
+            if code != 0 or self.stopped:
                 break
         with self.lock:
             self.code = code
             self.active = False
-            self.lines.append(f"— จบด้วยรหัส {code} "
-                              f"({time.time() - self.started:.0f} วินาที) —")
+            secs = f"({time.time() - self.started:.0f} วินาที)"
+            self.lines.append(f"— หยุดแล้ว {secs} —" if self.stopped
+                              else f"— จบด้วยรหัส {code} {secs} —")
 
     def state(self, since=0):
         with self.lock:
             return {"running": self.running, "step": self.step, "code": self.code,
+                    "stopped": self.stopped,
                     "total": len(self.lines), "lines": self.lines[since:]}
 
 
@@ -700,6 +727,9 @@ def make_handler(ctx, job):
                 job.start(argv, "compose", ctx.launcher.parent)
                 return self._json({"ok": True})
 
+            if p == "/api/job/stop":
+                return self._json({"ok": job.stop(), "step": job.step})
+
             if p == "/api/job":
                 step = payload.get("step")
                 if step not in JOB_STEPS and step not in PHASE_JOBS:
@@ -709,7 +739,14 @@ def make_handler(ctx, job):
                 head = [sys.executable, str(ctx.launcher)]
                 force = ["--force"] if payload.get("force") else []
 
-                if step in PHASE_JOBS:
+                # ขั้นเดี่ยวมาก่อน Phase เสมอ — ชื่อ "prepare" กับ "compose" เป็นทั้ง
+                # ชื่อขั้นและชื่อ Phase ถ้าให้ Phase ชนะ ปุ่ม "ตัดทีละคลิป" จะลาก
+                # listen + ai ไปรันด้วย ซึ่ง ai เสียโควตาจริงโดยที่ปุ่มไม่ได้บอก
+                if step in JOB_STEPS:
+                    argvs = [head + JOB_STEPS[step] + ctx.argv_tail
+                             + (force if step in ("scan", "listen", "ai", "silence",
+                                                  "render", "plan") else [])]
+                else:
                     # รันเฉพาะขั้นใน Phase นี้ที่แผนบอกว่าให้รัน
                     ok = {s["id"] for s in settings.plan(ctx.cfg) if s["run"]}
                     todo = [s for s in PHASE_JOBS[step] if s in ok]
@@ -717,12 +754,9 @@ def make_handler(ctx, job):
                         return self._json(
                             {"error": "ทุกขั้นใน Phase นี้ถูกปิดหรือข้ามไว้"}, 400)
                     argvs = [head + [s] + ctx.argv_tail
-                             + (force if s in ("scan", "listen", "ai", "render") else [])
+                             + (force if s in ("scan", "listen", "ai", "silence",
+                                               "render") else [])
                              for s in todo]
-                else:
-                    argvs = [head + JOB_STEPS[step] + ctx.argv_tail
-                             + (force if step in ("scan", "listen", "ai",
-                                                  "render", "plan") else [])]
                 job.start(argvs, step, ctx.launcher.parent)
                 return self._json({"ok": True, "step": step})
 

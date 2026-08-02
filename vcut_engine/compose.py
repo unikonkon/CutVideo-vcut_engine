@@ -288,7 +288,26 @@ def order_pieces(pieces, ctx, adv):
 
 SEG_KEYS = ("name", "src", "orient", "rot_override", "full_range", "achannels",
             "kind", "start", "end", "dur", "target_lufs", "text", "motion",
-            "bright", "chapter", "chapter_title", "ai_score", "id")
+            "bright", "chapter", "chapter_title", "ai_score", "id", "jump")
+
+
+def keep_jump_together(pieces):
+    """ชิ้นที่ถูกตัดชนมาจากประโยคเดียวกันต้องอยู่ติดกันตามลำดับเวลาเดิม
+
+    โหมด pattern/budget เลือกทีละชิ้นโดยไม่รู้ว่าชิ้นไหนเป็นครึ่งประโยค ถ้าไม่
+    รวบกลับมา มันจะเอาช่วงวิวไปแทรกกลางประโยค — นั่นไม่ใช่ cut ชน แต่คือ
+    ประโยคขาด ส่วนชิ้นที่ถูกทิ้งไปแล้วไม่ดึงกลับ เพราะการตัดคำออกเป็นเจตนา
+    """
+    out, done = [], set()
+    for p in pieces:
+        g = p.get("jump")
+        if not g:
+            out.append(p)
+        elif g not in done:
+            done.add(g)
+            out += sorted((x for x in pieces if x.get("jump") == g),
+                          key=lambda x: x["start"])
+    return out
 
 
 def run(ctx, write=True):
@@ -319,6 +338,7 @@ def run_with_pool(ctx, pool, write=True):
     run_dropped = []
     if mode not in ("manual", "ai"):
         picked, run_dropped = limit_runs(picked, int(ctx.get("broll.run_max", 0)))
+    picked = keep_jump_together(picked)
 
     timeline = [{k: p[k] for k in SEG_KEYS if k in p} for p in picked]
     d_t = sum(s["dur"] for s in timeline if s["kind"] == "TALK")

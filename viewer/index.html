@@ -91,7 +91,7 @@ aside{position:sticky;top:104px;display:flex;flex-direction:column;gap:.75rem}
 .tier{font-size:10px;padding:.05em .45em;border-radius:3px;font-weight:700;
   border:1px solid currentColor;opacity:.8}
 .t-render,.t-scan,.t-listen{color:var(--warn)}
-.t-ai{color:#a8571f} .t-edl,.t-thumbs{color:var(--ok)} .t-free{color:var(--dim)}
+.t-ai,.t-silence{color:#a8571f} .t-edl,.t-thumbs{color:var(--ok)} .t-free{color:var(--dim)}
 .rng{display:flex;gap:.5rem;align-items:center}
 .rng input[type=range]{flex:1;min-width:0}
 .rng output{font-size:12px;font-variant-numeric:tabular-nums;min-width:3.6em;
@@ -262,6 +262,7 @@ dialog .df{padding:.7rem 1rem;border-top:1px solid var(--line);display:flex;gap:
     <span class="spacer"></span>
     <span class="chip" id="c-dirty" hidden></span>
     <button id="reset" title="ล้างค่าทั้งหมดกลับเป็นค่าตั้งต้น — ของเดิมเก็บไว้กู้ได้">รีเซ็ตทั้งหมด</button>
+    <button id="stop" hidden>หยุด</button>
     <button id="save" disabled>บันทึกค่า</button>
     <button id="run" class="primary">ทำทุกขั้น</button>
   </div>
@@ -687,7 +688,9 @@ function stepPrepare(box){
   const jobs = el('div', 'acts');
   [['listen', 'ดึงบทพูด', 'ถอดเสียงทุกคลิปด้วย whisper'],
    ['ai', 'ดึงความหมาย (AI)', 'ให้ AI อ่านว่าคลิปไหนเล่าอะไร'],
+   ['silence', 'หาช่วงเงียบ', 'ฟังคลื่นเสียงจริงหาช่วงที่ไม่มีคนพูด — ไม่กี่วินาที'],
    ['prepare', 'ตัดทีละคลิป', 'สร้างคลังชิ้นจากค่าที่ตั้งไว้']].forEach(([id, lab, tip]) => {
+    if (id === 'silence' && !val('jumpcut.enabled')) return;
     const s = D.steps.find(x => x.id === id) || {};
     const b = el('button', 'runbtn' + (id === 'prepare' ? ' primary' : ''), lab);
     b.title = tip;
@@ -708,8 +711,22 @@ function stepPrepare(box){
     }
     c.appendChild(w);
   }
-  const ds = D.fields.find(f => f.key === 'prepare.drop_silent');
-  if (ds) c.appendChild(field(ds));
+  // ตัดช่วงเงียบให้ประโยคชนกัน — ค่าละเอียดโผล่เมื่อเปิดเท่านั้น
+  const jc = D.fields.find(f => f.key === 'jumpcut.enabled');
+  if (jc){
+    const w = el('div'); w.style.marginTop = '.8rem';
+    w.appendChild(field(jc));
+    if (val('jumpcut.enabled')){
+      ['jumpcut.noise_db', 'jumpcut.min_silence', 'jumpcut.pad', 'jumpcut.min_piece']
+        .forEach(k => { const f = D.fields.find(x => x.key === k);
+                        if (f) w.appendChild(field(f)); });
+      const sil = D.steps.find(x => x.id === 'silence') || {};
+      w.appendChild(el('p', 'note', sil.exists
+        ? 'แก้ค่าสองตัวบนแล้วต้องกด "หาช่วงเงียบ" ใหม่ · สองตัวล่างแค่กด "ตัดทีละคลิป" พอ'
+        : 'ยังไม่เคยหาช่วงเงียบ — กดปุ่ม "หาช่วงเงียบ" ก่อน แล้วค่อย "ตัดทีละคลิป"'));
+    }
+    c.appendChild(w);
+  }
 
   c.appendChild(advanced(['listen', 'prepare', 'ai']));
   box.appendChild(c);
@@ -1103,7 +1120,8 @@ function advanced(stages){
     // type "clips" = เลือกด้วยการกดที่ตัวคลิปในขั้น 1 ไม่ใช่ช่องกรอก
     && f.type !== 'clips'
     && !['project.source','project.name','project.out','ai.enabled','ai.goal',
-         'ai.tasks','ai.model','prepare.drop_silent','compose.mode']
+         'ai.tasks','ai.model','compose.mode', 'jumpcut.enabled', 'jumpcut.noise_db',
+         'jumpcut.min_silence', 'jumpcut.pad', 'jumpcut.min_piece']
         .includes(f.key)
     && !Object.values(MODE_FIELDS).flat().includes(f.key));
   if (!fs.length) d.appendChild(el('p', 'note', 'ไม่มีค่าเพิ่มเติมในขั้นนี้'));
@@ -1303,7 +1321,10 @@ async function poll(){
   }
   document.querySelectorAll('.runbtn, #run, #reset').forEach(b => b.disabled = j.running);
   $('#run').textContent = j.running ? `กำลัง ${j.step}…` : 'ทำทุกขั้น';
+  $('#stop').hidden = !j.running;
+  $('#stop').disabled = false;
   if (j.running) polling = setTimeout(poll, 800);
+  else if (j.stopped){ toast('หยุดแล้ว — ของที่ทำไปก่อนหน้ายังอยู่ครบ'); load(true); }
   else if (j.code === 0){ toast('เสร็จแล้ว'); load(true); }
   else if (j.code != null) toast('งานล้มเหลว — ดูบันทึกการทำงาน', true);
 }
@@ -1525,6 +1546,11 @@ $('#clip').addEventListener('close', () => {
   clOpen = -1; if (step === 1) render();
 });
 
+$('#stop').onclick = async () => {
+  $('#stop').disabled = true;
+  try { await post('/api/job/stop'); } catch(e){ toast(e.message, true); }
+  poll();
+};
 $('#reset').onclick = () => openReset('all');
 $('#rst-go').onclick = doReset;
 $('#rst-close').onclick = () => $('#rst').close();
