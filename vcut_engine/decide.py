@@ -1,463 +1,54 @@
-"""DECIDE — เปลี่ยน manifest + transcript เป็น edl.json ตามกติกาใน config
+"""DECIDE — ทำขั้น "เตรียม" กับ "รวม" ต่อกันรวดเดียว (คำสั่งเดิม)
 
-edl.json คือ "สัญญากลาง" ของทั้งระบบ: แก้ไฟล์นี้ด้วยมือได้ แล้ว render/assemble
-จะทำตามทันทีโดยไม่ต้องรัน decide ซ้ำ
+เดิมทั้งหมดอยู่ในไฟล์นี้ ตอนนี้ผ่าออกเป็นสองโมดูลเพราะเป็นงานคนละเรื่อง:
 
-ถ้าเปิด [ai] enabled จะอ่านความเห็นจาก .vcut/ai.json มาประกอบด้วย แต่การ
-ตัดสินใจจริงยังอยู่ในไฟล์นี้ทั้งหมด — AI มีสิทธิ์แค่เสนอ ไม่ได้ลงมือ
+    prepare.py   ดูทีละคลิป — ตัดช่วงไหน ใช้ได้ไหม        → .vcut/pool.json
+    compose.py   ดูทั้งกอง — หยิบชิ้นไหนมาเรียงยังไง       → .vcut/edl.json
+
+ไฟล์นี้เหลือหน้าที่เดียวคือเรียกสองตัวนั้นต่อกัน ให้ preset เดิมกับสคริปต์เดิม
+ยังใช้ `vcut decide` ได้เหมือนไม่มีอะไรเปลี่ยน
+
+การแปลง [select] → [compose]
+    select.enabled = false   →  mode = all      เอาทุกชิ้นในคลัง
+    select.enabled = true    →  mode = budget   แบ่งเวลาตาม talk_ratio
 """
-from . import ai as ai_mod
-from .util import c, die, info, read_json, warn, write_json
+from copy import deepcopy
+
+from . import compose, prepare
+from .util import info
 
 
-# ─────────────────────────── ช่วงพูด ───────────────────────────
+def _translate(ctx):
+    """คืน ctx ที่มี [compose] ตั้งไว้ให้ตรงกับ [select] แบบเดิม (ไม่แตะของจริง)"""
+    sel = ctx.get("select", {}) or {}
+    cfg = deepcopy(ctx.cfg)
+    cm = cfg.setdefault("compose", {})
+    if not sel.get("enabled", False) or float(sel.get("target_minutes", 0) or 0) <= 0:
+        cm["mode"] = "all"
+        return cfg, None
 
-def talk_ranges(segs, clip_len, cfg):
-    """รวมท่อนพูดเป็นช่วง ๆ: เผื่อหัวท้าย → เชื่อมช่องเงียบสั้น → ยืดให้ถึงช็อตสั้นสุด"""
-    if not segs:
-        return []
-    pre = float(cfg["margin_pre"])
-    post = float(cfg["margin_post"])
-    gap = float(cfg["gap_merge"])
-    minshot = float(cfg["min_shot"])
+    target = float(sel["target_minutes"])
+    ratio = float(sel.get("talk_ratio", 0.62))
+    cm.update({
+        "mode": "budget",
+        "talk_minutes": round(target * ratio, 3),
+        "broll_minutes": round(target * (1 - ratio), 3),
+        "avoid_adjacent": bool(sel.get("avoid_adjacent", True)),
+    })
+    return cfg, f"[select] {target:g} นาที × talk_ratio {ratio:g}"
 
-    r = []
-    for a, b, _t in segs:
-        s = max(0.0, a - pre)
-        e = min(clip_len, b + post)
-        if r and s - r[-1][1] < gap:
-            r[-1][1] = max(r[-1][1], e)
-        else:
-            r.append([s, e])
-
-    out = []
-    for s, e in r:
-        if e - s < minshot:
-            e2 = min(clip_len, s + minshot)
-            s = max(0.0, e2 - minshot)
-            e = e2
-        out.append([s, e])
-
-    merged = []
-    for s, e in out:
-        if merged and s <= merged[-1][1]:
-            merged[-1][1] = max(merged[-1][1], e)
-        else:
-            merged.append([s, e])
-    return [[round(s, 3), round(e, 3)] for s, e in merged if e - s > 0.05]
-
-
-def text_in(segs, a, b):
-    return " ".join(t for s, e, t in segs if e > a and s < b).strip()
-
-
-# ─────────────────────────── ช่วงวิว ───────────────────────────
-
-def broll_duration(motion, bands, durs):
-    for i, edge in enumerate(bands):
-        if motion < edge:
-            return float(durs[i])
-    return float(durs[-1])
-
-
-def broll_window(clip_dur, length, mode):
-    length = min(length, clip_dur)
-    if mode == "head":
-        st = 0.0
-    elif mode == "tail":
-        st = max(0.0, clip_dur - length)
-    else:
-        st = max(0.0, (clip_dur - length) / 2.0)
-    return round(st, 3), round(st + length, 3)
-
-
-def limit_runs(clips, run_max):
-    """วิวติดกันเกิน run_max ชิ้น → เก็บเฉพาะตัวที่ภาพนิ่งที่สุด"""
-    out, i, dropped = [], 0, []
-    while i < len(clips):
-        if clips[i]["kind"] != "BROLL":
-            out.append(clips[i])
-            i += 1
-            continue
-        j = i
-        while j < len(clips) and clips[j]["kind"] == "BROLL":
-            j += 1
-        run = clips[i:j]
-        if run_max > 0 and len(run) > run_max:
-            keep = {x["name"] for x in
-                    sorted(run, key=lambda x: x.get("motion", 99))[:run_max]}
-            dropped += [x["name"] for x in run if x["name"] not in keep]
-            run = [x for x in run if x["name"] in keep]
-        out.extend(run)
-        i = j
-    return out, dropped
-
-
-# ─────────────────────────── เอาความเห็น AI มาใช้ ───────────────────────────
-#
-# ทั้งหมดในหัวข้อนี้เป็นกฎตายตัว — AI ให้มาแค่ตัวเลขกับชื่อคลิป ส่วนจะเอาไป
-# ทำอะไรกำหนดไว้ที่นี่และปรับได้ที่ [ai.apply] ในไฟล์ config
-
-def ai_order_key(adv):
-    """คืน dict ชื่อคลิป → ลำดับที่ AI จัดไว้ (ไล่บทที่ 1 ไปบทสุดท้าย)"""
-    rank = {}
-    for ch in adv.get("chapters", []):
-        for name in ch["clips"]:
-            rank.setdefault(name, len(rank))
-    return rank
-
-
-def intersect(ranges, keeps, floor=1.0):
-    """ตัดช่วงที่กฎคำนวณไว้ ให้เหลือเฉพาะส่วนที่ทับกับช่วงที่ AI แนะนำ
-
-    floor กันเศษสั้น ๆ ที่เกิดจากขอบสองชุดเฉียดกัน — ชิ้นหนึ่งวินาทีดูเป็น
-    ความผิดพลาดในการตัดต่อ ไม่ใช่การตัดสินใจ
-    """
-    out = []
-    for a, b in ranges:
-        for ka, kb in keeps:
-            s, e = max(a, ka), min(b, kb)
-            if e - s >= floor:
-                out.append([round(s, 3), round(e, 3)])
-    return out
-
-
-def ai_broll_window(clip_dur, length, mode, keeps):
-    """AI เลือก "ตรงไหนของคลิป" · กฎยังเป็นคนกำหนด "ยาวเท่าไร"
-
-    แยกหน้าที่แบบนี้เพื่อให้จังหวะหนัง (pacing) ยังคุมได้จาก config เหมือนเดิม
-    ถ้าช่วงที่ AI ชี้สั้นกว่าที่กฎกำหนด แปลว่าดีอยู่แค่นั้นจริง ๆ ก็ใช้ตามนั้น
-    """
-    if not keeps:
-        return broll_window(clip_dur, length, mode)
-    a, b = max(keeps, key=lambda r: r[1] - r[0])
-    a, b = max(0.0, a), min(clip_dur, b)
-    if b - a <= length:
-        return round(a, 3), round(b, 3)
-    st = a + (b - a - length) / 2.0
-    return round(st, 3), round(st + length, 3)
-
-
-def _norm(vals):
-    """ย่อค่าลงช่วง 0–1 เทียบกับค่าสูงสุดที่เจอจริง — ไม่มีเลขวิเศษฝังในโค้ด"""
-    hi = max(vals) if vals else 0.0
-    return (lambda x: (x / hi) if hi > 0 else 0.0)
-
-
-# ─────────────────────────── ตัดให้ถึงเป้าความยาว ───────────────────────────
-
-def _talk_score(text, dur):
-    """คะแนนช็อตพูด = ความหลากหลายของคำ × ความเหมาะของความยาว
-    ช็อตที่วนซ้ำคำเดิม ("นายนายนาย", "ขึ้นกิมมมม") จะได้คะแนนต่ำ"""
-    words = [w for w in text.replace("ๆ", " ").split() if w]
-    if not words:
-        return 0.0
-    uniq = len(set(words))
-    variety = uniq / len(words)
-    fit = min(1.0, dur / 8.0) if dur < 8 else max(0.35, 8.0 / dur)
-    return round(uniq * variety * fit, 3)
-
-
-def select(timeline, cfg, ai_weight=0.0):
-    """ตัดไทม์ไลน์ให้เหลือตามเป้าความยาว โดยคงลำดับเวลาเดิมไว้
-
-    ai_weight > 0 = ผสมคะแนนจาก AI เข้ากับคะแนนที่กฎคำนวณเอง
-    (0 = ใช้กฎล้วนเหมือน Phase 3 · 1 = เชื่อ AI ล้วน)
-    """
-    target = float(cfg.get("target_minutes", 0)) * 60.0
-    if target <= 0:
-        return timeline, {"enabled": True, "skipped": "target_minutes = 0"}
-
-    total = sum(s["dur"] for s in timeline)
-    if total <= target:
-        return timeline, {"enabled": True, "skipped": f"ยาว {total / 60:.1f} นาที ไม่เกินเป้าอยู่แล้ว"}
-
-    ratio = float(cfg.get("talk_ratio", 0.62))
-    min_uw = int(cfg.get("min_unique_words", 2))
-    avoid_adj = bool(cfg.get("avoid_adjacent", True))
-    w = max(0.0, min(1.0, float(ai_weight)))
-
-    talk = [(i, s) for i, s in enumerate(timeline) if s["kind"] == "TALK"]
-    broll = [(i, s) for i, s in enumerate(timeline) if s["kind"] == "BROLL"]
-
-    # ── ช่วงพูด: เรียงตามคะแนน เก็บจนเต็มงบ ──
-    for _i, s in talk:
-        s["score"] = _talk_score(s.get("text", ""), s["dur"])
-        s["unique_words"] = len(set(w2 for w2 in s.get("text", "").split() if w2))
-    if w > 0:
-        nrm = _norm([s["score"] for _i, s in talk])
-        for _i, s in talk:
-            s["rank_score"] = round((1 - w) * nrm(s["score"])
-                                    + w * float(s.get("ai_score", nrm(s["score"]))), 4)
-    else:
-        for _i, s in talk:
-            s["rank_score"] = s["score"]
-
-    budget_t = target * ratio
-    keep_t, used = set(), 0.0
-    ranked = sorted(talk, key=lambda p: (-p[1]["rank_score"], p[1]["dur"]))
-    for i, s in ranked:
-        if s["unique_words"] < min_uw:
-            continue
-        if used + s["dur"] > budget_t:
-            continue
-        keep_t.add(i)
-        used += s["dur"]
-
-    # ── ช่วงวิว: เรียงตามความนิ่ง เลี่ยงชิ้นที่อยู่ติดกัน ──
-    budget_b = max(0.0, target - used)
-    if w > 0:
-        nrm = _norm([s.get("motion", 99) for _i, s in broll])
-        for _i, s in broll:
-            still = 1.0 - nrm(s.get("motion", 99))       # นิ่งมาก = เข้าใกล้ 1
-            s["rank_score"] = round((1 - w) * still
-                                    + w * float(s.get("ai_score", still)), 4)
-        by_still = sorted(broll, key=lambda p: -p[1]["rank_score"])
-    else:
-        by_still = sorted(broll, key=lambda p: p[1].get("motion", 99))
-    keep_b, usedb = set(), 0.0
-    for i, s in by_still:
-        if usedb + s["dur"] > budget_b:
-            continue
-        if avoid_adj and any(abs(i - k) == 1 for k in keep_b):
-            continue
-        keep_b.add(i)
-        usedb += s["dur"]
-
-    # เงื่อนไข "ห้ามติดกัน" อาจทำให้เติมไม่เต็มเป้า — ถ้ายังขาดเกิน 10%
-    # เติมรอบสองโดยยอมให้ติดกัน (แถวที่ยาวเกินจะถูกคุมด้วย run_max อีกชั้น)
-    if usedb < budget_b * 0.9:
-        for i, s in by_still:
-            if i in keep_b or usedb + s["dur"] > budget_b:
-                continue
-            keep_b.add(i)
-            usedb += s["dur"]
-
-    keep = keep_t | keep_b
-    out = [s for i, s in enumerate(timeline) if i in keep]
-    stats = {"enabled": True, "target_minutes": target / 60,
-             "before": len(timeline), "after": len(out),
-             "talk_kept": len(keep_t), "talk_dropped": len(talk) - len(keep_t),
-             "broll_kept": len(keep_b), "broll_dropped": len(broll) - len(keep_b),
-             "duration": round(used + usedb, 1)}
-    return out, stats
-
-
-# ─────────────────────────── main ───────────────────────────
 
 def run(ctx, write=True):
-    """write=False = คำนวณอย่างเดียว ไม่แตะ edl.json และไม่พิมพ์อะไร
+    """write=False = คำนวณอย่างเดียว ไม่แตะไฟล์และไม่พิมพ์อะไร (ใช้ตอนประเมิน)"""
+    pool = prepare.run(ctx, write=write)
+    cfg, note = _translate(ctx)
+    if write and note:
+        info(f"  {'แปลงเป็น [compose] budget — ' + note}")
 
-    หน้า setup ใช้โหมดนี้ตอบคำถาม "แก้ค่านี้แล้วต้อง render ใหม่กี่ชิ้น"
-    ก่อนที่ผู้ใช้จะกดลงมือจริง
-    """
-    man = read_json(ctx.manifest)
-    if not man:
-        die("ยังไม่มี manifest — รัน `vcut scan` ก่อน")
-    tr = (read_json(ctx.transcript, {}) or {}).get("clips", {})
-    clips = [dict(x) for x in man["clips"]]
-
-    # ── จัดประเภท ──
-    thr = float(ctx.get("classify.min_speech_total", 1.0))
-    for cl in clips:
-        segs = tr.get(cl["name"], [])
-        cl["_segs"] = segs
-        cl["speech"] = round(sum(b - a for a, b, _ in segs), 2)
-        cl["kind"] = "TALK" if (segs and cl["speech"] >= thr) else "BROLL"
-
-    # ── ความเห็นจาก AI (ถ้าเปิดใช้) ──
-    adv, apply = None, ctx.get("ai.apply", {})
-    if ctx.get("ai.enabled", False):
-        adv = ai_mod.load(ctx)
-        if not adv:
-            die("เปิด [ai] enabled ไว้แต่ยังไม่มี .vcut/ai.json — รัน `vcut ai` ก่อน\n"
-                "   หรือปิดด้วย --set ai.enabled=false เพื่อใช้กฎล้วนแบบเดิม")
-    ai_clips = (adv or {}).get("clips", {})
-    ai_w = float(apply.get("score_weight", 0.0)) if adv else 0.0
-
-    # ── เรียงลำดับ ──
-    mode = ctx.get("order.mode", "filename")
-    keyf = {"filename": lambda x: (x["num"], x["name"]),
-            "mtime": lambda x: x["mtime"],
-            "duration": lambda x: x["duration"]}[mode]
-    if adv and apply.get("order", False) and adv.get("chapters"):
-        rank = ai_order_key(adv)
-        # คลิปที่ AI ไม่ได้จัดบทให้ ต่อท้ายตามลำดับไฟล์ ไม่ให้หายไปเฉย ๆ
-        tail = len(rank)
-        clips.sort(key=lambda x: (rank.get(x["name"], tail + x["num"]), x["num"]))
-    else:
-        clips.sort(key=keyf, reverse=bool(ctx.get("order.reverse", False)))
-
-    # ── กรอง B-roll ที่ไม่เอา ──
-    bcfg = ctx.get("broll", {})
-    drop_m = float(bcfg.get("drop_above_motion", 0) or 0)
-    drop_b = float(bcfg.get("drop_below_bright", 0) or 0)
-    min_dur = float(bcfg.get("min_source_duration", 0) or 0)
-    ai_drop = bool(adv and apply.get("drop", False))
-    pre_drop = []
-    kept = []
-    for cl in clips:
-        if ai_drop and ai_clips.get(cl["name"], {}).get("drop"):
-            pre_drop.append((cl["name"], "AI"))
-            continue
-        if cl["kind"] == "BROLL":
-            if drop_m > 0 and cl["motion"] >= drop_m:
-                pre_drop.append((cl["name"], "สั่น"))
-                continue
-            if drop_b > 0 and cl["bright"] < drop_b:
-                pre_drop.append((cl["name"], "มืด"))
-                continue
-            if min_dur > 0 and cl["duration"] < min_dur:
-                pre_drop.append((cl["name"], "สั้น"))
-                continue
-        kept.append(cl)
-
-    # ── จำกัดแถววิวติดกัน ──
-    kept, run_dropped = limit_runs(kept, int(bcfg.get("run_max", 0)))
-
-    # ── สร้างไทม์ไลน์ ──
-    tcfg = ctx.get("talk", {})
-    bands = bcfg.get("motion_bands", [8.0, 15.0])
-    durs = bcfg.get("durations", [4.0, 3.0, 1.5])
-    pick = bcfg.get("pick", "center")
-    lufs_t = float(ctx.get("audio.target_lufs_talk", -19.0))
-    lufs_b = float(ctx.get("audio.target_lufs_broll", -26.0))
-
-    ai_trim = bool(adv and apply.get("trim", False))
-    ch_title = {ch["id"]: ch["title"] for ch in (adv or {}).get("chapters", [])}
-    trim_empty = []
-
-    timeline = []
-    for cl in kept:
-        hint = ai_clips.get(cl["name"], {})
-        base = {"name": cl["name"], "src": cl["src"], "orient": cl["orient"],
-                "rot_override": cl["rot_override"], "full_range": cl["full_range"],
-                "achannels": cl["achannels"]}
-        if adv:
-            if hint.get("chapter"):
-                base["chapter"] = hint["chapter"]
-                base["chapter_title"] = ch_title.get(hint["chapter"], hint["chapter"])
-            if "score" in hint:
-                base["ai_score"] = hint["score"]
-        keeps = hint.get("keep") if ai_trim else None
-
-        if cl["kind"] == "TALK":
-            ranges = talk_ranges(cl["_segs"], cl["duration"], tcfg)
-            if keeps:
-                cut = intersect(ranges, keeps)
-                # ถ้าตัดแล้วไม่เหลืออะไรเลย แปลว่า AI กับ VAD มองคนละจุด
-                # เชื่อ VAD ไว้ก่อน ดีกว่าทำให้คลิปหายทั้งอันโดยไม่ตั้งใจ
-                if cut:
-                    ranges = cut
-                else:
-                    trim_empty.append(cl["name"])
-            for a, b in ranges:
-                timeline.append({**base, "kind": "TALK", "start": a, "end": b,
-                                 "dur": round(b - a, 3), "target_lufs": lufs_t,
-                                 "text": text_in(cl["_segs"], a, b)[:400]})
-        else:
-            ln = broll_duration(cl["motion"], bands, durs)
-            a, b = ai_broll_window(cl["duration"], ln, pick, keeps)
-            timeline.append({**base, "kind": "BROLL", "start": a, "end": b,
-                             "dur": round(b - a, 3), "target_lufs": lufs_b,
-                             "motion": cl["motion"], "bright": cl["bright"]})
-    if trim_empty and write:
-        warn(f"ช่วงที่ AI แนะนำไม่ทับกับช่วงที่พูดจริงใน {len(trim_empty)} คลิป "
-             f"— ใช้ช่วงจาก VAD ตามเดิม")
-
-    # ── ตัดให้ถึงเป้าความยาว (ถ้าเปิด) ──
-    scfg = ctx.get("select", {})
-    sel_stats = {"enabled": False}
-    if scfg.get("enabled", False):
-        timeline, sel_stats = select(timeline, scfg, ai_weight=ai_w)
-        # select ตัดช็อตพูดออก ทำให้ช่วงวิวที่เคยถูกคั่นมาชนกันเป็นแถวยาว
-        # ต้องคุมความยาวแถวอีกรอบ ไม่งั้น run_max ที่ตั้งไว้จะไม่มีผลจริง
-        timeline, post_run = limit_runs(timeline, int(bcfg.get("run_max", 0)))
-        run_dropped += post_run
-        sel_stats["post_run_dropped"] = len(post_run)
-        sel_stats["duration"] = round(sum(x["dur"] for x in timeline), 1)
-        sel_stats["after"] = len(timeline)
-
-    # ── สรุปบทจากไทม์ไลน์ที่เหลือจริง (หลัง select ตัดแล้ว) ──
-    chapters = []
-    if adv:
-        for ch in adv.get("chapters", []):
-            segs = [s for s in timeline if s.get("chapter") == ch["id"]]
-            if segs:
-                chapters.append({"id": ch["id"], "title": ch["title"],
-                                 "segments": len(segs),
-                                 "duration": round(sum(s["dur"] for s in segs), 1)})
-
-    d_t = sum(s["dur"] for s in timeline if s["kind"] == "TALK")
-    d_b = sum(s["dur"] for s in timeline if s["kind"] == "BROLL")
-    edl = {
-        "config": ctx.cfg.get("_meta", {}).get("config_files", []),
-        "ai": ({"goal": adv.get("goal", ""), "apply": apply,
-                "tasks": list(adv.get("tasks", {}).keys())} if adv else {"enabled": False}),
-        "chapters": chapters,
-        "params": {"talk": tcfg, "broll": bcfg, "order": ctx.get("order", {}),
-                   "select": scfg, "audio": ctx.get("audio", {}),
-                   "video": ctx.get("video", {}), "encode": ctx.get("encode", {})},
-        "summary": {
-            "segments": len(timeline),
-            "segments_talk": sum(1 for s in timeline if s["kind"] == "TALK"),
-            "segments_broll": sum(1 for s in timeline if s["kind"] == "BROLL"),
-            "segments_vertical": sum(1 for s in timeline if s["orient"] == "V"),
-            "duration_talk": round(d_t, 1),
-            "duration_broll": round(d_b, 1),
-            "duration_total": round(d_t + d_b, 1),
-            "clips_dropped_filter": len(pre_drop),
-            "clips_dropped_run": len(run_dropped),
-            "select": sel_stats,
-        },
-        "timeline": timeline,
-    }
-    if write:
-        write_json(ctx.edl, edl)
-        report(edl, pre_drop, run_dropped)
-    return edl
-
-
-def report(edl, pre_drop, run_dropped):
-    s = edl["summary"]
-    tl = edl["timeline"]
-    info("─" * 62)
-    info(f"  ชิ้นทั้งหมด        {s['segments']:>4}   "
-         f"({s['segments_talk']} พูด + {s['segments_broll']} วิว)")
-    info(f"  คลิปแนวตั้ง         {s['segments_vertical']:>4} ชิ้น")
-    info(f"  ช่วงพูด           {s['duration_talk'] / 60:>6.1f} นาที")
-    info(f"  ช่วงวิว            {s['duration_broll'] / 60:>6.1f} นาที")
-    total_min = f"{s['duration_total'] / 60:>6.1f} นาที"
-    info(f"  {c('รวม', 'g')}               {c(total_min, 'g')}")
-    info("─" * 62)
-    if pre_drop:
-        why = {}
-        for _n, r in pre_drop:
-            why[r] = why.get(r, 0) + 1
-        info(f"  ตัดออกก่อนเรียง      {len(pre_drop):>3} คลิป  "
-             f"({', '.join(f'{k} {v}' for k, v in why.items())})")
-    if run_dropped:
-        info(f"  ตัดเพราะวิวติดกันเกิน  {len(run_dropped):>3} คลิป")
-
-    seq = "".join("T" if x["kind"] == "TALK" else "B" for x in tl)
-    longest = max((len(r) for r in seq.split("T")), default=0)
-    info(f"  แถววิวติดกันยาวสุด    {longest:>3} ชิ้น")
-
-    for i, ch in enumerate(edl.get("chapters", []), 1):
-        mins = c(f"{ch['duration'] / 60:.1f} นาที", "d")
-        info(f"  {c('บท ' + str(i), 'b')} {ch['title']:<26} {ch['segments']:>3} ชิ้น  {mins}")
-    if edl.get("chapters"):
-        info("─" * 62)
-
-    sel = s.get("select", {})
-    if sel.get("enabled") and "after" in sel:
-        info(f"  {c('SELECT', 'b')}  {sel['before']} → {sel['after']} ชิ้น "
-             f"(พูด −{sel['talk_dropped']}, วิว −{sel['broll_dropped']})")
-    elif sel.get("skipped"):
-        info(f"  {c('SELECT', 'b')}  ข้าม — {sel['skipped']}")
-    info("─" * 62)
-    for i in range(0, min(len(seq), 300), 60):
-        info(f"  {c(seq[i:i + 60], 'd')}")
-    if len(seq) > 300:
-        info(f"  {c('… (' + str(len(seq)) + ' ชิ้น)', 'd')}")
-    info(f"  {c('T = ช่วงพูด   B = ช่วงวิว', 'd')}")
+    from .config import Ctx
+    sub = Ctx(cfg)
+    sub.cfg = cfg
+    if not write:
+        # ตอนประเมินยังไม่ได้เขียน pool.json ลงดิสก์ — ยัดของในหน่วยความจำให้แทน
+        return compose.run_with_pool(sub, pool, write=False)
+    return compose.run(sub, write=True)

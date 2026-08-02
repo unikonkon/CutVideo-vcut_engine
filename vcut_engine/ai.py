@@ -25,10 +25,11 @@ from pathlib import Path
 
 from .util import c, die, info, read_json, warn, write_json
 
-TASKS = ("story_arc", "shot_scoring", "trim_suggest")
+TASKS = ("story_arc", "describe", "shot_scoring", "trim_suggest")
 
 TASK_LABEL = {
     "story_arc": "แบ่งบทเล่าเรื่อง",
+    "describe": "อ่านความหมายรายคลิป",
     "shot_scoring": "ให้คะแนนช็อต",
     "trim_suggest": "แนะนำช่วงที่ควรเก็บ",
 }
@@ -140,6 +141,13 @@ _SCHEMA = {
      "clips": ["IMG_0001", "IMG_0002"]}
   ]
 }""",
+    "describe": """{
+  "clips": {
+    "IMG_0001": {"meaning": "ปีนดินแดงชัน มีคนช่วยดึงขึ้นไป",
+                 "tags": ["ปีนเขา", "ช่วยเหลือกัน"]},
+    "IMG_0002": {"meaning": "...", "tags": ["..."]}
+  }
+}""",
     "shot_scoring": """{
   "clips": {
     "IMG_0001": {"score": 0.85, "why": "เหตุผลสั้น ๆ"},
@@ -177,6 +185,28 @@ def build_prompt(task, ctx, rows, goal, out_name, smap=(), total=None, part=None
   สลับได้เฉพาะเมื่อมีเหตุผลชัดจากเนื้อหา
 - ทุกคลิปในตารางต้องอยู่ในบทใดบทหนึ่ง ห้ามตกหล่น ห้ามซ้ำสองบท
 - ตั้งเป้า 6–12 บท
+
+ตาราง
+{_table(rows)}
+
+คำพูดในแต่ละคลิป
+{_speech_block(rows, limit)}
+"""
+    elif task == "describe":
+        body = f"""
+งานของคุณ: เขียน "ความหมาย" ของทุกคลิปในตาราง คลิปละหนึ่งบรรทัด
+
+ความหมายคือ *เกิดอะไรขึ้นในคลิปนี้* ไม่ใช่คำบรรยายภาพ
+  ดี   "ปีนดินแดงชัน มีคนช่วยดึงขึ้นไป"
+  ไม่ดี "ภาพคนในป่า"
+
+คลิปพูด — สรุปจากสิ่งที่พูด ว่ากำลังเล่าอะไรหรือทำอะไรอยู่
+คลิปวิว — ดูจาก contact sheet ว่าเห็นอะไร อยู่ช่วงไหนของการเดินทาง
+
+- ต้องเขียนครบทุกคลิปในตาราง
+- meaning ไม่เกิน 15 คำ ภาษาไทย
+- tags 1–3 คำ สำหรับจัดกลุ่มคลิปที่เล่าเรื่องเดียวกัน ใช้คำซ้ำข้ามคลิปได้เลย
+- ถ้าดูไม่ออกจริง ๆ ให้เขียนว่า "ไม่ชัด" อย่าเดา
 
 ตาราง
 {_table(rows)}
@@ -373,6 +403,22 @@ def validate(task, data, rows):
         if missing:
             warns.append(f"AI ไม่ได้จัดบทให้ {len(missing)} คลิป — ต่อท้ายตามลำดับไฟล์")
 
+    elif task == "describe":
+        for n, v in (data.get("clips") or {}).items():
+            if n not in known:
+                warns.append(f"อธิบายคลิปที่ไม่มีจริง: {n}")
+                continue
+            if isinstance(v, str):
+                v = {"meaning": v}
+            m = str((v or {}).get("meaning") or "").strip()[:160]
+            if not m:
+                continue
+            tags = [str(t).strip()[:24] for t in ((v or {}).get("tags") or [])
+                    if str(t).strip()][:4]
+            clips.setdefault(n, {}).update({"meaning": m, "tags": tags})
+        if len(clips) < len(rows):
+            warns.append(f"อธิบายมา {len(clips)}/{len(rows)} คลิป")
+
     elif task == "shot_scoring":
         for n, v in (data.get("clips") or {}).items():
             if n not in known:
@@ -423,6 +469,7 @@ def validate(task, data, rows):
 # ไม่งั้นคำตอบรอบก่อน (เช่น drop = true) จะค้างอยู่ทั้งที่รอบใหม่ไม่ได้บอกแบบนั้น
 OWNS = {
     "story_arc": ("chapter",),
+    "describe": ("meaning", "tags"),
     "shot_scoring": ("score", "score_why"),
     "trim_suggest": ("keep", "drop", "trim_why"),
 }
@@ -527,6 +574,99 @@ def run(ctx, tasks=None, goal="", force=False):
 
     write_json(ctx.work / "ai.json", store)
     report(store)
+    return store
+
+
+# ─────────────────────── AI เลือกชิ้นจากคลัง (ขั้นที่ 3) ───────────────────────
+
+_PICK_SCHEMA = """{
+  "why": "อธิบายสั้น ๆ ว่าเรียงแบบนี้เพราะอะไร",
+  "order": ["IMG_0001#0", "IMG_0007#0", "IMG_0012#1"]
+}"""
+
+
+def pick_compose(ctx, context="", pool=None):
+    """ให้ AI เลือกและเรียงชิ้นจากคลัง → .vcut/compose.json
+
+    AI เขียนได้แค่รายการ id — compose.py เอาไปหยิบชิ้นจริงเอง ชิ้นที่อ้างผิด
+    หรือไม่มีในคลังจะถูกทิ้ง เอนจินจึงยังคุมได้เหมือนเดิม
+    """
+    pool = pool or read_json(ctx.work / "pool.json")
+    if not pool:
+        die("ยังไม่มี pool.json — ทำขั้นที่ 2 (เตรียมวิดีโอ) ก่อน")
+    ok = [p for p in pool["pieces"] if p["ok"]]
+    if not ok:
+        die("คลังว่างเปล่า — ผ่อนตัวกรองในขั้นที่ 2 ก่อน")
+    context = context or str(ctx.get("compose.context", "") or "")
+
+    rows = ["id | ประเภท | วินาที | คลิป | ความหมาย / เนื้อหา"]
+    for p in ok:
+        body = p.get("meaning") or (
+            (p.get("text") or "")[:110] if p["kind"] == "TALK"
+            else f"ภาพวิว motion {p.get('motion', '?')}")
+        tags = " #" + " #".join(p["tags"]) if p.get("tags") else ""
+        rows.append(f"{p['id']} | {'พูด' if p['kind'] == 'TALK' else 'วิว'} | "
+                    f"{p['dur']:.1f} | {p['name']} | {body}{tags}")
+
+    s = pool["summary"]
+    has_meaning = sum(1 for p in ok if p.get("meaning"))
+    head = [f"นี่คือคลังชิ้นวิดีโอที่ตัดเตรียมไว้แล้ว {len(ok)} ชิ้น "
+            f"({s['talk']} พูด + {s['broll']} วิว) รวม {s['duration_total'] / 60:.1f} นาที"]
+    if not has_meaning:
+        head.append("\n⚠ ยังไม่ได้ให้ AI อ่านความหมายรายคลิป (`vcut ai --task describe`) "
+                    "— จะเลือกได้จากบทพูดกับตัวเลขเท่านั้น")
+    if context:
+        head.append(f"\nสิ่งที่เจ้าของงานสั่ง: {context}")
+
+    prompt = "\n".join(head) + f"""
+
+งานของคุณ: เลือกชิ้นที่จะใช้ แล้วเรียงเป็นลำดับของหนัง
+
+- ตอบเป็นรายการ id ตามลำดับที่จะเล่นจริง
+- ใช้ได้เฉพาะ id ที่อยู่ในตาราง ห้ามแต่ง ห้ามซ้ำ
+- ไม่ต้องใช้ทุกชิ้น เลือกเฉพาะที่ทำให้เรื่องเดินหน้า
+- คิดถึงจังหวะด้วย: ช่วงพูดยาว ๆ ติดกันจะน่าเบื่อ คั่นด้วยวิวบ้าง
+- ปกติเลข id เรียงตามเวลาถ่ายจริง ยึดลำดับนั้นเป็นหลัก สลับเมื่อมีเหตุผลชัด
+
+ตาราง
+{chr(10).join(rows)}
+
+schema ที่ต้องตอบ
+{_PICK_SCHEMA}
+{_RULES % 'ai/compose.json'}"""
+
+    ai_dir = ctx.work / "ai"
+    ai_dir.mkdir(parents=True, exist_ok=True)
+    (ai_dir / "compose.prompt.md").write_text(prompt, encoding="utf-8")
+    info(f"AI เลือกชิ้นจากคลัง {len(ok)} ชิ้น ({len(prompt) // 1000} KB)"
+         + (f"  ·  โจทย์: {context[:40]}" if context else "") + " …")
+
+    data, meta = call_claude(ctx, prompt, ai_dir / "compose.json", section="compose")
+    valid = {p["id"] for p in ok}
+    order, seen, bad = [], set(), 0
+    for i in (data.get("order") or []):
+        i = str(i)
+        if i in valid and i not in seen:
+            seen.add(i)
+            order.append(i)
+        else:
+            bad += 1
+    if bad:
+        warn(f"AI อ้าง id ที่ใช้ไม่ได้ {bad} ชิ้น — ข้ามไป")
+    if not order:
+        die("AI ไม่ได้เลือกชิ้นไหนเลย — ดูคำตอบดิบที่ .vcut/ai/compose.raw.txt")
+
+    by_id = {p["id"]: p for p in ok}
+    dur = sum(by_id[i]["dur"] for i in order)
+    store = {"version": 1, "context": context, "why": str(data.get("why") or "")[:600],
+             "order": order, "segments": len(order), "duration": round(dur, 1),
+             "cost_usd": meta.get("cost_usd"), "seconds": meta.get("seconds"),
+             "at": int(time.time())}
+    write_json(ctx.work / "compose.json", store)
+    info(f"  {c('✓', 'g')} เลือก {len(order)} ชิ้น · {dur / 60:.1f} นาที"
+         + (f"  ({meta.get('seconds')} วิ)" if meta.get("seconds") else ""))
+    if store["why"]:
+        info(f"  {c(store['why'][:200], 'd')}")
     return store
 
 

@@ -33,7 +33,9 @@
 | `vcut listen` | manifest | `.vcut/transcript.json` | แยกเสียง 16k → whisper.cpp → คำพูดพร้อมเวลา |
 | `vcut thumbs` | manifest | `.vcut/thumbs/` | ภาพตัวอย่าง + contact sheet 5×5 |
 | `vcut ai` | manifest + transcript + sheets | `.vcut/ai.json` | ถาม AI: แบ่งบท · ให้คะแนนช็อต · ช่วงที่ควรเก็บ |
-| `vcut decide` | manifest + transcript (+ ai.json) | `.vcut/edl.json` | **★ ตัดสินใจว่าเอาช็อตไหน ยาวเท่าไร เรียงยังไง** |
+| `vcut prepare` | manifest + transcript (+ ai.json) | `.vcut/pool.json` | **ขั้น 2** · ดูทีละคลิป — แยกพูด/วิว ตัดเอาช่วงที่ใช้ได้ |
+| `vcut compose` | pool | `.vcut/edl.json` | **★ ขั้น 3** · หยิบจากคลังมาเรียงเป็นหนัง (7 วิธี) |
+| `vcut decide` | manifest + transcript | `.vcut/edl.json` | ทำ prepare + compose รวดเดียว (คำสั่งเดิม) |
 | `vcut render` | edl | `.vcut/segments/` | ตัด + แก้ภาพ/เสียงในพาสเดียว (cache ด้วย content hash) |
 | `vcut assemble` | segments | `final.mp4` | ต่อเป็นไฟล์เดียว ไม่เข้ารหัสซ้ำ |
 | `vcut review` | edl + render | `.vcut/review.json` | ให้ AI ดูหนังที่ตัดแล้ว → เสนอให้เอาออก/สลับที่ |

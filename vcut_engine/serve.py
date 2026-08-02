@@ -39,7 +39,8 @@ SAFE_NAME = re.compile(r"^[A-Za-z0-9_.\-]+$")
 # ทุกขั้นที่ปุ่มในหน้าเว็บสั่งได้ — ชื่อ → argv ของ vcut
 JOB_STEPS = {
     "scan": ["scan"], "listen": ["listen"], "thumbs": ["thumbs"], "ai": ["ai"],
-    "decide": ["decide"], "render": ["render"], "assemble": ["assemble"],
+    "prepare": ["prepare"], "compose": ["compose"], "decide": ["decide"],
+    "render": ["render"], "assemble": ["assemble"],
     "build": ["run", "--from", "render"],
     "plan": ["run"],          # ทำตามแผนใน [run] — ปุ่ม "สร้างไฟล์" ในหน้าหลักใช้ตัวนี้
     "all": ["run"],
@@ -247,12 +248,7 @@ def build_state(ctx):
 def build_setup(ctx):
     """ทุกอย่างที่หน้า setup ต้องใช้ — รายการค่า ค่าปัจจุบัน และสถานะแต่ละขั้น"""
     cur = Path(ctx.config_name).resolve() if ctx.config_name else None
-    rel = ""
-    if cur:
-        try:
-            rel = str(cur.relative_to(settings.PKG_ROOT.resolve()))
-        except ValueError:
-            rel = str(cur)
+    rel = project_rel(ctx) or (str(cur) if cur else "")
 
     # ค่าที่จะกลับไปเป็นถ้าลบคีย์นี้ออกจากไฟล์โปรเจกต์ = ค่าจาก default + preset chain
     base = config.load(None, [])
@@ -311,6 +307,34 @@ def build_plan(ctx):
     return {"steps": steps, "estimate": est, "error": err,
             "seconds": secs, "unknown": notes,
             "phases": settings.phase_view(ctx, ctx.cfg)}
+
+
+def project_rel(ctx):
+    """ที่อยู่ไฟล์โปรเจกต์แบบเทียบกับรากโปรเจกต์ — คืน "" ถ้าอยู่นอกราก"""
+    if not ctx.config_name:
+        return ""
+    try:
+        return str(Path(ctx.config_name).resolve()
+                   .relative_to(settings.PKG_ROOT.resolve()))
+    except (ValueError, OSError):
+        return ""
+
+
+def build_pool(ctx):
+    """คลังชิ้นที่ขั้น "เตรียม" ทำไว้ + บอกว่าชิ้นไหนถูกใช้ในหนังปัจจุบันแล้ว"""
+    pool = read_json(ctx.work / "pool.json", {}) or {}
+    edl = read_json(ctx.edl, {}) or {}
+    used = {s.get("id") for s in edl.get("timeline", []) if s.get("id")}
+    # EDL รุ่นเก่ายังไม่มี id — เทียบด้วยเนื้อชิ้นแทน
+    if not used:
+        used = {f"{s['name']}@{round(s['start'], 3)}" for s in edl.get("timeline", [])}
+        for pc in pool.get("pieces", []):
+            pc["used"] = f"{pc['name']}@{round(pc['start'], 3)}" in used
+    else:
+        for pc in pool.get("pieces", []):
+            pc["used"] = pc["id"] in used
+    pool["has"] = bool(pool.get("pieces"))
+    return pool
 
 
 def build_review(ctx):
@@ -424,9 +448,12 @@ def make_handler(ctx, job):
                 return self._send(200, VIEWER.read_bytes(), "text/html; charset=utf-8")
 
             if p in ("/setup", "/setup.html"):
-                if not SETUP.exists():
-                    return self._send(500, f"ไม่พบ {SETUP}", "text/plain; charset=utf-8")
-                return self._send(200, SETUP.read_bytes(), "text/html; charset=utf-8")
+                # หน้า 3 ขั้นรวมงานของหน้า setup เดิมไว้แล้ว — ส่งกลับไปหน้าเดียว
+                self.send_response(302)
+                self.send_header("Location", "/")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
 
             if p == "/api/state":
                 return self._json(build_state(ctx))
@@ -439,6 +466,9 @@ def make_handler(ctx, job):
 
             if p == "/api/review":
                 return self._json(build_review(ctx))
+
+            if p == "/api/pool":
+                return self._json(build_pool(ctx))
 
             if p == "/api/probe_dir":
                 q = dict(x.split("=", 1) for x in u.query.split("&") if "=" in x)
@@ -542,6 +572,29 @@ def make_handler(ctx, job):
                 if payload.get("force"):
                     argv.append("--force")
                 job.start(argv, "review", ctx.launcher.parent)
+                return self._json({"ok": True})
+
+            if p == "/api/compose":
+                # หน้าเว็บส่งค่าของโหมดมาให้ → บันทึกลงไฟล์โปรเจกต์ → รวมใหม่
+                vals = {k: v for k, v in (payload.get("values") or {}).items()
+                        if k.startswith("compose.")}
+                if vals:
+                    rel = project_rel(ctx)
+                    if not rel:
+                        return self._json({"error": "ยังไม่มีไฟล์โปรเจกต์ให้บันทึก"}, 400)
+                    _, err = settings.save_project(rel, vals)
+                    if err:
+                        return self._json({"error": err}, 400)
+                    reload_ctx(ctx)
+                if job.running:
+                    return self._json({"error": "มีงานกำลังรันอยู่"}, 409)
+                argv = [sys.executable, str(ctx.launcher), "compose"] + ctx.argv_tail
+                if payload.get("ask"):
+                    argv.append("--ask")
+                    ctxt = str(payload.get("context") or "").strip()
+                    if ctxt:
+                        argv += ["--context", ctxt]
+                job.start(argv, "compose", ctx.launcher.parent)
                 return self._json({"ok": True})
 
             if p == "/api/job":

@@ -60,6 +60,7 @@ def _one(args):
         "src": str(path),
         "num": sort_key(name)[0],
         "mtime": int(path.stat().st_mtime),
+        "created": d.get("created", 0) or int(path.stat().st_mtime),
         "size": d["size"],
         "duration": d["duration"],
         "w": d["w"], "h": d["h"], "dw": dw, "dh": dh,
@@ -92,6 +93,20 @@ def run(ctx, force=False):
             reuse.append(prev)
         else:
             todo.append(p)
+
+    # manifest รุ่นเก่ายังไม่มีเวลาถ่ายจริง — เติมย้อนหลังด้วย ffprobe อย่างเดียว
+    # (วินาทีเดียวจบ) ดีกว่าบังคับให้ scan ใหม่ทั้งกองซึ่งต้องวิเคราะห์ motion ใหม่หมด
+    stale = [r for r in reuse if not r.get("created")]
+    if stale:
+        info(f"  {c(f'เติมเวลาถ่ายจริงให้ {len(stale)} คลิป …', 'd')}")
+
+        def _created(rec):
+            d = probe_video(rec["src"])
+            return rec, (d or {}).get("created", 0) or rec.get("mtime", 0)
+
+        with ThreadPoolExecutor(max_workers=int(ctx.get("scan.workers", 6))) as ex:
+            for rec, ts in ex.map(_created, stale):
+                rec["created"] = ts
 
     info(f"SCAN  {len(files)} คลิป  ({c(f'cache {len(reuse)}', 'd')}, ใหม่ {len(todo)})")
     out = list(reuse)

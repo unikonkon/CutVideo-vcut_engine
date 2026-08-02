@@ -117,7 +117,19 @@ def probe_video(path):
             return 0.0
 
     dur = float(j.get("format", {}).get("duration") or v.get("duration") or 0)
+    # เวลาถ่ายจริงจาก metadata — mtime ของไฟล์เชื่อไม่ได้ พอ copy ฟุตเทจมาก็เปลี่ยนหมด
+    ct = ((j.get("format", {}).get("tags") or {}).get("creation_time")
+          or (v.get("tags") or {}).get("creation_time") or "")
+    created = 0
+    if ct:
+        try:
+            import calendar
+            created = int(calendar.timegm(
+                time.strptime(ct.split(".")[0].rstrip("Z"), "%Y-%m-%dT%H:%M:%S")))
+        except (ValueError, TypeError):
+            created = 0
     return {
+        "created": created,
         "w": w, "h": h, "dw": dw, "dh": dh, "rot": rot,
         "duration": round(dur, 3),
         "codec": v.get("codec_name", "?"),

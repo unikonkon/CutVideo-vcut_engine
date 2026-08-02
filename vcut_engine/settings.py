@@ -29,47 +29,38 @@ TIERS = {
 
 # ── ขั้นในไปป์ไลน์ เรียงตามลำดับที่มันทำงานจริง ────────────────────────────────
 STEPS = [
-    {"id": "scan",     "label": "อ่านคลิป",      "artifact": "manifest.json"},
-    {"id": "thumbs",   "label": "ภาพตัวอย่าง",   "artifact": "thumbs/"},
-    {"id": "listen",   "label": "ถอดเสียง",      "artifact": "transcript.json"},
-    {"id": "ai",       "label": "ถาม AI",        "artifact": "ai.json"},
-    {"id": "decide",   "label": "ตัดสินใจ",      "artifact": "edl.json"},
-    {"id": "render",   "label": "ตัดเป็นชิ้น",   "artifact": "segments/"},
-    {"id": "assemble", "label": "ต่อเป็นไฟล์",   "artifact": "final.mp4"},
+    {"id": "scan",     "label": "อ่านคลิป",       "artifact": "manifest.json"},
+    {"id": "thumbs",   "label": "ภาพตัวอย่าง",    "artifact": "thumbs/"},
+    {"id": "listen",   "label": "ดึงบทพูด",       "artifact": "transcript.json"},
+    {"id": "ai",       "label": "ดึงความหมาย",    "artifact": "ai.json"},
+    {"id": "prepare",  "label": "ตัดทีละคลิป",    "artifact": "pool.json"},
+    {"id": "compose",  "label": "เรียงเป็นหนัง",  "artifact": "edl.json"},
+    {"id": "render",   "label": "ตัดเป็นชิ้น",    "artifact": "segments/"},
+    {"id": "assemble", "label": "ต่อเป็นไฟล์",    "artifact": "final.mp4"},
 ]
 STEP_ORDER = [s["id"] for s in STEPS]
 STEP_LABEL = {s["id"]: s["label"] for s in STEPS}
 
-# ── Phase ────────────────────────────────
+# ── 3 ขั้น ตามภาษาของคนตัดต่อ ไม่ใช่ภาษาของเครื่อง ────────────────────────────────
 #
-# ⚠️ เลข Phase ในนี้ "ไม่ตรง" กับเอกสารแผนที่ตั้งไว้ตอนแรก และตั้งใจให้ไม่ตรง
-#
-# เลขในเอกสารแผนคือลำดับที่ *สร้าง* ระบบขึ้นมา ส่วนเลขในนี้คือลำดับที่มัน
-# *ทำงาน* ซึ่งเป็นคนละอย่าง: แผนเดิมเรียง 1→2→3→4 แต่ถ้ารันตามนั้นจริง จะกด
-# render (Phase 2 เดิม) ก่อน decide (Phase 3 เดิม) แล้วพังทันที
-#
-#     ลำดับรันจริง   scan → thumbs → listen → ai → decide → render → assemble
-#     เลขแผนเดิม       1       1        1      4      3        2        2
-#
-# field `was` เก็บชื่อจากเอกสารแผนไว้ให้เทียบกันได้ หน้าเว็บแสดงทั้งสองเลข
+# เดิมหน้าเว็บเรียงตามชื่อคำสั่ง (scan/listen/ai/decide/render) ซึ่งอ่านแล้วไม่รู้ว่า
+# กำลังทำอะไรอยู่ ตอนนี้เรียงตามงานจริงที่คนทำ: หาของ → เตรียมของ → ประกอบ
 PHASES = [
-    {"id": "prepare", "no": 1, "label": "เตรียมวัตถุดิบ",
-     "was": "Phase 1 · SCAN + LISTEN",
-     "why": "อ่านฟุตเทจทุกคลิปครั้งเดียว แล้วไม่ต้องแตะไฟล์วิดีโออีกเลย",
-     "steps": ["scan", "thumbs", "listen"], "key": "run.prepare"},
-    {"id": "advise", "no": 2, "label": "ความเห็น AI",
-     "was": "Phase 4 · AI + SKILL",
-     "why": "AI อ่านคำพูด + ดูภาพ แล้วเขียนความเห็นลง ai.json — ไม่แตะ EDL เอง",
-     "steps": ["ai"], "key": "run.advise", "toggle": "ai.enabled",
-     "toggle_label": "เอาความเห็น AI ไปใช้ตอนตัดสินใจ"},
-    {"id": "decide", "no": 3, "label": "ตัดสินใจ",
-     "was": "Phase 3 · DECIDE + PRESET",
-     "why": "เอาทุกอย่างมารวมเป็น edl.json ตามกติกาใน config",
-     "steps": ["decide"], "key": "run.decide"},
-    {"id": "produce", "no": 4, "label": "ผลิตไฟล์",
-     "was": "Phase 2 · RENDER + ASSEMBLE",
-     "why": "ตัดเป็นชิ้น (มี cache) แล้วต่อเป็นไฟล์เดียว",
-     "steps": ["render", "assemble"], "key": "run.produce"},
+    {"id": "source", "no": 1, "label": "เลือกฟุตเทจ",
+     "was": "Phase 1 · SCAN",
+     "why": "ชี้ไปที่โฟลเดอร์คลิปดิบ แล้วอ่านคุณสมบัติทุกคลิปครั้งเดียวจบ",
+     "steps": ["scan", "thumbs"], "key": "run.source"},
+    {"id": "prepare", "no": 2, "label": "เตรียมวิดีโอ",
+     "was": "Phase 1+4 · LISTEN + AI",
+     "why": "ดูทีละคลิป — แยกคลิปพูดกับคลิปวิว ตัดเอาเฉพาะช่วงที่ใช้ได้ "
+            "เก็บเข้าคลังไว้รอประกอบ",
+     "steps": ["listen", "ai", "prepare"], "key": "run.prepare",
+     "toggle": "ai.enabled",
+     "toggle_label": "ให้ AI ช่วยคิดด้วย (อ่านความหมาย ให้คะแนน แนะนำช่วงที่ควรเก็บ)"},
+    {"id": "compose", "no": 3, "label": "รวมเป็นหนัง",
+     "was": "Phase 3+2 · DECIDE + RENDER",
+     "why": "หยิบชิ้นจากคลังมาเรียง แล้วผลิตเป็นไฟล์เดียว",
+     "steps": ["compose", "render", "assemble"], "key": "run.compose"},
 ]
 PHASE_OF_STEP = {s: p["id"] for p in PHASES for s in p["steps"]}
 
@@ -83,10 +74,9 @@ def F(key, label, typ, tier, stage, **kw):
 
 FIELDS = [
     # ── จะรัน Phase ไหนบ้าง (หน้าเว็บวาดเป็นสวิตช์บนหัวการ์ด ไม่ใช่ช่องในฟอร์ม) ──
-    F("run.prepare", "รัน Phase 1", "bool", "free", "run"),
-    F("run.advise", "รัน Phase 2", "bool", "free", "run"),
-    F("run.decide", "รัน Phase 3", "bool", "free", "run"),
-    F("run.produce", "รัน Phase 4", "bool", "free", "run"),
+    F("run.source", "รันขั้น 1", "bool", "free", "run"),
+    F("run.prepare", "รันขั้น 2", "bool", "free", "run"),
+    F("run.compose", "รันขั้น 3", "bool", "free", "run"),
 
     # ── โปรเจกต์ ──
     F("project.name", "ชื่อโปรเจกต์", "str", "free", "project"),
@@ -128,8 +118,9 @@ FIELDS = [
       placeholder="ตัดเหลือ 10 นาที เล่าตามลำดับการเดินทาง"),
     F("ai.model", "โมเดล", "select", "ai", "ai", options=["sonnet", "opus", "haiku"]),
     F("ai.tasks", "งานที่ให้ AI ทำ", "multi", "ai", "ai",
-      options=["story_arc", "shot_scoring", "trim_suggest"],
-      labels={"story_arc": "แบ่งบท", "shot_scoring": "ให้คะแนนช็อต",
+      options=["story_arc", "describe", "shot_scoring", "trim_suggest"],
+      labels={"story_arc": "แบ่งบทเล่าเรื่อง", "describe": "อ่านความหมายรายคลิป",
+              "shot_scoring": "ให้คะแนนช็อต",
               "trim_suggest": "แนะนำช่วงที่ควรเก็บ"}),
     F("ai.batch_clips", "ซอยเป็นก้อนละกี่คลิป", "int", "ai", "ai", min=0, max=300, step=10,
       help="0 = ไม่ซอย · ก้อนเล็กเร็วกว่าและหลุดยากกว่า (แบ่งบทไม่ถูกซอยไม่ว่าตั้งเท่าไร)"),
@@ -141,45 +132,74 @@ FIELDS = [
       help="0 = ใช้กฎล้วน · 1 = ใช้คะแนน AI ล้วน · มีผลเฉพาะตอนเปิด [select]"),
 
     # ── ตัดสินใจ: ช่วงพูด ──
-    F("talk.gap_merge", "ช่องเงียบสั้นกว่านี้ไม่ตัด", "float", "edl", "decide",
+    F("talk.gap_merge", "ช่องเงียบสั้นกว่านี้ไม่ตัด", "float", "edl", "prepare",
       min=0.2, max=5, step=0.1, unit="วิ",
       help="สูงขึ้น = ตัดถี่น้อยลง ปล่อยให้พูดจบความคิด"),
-    F("talk.min_shot", "ช็อตพูดสั้นสุด", "float", "edl", "decide",
+    F("talk.min_shot", "ช็อตพูดสั้นสุด", "float", "edl", "prepare",
       min=1, max=15, step=0.5, unit="วิ"),
-    F("talk.margin_pre", "เผื่อหัวประโยค", "float", "edl", "decide",
+    F("talk.margin_pre", "เผื่อหัวประโยค", "float", "edl", "prepare",
       min=0, max=2, step=0.05, unit="วิ"),
-    F("talk.margin_post", "เผื่อท้ายประโยค", "float", "edl", "decide",
+    F("talk.margin_post", "เผื่อท้ายประโยค", "float", "edl", "prepare",
       min=0, max=3, step=0.05, unit="วิ"),
 
     # ── ตัดสินใจ: ช่วงวิว ──
-    F("broll.motion_bands", "เส้นแบ่งระดับความสั่น", "list_float", "edl", "decide",
+    F("broll.motion_bands", "เส้นแบ่งระดับความสั่น", "list_float", "edl", "prepare",
       help="เรียงจากน้อยไปมาก · ต้องมีจำนวนน้อยกว่า 'ความยาวตามระดับ' อยู่ 1 ค่า"),
-    F("broll.durations", "ความยาวตามระดับ", "list_float", "edl", "decide", unit="วิ",
+    F("broll.durations", "ความยาวตามระดับ", "list_float", "edl", "prepare", unit="วิ",
       help="ภาพยิ่งสั่นยิ่งให้สั้น — ค่าแรกคือคลิปที่นิ่งที่สุด"),
-    F("broll.run_max", "วิวติดกันได้ไม่เกิน", "int", "edl", "decide",
+    F("broll.run_max", "วิวติดกันได้ไม่เกิน", "int", "edl", "prepare",
       min=0, max=10, step=1, unit="ชิ้น", help="0 = ไม่จำกัด"),
-    F("broll.pick", "เลือกช่วงไหนของคลิป", "select", "edl", "decide",
+    F("broll.pick", "เลือกช่วงไหนของคลิป", "select", "edl", "prepare",
       options=["center", "head", "tail"],
       labels={"center": "กลางคลิป", "head": "ต้นคลิป", "tail": "ท้ายคลิป"}),
-    F("broll.drop_above_motion", "ทิ้งคลิปที่สั่นเกิน", "float", "edl", "decide",
+    F("broll.drop_above_motion", "ทิ้งคลิปที่สั่นเกิน", "float", "edl", "prepare",
       min=0, max=40, step=1, help="0 = เก็บหมด"),
-    F("broll.drop_below_bright", "ทิ้งคลิปที่มืดกว่า", "float", "edl", "decide",
+    F("broll.drop_below_bright", "ทิ้งคลิปที่มืดกว่า", "float", "edl", "prepare",
       min=0, max=80, step=1, help="0 = เก็บหมด"),
 
     # ── ตัดสินใจ: ลำดับ + ความยาว ──
-    F("order.mode", "เรียงลำดับตาม", "select", "edl", "decide",
+    F("order.mode", "เรียงลำดับตาม", "select", "edl", "prepare",
       options=["filename", "mtime", "duration"],
       labels={"filename": "เลขไฟล์", "mtime": "เวลาแก้ไขไฟล์", "duration": "ความยาว"}),
-    F("order.reverse", "กลับลำดับ", "bool", "edl", "decide"),
-    F("select.enabled", "ตัดให้ถึงเป้าความยาว", "bool", "edl", "decide"),
-    F("select.target_minutes", "เป้าความยาว", "float", "edl", "decide",
+    F("order.reverse", "กลับลำดับ", "bool", "edl", "prepare"),
+    F("select.enabled", "ตัดให้ถึงเป้าความยาว", "bool", "edl", "prepare"),
+    F("select.target_minutes", "เป้าความยาว", "float", "edl", "prepare",
       min=0, max=120, step=0.5, unit="นาที",
       help="เป็นเพดาน ไม่ใช่การรับประกัน — ถ้า B-roll ที่ผ่านตัวกรองมีไม่พอ จะได้สั้นกว่าเป้า"),
-    F("select.talk_ratio", "สัดส่วนเวลาที่ให้ช่วงพูด", "float", "edl", "decide",
+    F("select.talk_ratio", "สัดส่วนเวลาที่ให้ช่วงพูด", "float", "edl", "prepare",
       min=0, max=1, step=0.02),
-    F("select.min_unique_words", "ช็อตพูดต้องมีคำไม่ซ้ำอย่างน้อย", "int", "edl", "decide",
+    F("select.min_unique_words", "ช็อตพูดต้องมีคำไม่ซ้ำอย่างน้อย", "int", "edl", "prepare",
       min=0, max=20, step=1, unit="คำ"),
-    F("select.avoid_adjacent", "ห้ามเลือกวิวสองชิ้นที่ติดกัน", "bool", "edl", "decide"),
+    F("select.avoid_adjacent", "ห้ามเลือกวิวสองชิ้นที่ติดกัน", "bool", "edl", "prepare"),
+
+    # ── เตรียมวิดีโอ: ตัดคลิปที่ไม่มีเสียงพูดออก ──
+    F("prepare.drop_silent", "ตัดคลิปที่ไม่มีเสียงพูดออก", "bool", "edl", "prepare",
+      help="เอาคลิปวิวออกจากคลังทั้งหมด เหลือแต่คลิปที่มีคนพูด"),
+
+    # ── รวมเป็นหนัง: วิธีเลือกชิ้นจากคลัง ──
+    F("compose.mode", "วิธีเลือกชิ้นจากคลัง", "select", "edl", "compose",
+      options=["all", "pattern", "budget", "numbers", "timerange", "manual", "ai"],
+      labels={"all": "เอาทั้งหมด", "pattern": "สลับตามรูปแบบ",
+              "budget": "กำหนดเวลารวมแต่ละแบบ", "numbers": "ตามเลขคลิป",
+              "timerange": "ตามช่วงเวลาที่ถ่าย", "manual": "เลือกทีละชิ้นเอง",
+              "ai": "ให้ AI เลือกจากความหมาย"}),
+    F("compose.pattern", "รูปแบบการสลับ", "multi_order", "edl", "compose",
+      options=["TALK", "BROLL"], labels={"TALK": "พูด", "BROLL": "วิว"},
+      help="ใช้เมื่อเลือก 'สลับตามรูปแบบ' — เช่น พูด → วิว → วิว แล้ววนซ้ำ"),
+    F("compose.target_minutes", "ความยาวเป้า", "float", "edl", "compose",
+      min=0, max=120, step=0.5, unit="นาที", help="0 = ไม่จำกัด (ใช้กับ 'สลับตามรูปแบบ')"),
+    F("compose.talk_minutes", "เวลาช่วงพูด", "float", "edl", "compose",
+      min=0, max=90, step=0.5, unit="นาที", help="ใช้กับ 'กำหนดเวลารวมแต่ละแบบ'"),
+    F("compose.broll_minutes", "เวลาช่วงวิว", "float", "edl", "compose",
+      min=0, max=90, step=0.5, unit="นาที"),
+    F("compose.avoid_adjacent", "ห้ามเอาวิวจากคลิปที่อยู่ติดกัน", "bool", "edl", "compose"),
+    F("compose.numbers", "เลขคลิปที่เอา", "str", "edl", "compose",
+      placeholder="7068-7200, 7305, 7400-7450"),
+    F("compose.from", "ถ่ายตั้งแต่", "str", "edl", "compose",
+      placeholder="2026-07-30 หรือ 2026-07-30 08:00"),
+    F("compose.to", "ถึง", "str", "edl", "compose", placeholder="2026-07-31 23:59"),
+    F("compose.context", "โจทย์ที่จะบอก AI", "text", "edl", "compose",
+      placeholder="เล่าตามลำดับการเดินทาง เน้นช่วงขึ้นเขา"),
 
     # ── ภาพ (แพง) ──
     F("video.vertical_mode", "คลิปแนวตั้งทำยังไง", "select", "render", "render",
@@ -225,6 +245,9 @@ STEP_PARAMS = {
                "thumbs.per_clip"],
     "ai": ["ai.model", "ai.tasks", "ai.sheets", "ai.transcript_chars",
            "ai.batch_clips", "ai.goal"],
+    "prepare": ["talk", "broll", "classify.min_speech_total", "prepare.drop_silent",
+                "ai.enabled", "ai.apply", "audio.target_lufs_talk",
+                "audio.target_lufs_broll"],
 }
 
 
@@ -490,10 +513,11 @@ def step_status(ctx, cfg):
         sid = st["id"]
         path = {
             "scan": work / "manifest.json",
-            "listen": work / "transcript.json",
             "thumbs": ctx.thumb_dir / "sheets",
+            "listen": work / "transcript.json",
             "ai": work / "ai.json",
-            "decide": work / "edl.json",
+            "prepare": work / "pool.json",
+            "compose": work / "edl.json",
             "render": work / "render.json",
             "assemble": ctx.out,
         }[sid]
@@ -506,7 +530,8 @@ def step_status(ctx, cfg):
             src = {"scan": work / "manifest.json",
                    "listen": work / "transcript.json",
                    "thumbs": ctx.thumb_dir / "params.json",
-                   "ai": work / "ai.json"}[sid]
+                   "ai": work / "ai.json",
+                   "prepare": work / "pool.json"}[sid]
             saved = (read_json(src, {}) or {}).get("params")
             if saved is not None:
                 now = params_of(cfg, sid)
@@ -528,7 +553,12 @@ def step_status(ctx, cfg):
             adv = read_json(path, {}) or {}
             rec["summary"] = (f"{len(adv.get('chapters', []))} บท · "
                               f"ให้คะแนน {sum(1 for v in adv.get('clips', {}).values() if 'score' in v)} คลิป")
-        elif sid == "decide" and exists:
+        elif sid == "prepare" and exists:
+            s = (read_json(path, {}) or {}).get("summary", {})
+            rec["summary"] = (f"คลัง {s.get('usable', 0)} ชิ้น "
+                              f"({s.get('talk', 0)} พูด + {s.get('broll', 0)} วิว) · "
+                              f"{s.get('duration_total', 0) / 60:.1f} นาที")
+        elif sid == "compose" and exists:
             s = (read_json(path, {}) or {}).get("summary", {})
             rec["summary"] = (f"{s.get('segments', 0)} ชิ้น · "
                               f"{s.get('duration_total', 0) / 60:.1f} นาที")

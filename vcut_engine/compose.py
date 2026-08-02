@@ -1,0 +1,392 @@
+"""COMPOSE — หยิบชิ้นจากคลังมาเรียงเป็นหนัง → .vcut/edl.json
+
+ครึ่งหลังของสิ่งที่ decide.py เคยทำรวดเดียว รับ pool.json (คลังชิ้นที่ prepare.py
+ตัดไว้แล้ว) แล้วตอบคำถามเดียว: **จะเอาชิ้นไหนมาเรียงยังไง**
+
+7 วิธีเลือก — เปลี่ยนได้ที่ [compose] mode
+
+    all        เอาทุกชิ้นในคลัง เรียงตามลำดับไฟล์
+    pattern    สลับตามรูปแบบที่กำหนด เช่น พูด → วิว → วิว วนไป
+    budget     กำหนดเวลารวมของแต่ละแบบ เช่น พูด 6 นาที + วิว 4 นาที
+    numbers    เอาเฉพาะเลขคลิปที่ระบุ เช่น 7068-7200, 7305
+    timerange  เอาเฉพาะคลิปที่ถ่ายในช่วงเวลาที่ระบุ
+    manual     เลือกทีละชิ้นเอง (หน้าเว็บเขียนรายการ id มาให้)
+    ai         ให้ AI เลือกจากความหมายของคลิป + โจทย์ที่สั่ง
+
+ทุกโหมดหยิบได้เฉพาะชิ้นที่ ok — ยกเว้น manual ที่หยิบชิ้นซึ่งตัวกรองคัดออก
+กลับมาได้ เพราะคนเลือกเองย่อมรู้ดีกว่าตัวกรอง
+"""
+import re
+import time
+
+from . import ai as ai_mod
+from .util import c, die, info, read_json, warn, write_json
+
+MODES = ("all", "pattern", "budget", "numbers", "timerange", "manual", "ai")
+
+
+# ─────────────────────────── ตัวช่วยให้คะแนน ───────────────────────────
+
+def talk_score(text, dur):
+    """คะแนนช็อตพูด = ความหลากหลายของคำ × ความเหมาะของความยาว
+    ช็อตที่วนซ้ำคำเดิม ("นายนายนาย", "ขึ้นกิมมมม") จะได้คะแนนต่ำ"""
+    words = [w for w in (text or "").replace("ๆ", " ").split() if w]
+    if not words:
+        return 0.0
+    uniq = len(set(words))
+    fit = min(1.0, dur / 8.0) if dur < 8 else max(0.35, 8.0 / dur)
+    return round(uniq * (uniq / len(words)) * fit, 3)
+
+
+def _norm(vals):
+    hi = max(vals) if vals else 0.0
+    return (lambda x: (x / hi) if hi > 0 else 0.0)
+
+
+def rank_of(pieces, ai_weight=0.0):
+    """คะแนนรวม 0–1 ต่อชิ้น — ผสมคะแนนกฎกับคะแนน AI ตามน้ำหนักที่ตั้งไว้
+
+    ช่วงพูดวัดจากเนื้อคำ ช่วงวิววัดจากความนิ่งของภาพ แล้วย่อลงมาตราเดียวกัน
+    จะได้เทียบข้ามประเภทได้เวลาต้องเลือกว่าจะทิ้งอะไรก่อน
+    """
+    w = max(0.0, min(1.0, float(ai_weight)))
+    talk = [p for p in pieces if p["kind"] == "TALK"]
+    broll = [p for p in pieces if p["kind"] == "BROLL"]
+
+    nt = _norm([talk_score(p.get("text"), p["dur"]) for p in talk])
+    for p in talk:
+        base = nt(talk_score(p.get("text"), p["dur"]))
+        p["_rank"] = round((1 - w) * base + w * float(p.get("ai_score", base)), 4)
+
+    nb = _norm([p.get("motion", 99) for p in broll])
+    for p in broll:
+        base = 1.0 - nb(p.get("motion", 99))          # นิ่งมาก = เข้าใกล้ 1
+        p["_rank"] = round((1 - w) * base + w * float(p.get("ai_score", base)), 4)
+    return pieces
+
+
+def limit_runs(pieces, run_max):
+    """วิวติดกันเกิน run_max ชิ้น → เก็บเฉพาะตัวที่คะแนนดีที่สุด"""
+    out, i, dropped = [], 0, []
+    while i < len(pieces):
+        if pieces[i]["kind"] != "BROLL":
+            out.append(pieces[i])
+            i += 1
+            continue
+        j = i
+        while j < len(pieces) and pieces[j]["kind"] == "BROLL":
+            j += 1
+        run = pieces[i:j]
+        if run_max > 0 and len(run) > run_max:
+            keep = {x["id"] for x in
+                    sorted(run, key=lambda x: -x.get("_rank", 0))[:run_max]}
+            dropped += [x["id"] for x in run if x["id"] not in keep]
+            run = [x for x in run if x["id"] in keep]
+        out.extend(run)
+        i = j
+    return out, dropped
+
+
+# ─────────────────────────── ตัวแปลงข้อความเป็นตัวกรอง ───────────────────────────
+
+def parse_numbers(spec):
+    """"7068-7200, 7305, 7400-7450" → เซตของเลขคลิป"""
+    out = set()
+    for part in re.split(r"[,\s]+", str(spec or "")):
+        if not part:
+            continue
+        m = re.match(r"^(\d+)\s*-\s*(\d+)$", part)
+        if m:
+            a, b = int(m.group(1)), int(m.group(2))
+            out.update(range(min(a, b), max(a, b) + 1))
+        elif part.isdigit():
+            out.add(int(part))
+    return out
+
+
+def parse_when(s):
+    """รับ "2026-05-01" หรือ "2026-05-01 08:30" → epoch (None ถ้าเว้นว่าง)"""
+    s = str(s or "").strip()
+    if not s:
+        return None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            return time.mktime(time.strptime(s, fmt))
+        except ValueError:
+            continue
+    die(f"[compose] อ่านเวลา '{s}' ไม่ออก — ใช้รูปแบบ 2026-05-01 หรือ 2026-05-01 08:30")
+
+
+# ─────────────────────────── 7 วิธีเลือก ───────────────────────────
+
+def _by_num(p):
+    return (p["num"], p["id"])
+
+
+def mode_all(pool_ok, cfg, ctx):
+    return sorted(pool_ok, key=_by_num), False, {}
+
+
+def mode_numbers(pool_ok, cfg, ctx):
+    want = parse_numbers(cfg.get("numbers", ""))
+    if not want:
+        die("[compose] mode = numbers แต่ยังไม่ได้ใส่เลขคลิป เช่น numbers = \"7068-7200\"")
+    got = [p for p in pool_ok if p["num"] in want]
+    return sorted(got, key=_by_num), False, {"เลขที่ระบุ": len(want), "เจอจริง": len(got)}
+
+
+def mode_timerange(pool_ok, cfg, ctx):
+    a, b = parse_when(cfg.get("from", "")), parse_when(cfg.get("to", ""))
+    if a is None and b is None:
+        die("[compose] mode = timerange แต่ยังไม่ได้ใส่ from / to")
+    got = [p for p in pool_ok
+           if (a is None or p.get("mtime", 0) >= a)
+           and (b is None or p.get("mtime", 0) <= b)]
+    return sorted(got, key=_by_num), False, {"อยู่ในช่วง": len(got)}
+
+
+def mode_manual(pool_all, cfg, ctx):
+    """เลือกทีละชิ้น — หยิบชิ้นที่ตัวกรองคัดออกกลับมาได้ด้วย"""
+    ids = list(cfg.get("manual", []) or [])
+    if not ids:
+        die("[compose] mode = manual แต่ยังไม่ได้เลือกชิ้นไหนเลย")
+    by_id = {p["id"]: p for p in pool_all}
+    got, missing = [], []
+    for i in ids:
+        if i in by_id:
+            got.append(by_id[i])
+        else:
+            missing.append(i)
+    if missing:
+        warn(f"เลือกชิ้นที่ไม่มีในคลัง {len(missing)} ชิ้น (เช่น {missing[0]}) — ข้ามไป")
+    rescued = sum(1 for p in got if not p["ok"])
+    return got, True, {"เลือกเอง": len(got), "หยิบที่ถูกกรองกลับมา": rescued}
+
+
+def mode_pattern(pool_ok, cfg, ctx):
+    """สลับตามรูปแบบ เช่น พูด → วิว → วิว วนไปจนของหมดหรือถึงเป้าความยาว"""
+    pat = [str(x).upper() for x in (cfg.get("pattern", []) or ["TALK", "BROLL"])]
+    pat = [x for x in pat if x in ("TALK", "BROLL")]
+    if not pat:
+        die("[compose] pattern ต้องมีอย่างน้อยหนึ่งค่าเป็น TALK หรือ BROLL")
+    target = float(cfg.get("target_minutes", 0) or 0) * 60.0
+
+    queues = {}
+    for k in ("TALK", "BROLL"):
+        qs = [p for p in pool_ok if p["kind"] == k]
+        # เรียงตามลำดับไฟล์ แต่ถ้ามีเป้าความยาว ให้เอาชิ้นดีก่อน
+        queues[k] = sorted(qs, key=(lambda p: -p.get("_rank", 0)) if target else _by_num)
+
+    out, used, i, stall = [], 0.0, 0, 0
+    while stall < len(pat):
+        k = pat[i % len(pat)]
+        i += 1
+        if not queues[k]:
+            stall += 1
+            continue
+        stall = 0
+        p = queues[k].pop(0)
+        if target and used + p["dur"] > target:
+            break
+        out.append(p)
+        used += p["dur"]
+    if target:
+        out.sort(key=_by_num)          # คุมสัดส่วนแล้ว แต่ยังเล่าตามลำดับเวลาจริง
+        out, _ = _reflow(out, pat)
+    return out, True, {"รูปแบบ": " → ".join(pat), "ได้": len(out)}
+
+
+def _reflow(pieces, pat):
+    """จัดให้ใกล้เคียงรูปแบบที่สุดโดยยังคงลำดับเวลาเดิมของแต่ละประเภท"""
+    q = {"TALK": [p for p in pieces if p["kind"] == "TALK"],
+         "BROLL": [p for p in pieces if p["kind"] == "BROLL"]}
+    out, i, stall = [], 0, 0
+    while stall < len(pat):
+        k = pat[i % len(pat)]
+        i += 1
+        if not q[k]:
+            stall += 1
+            continue
+        stall = 0
+        out.append(q[k].pop(0))
+    out += q["TALK"] + q["BROLL"]
+    return out, None
+
+
+def mode_budget(pool_ok, cfg, ctx):
+    """กำหนดเวลารวมของแต่ละแบบ — เอาชิ้นคะแนนดีก่อนจนเต็มงบ แล้วเรียงตามเวลาจริง"""
+    bt = float(cfg.get("talk_minutes", 0) or 0) * 60.0
+    bb = float(cfg.get("broll_minutes", 0) or 0) * 60.0
+    if bt <= 0 and bb <= 0:
+        die("[compose] mode = budget ต้องใส่ talk_minutes หรือ broll_minutes อย่างน้อยหนึ่งค่า")
+    avoid_adj = bool(cfg.get("avoid_adjacent", True))
+
+    out, stats = [], {}
+    for kind, budget, key in (("TALK", bt, "พูด"), ("BROLL", bb, "วิว")):
+        qs = sorted([p for p in pool_ok if p["kind"] == kind],
+                    key=lambda p: -p.get("_rank", 0))
+        used, keep = 0.0, []
+        for p in qs:
+            if budget <= 0 or used + p["dur"] > budget:
+                continue
+            if avoid_adj and kind == "BROLL" and any(abs(p["num"] - x["num"]) <= 1
+                                                     for x in keep):
+                continue
+            keep.append(p)
+            used += p["dur"]
+        # เงื่อนไข "ห้ามติดกัน" อาจทำให้เติมไม่เต็ม — เติมรอบสองโดยยอมให้ติดกัน
+        if budget > 0 and used < budget * 0.9:
+            for p in qs:
+                if p in keep or used + p["dur"] > budget:
+                    continue
+                keep.append(p)
+                used += p["dur"]
+        out += keep
+        stats[key] = f"{len(keep)} ชิ้น {used / 60:.1f} นาที"
+    return sorted(out, key=_by_num), False, stats
+
+
+def mode_ai(pool_ok, cfg, ctx):
+    """ใช้รายการที่ AI เลือกไว้ใน .vcut/compose.json — engine ไม่ได้ถาม AI เอง"""
+    d = read_json(ctx.work / "compose.json")
+    if not d or not d.get("order"):
+        die("mode = ai แต่ยังไม่มี .vcut/compose.json\n"
+            "   สั่ง `vcut compose --ask --context \"...\"` เพื่อให้ AI เลือกให้ก่อน")
+    by_id = {p["id"]: p for p in pool_ok}
+    got = [by_id[i] for i in d["order"] if i in by_id]
+    miss = len(d["order"]) - len(got)
+    if miss:
+        warn(f"AI อ้างชิ้นที่ไม่มีในคลัง {miss} ชิ้น — ข้ามไป")
+    return got, True, {"AI เลือก": len(got), "โจทย์": d.get("context", "")[:40] or "—"}
+
+
+PICKERS = {"all": mode_all, "pattern": mode_pattern, "budget": mode_budget,
+           "numbers": mode_numbers, "timerange": mode_timerange,
+           "manual": mode_manual, "ai": mode_ai}
+
+
+# ─────────────────────────── ลำดับ ───────────────────────────
+
+def order_pieces(pieces, ctx, adv):
+    apply = ctx.get("ai.apply", {})
+    if adv and apply.get("order", False) and adv.get("chapters"):
+        rank = {}
+        for ch in adv["chapters"]:
+            for n in ch["clips"]:
+                rank.setdefault(n, len(rank))
+        tail = len(rank)
+        return sorted(pieces, key=lambda p: (rank.get(p["name"], tail + p["num"]),
+                                             p["num"], p["id"]))
+    mode = ctx.get("order.mode", "filename")
+    keyf = {"filename": lambda p: (p["num"], p["id"]),
+            "mtime": lambda p: p.get("mtime", 0),
+            "duration": lambda p: p["dur"]}[mode]
+    return sorted(pieces, key=keyf, reverse=bool(ctx.get("order.reverse", False)))
+
+
+# ─────────────────────────── main ───────────────────────────
+
+SEG_KEYS = ("name", "src", "orient", "rot_override", "full_range", "achannels",
+            "kind", "start", "end", "dur", "target_lufs", "text", "motion",
+            "bright", "chapter", "chapter_title", "ai_score", "id")
+
+
+def run(ctx, write=True):
+    pool = read_json(ctx.work / "pool.json")
+    if not pool:
+        die("ยังไม่มี pool.json — ทำขั้นที่ 2 (เตรียมวิดีโอ) ก่อน")
+    return run_with_pool(ctx, pool, write=write)
+
+
+def run_with_pool(ctx, pool, write=True):
+    """รับคลังมาตรง ๆ — ตอนประเมินผลยังไม่ได้เขียน pool.json ลงดิสก์"""
+    cfg = ctx.get("compose", {})
+    mode = str(cfg.get("mode", "all"))
+    if mode not in MODES:
+        die(f"[compose] mode รองรับ {' | '.join(MODES)} (ได้รับ '{mode}')")
+
+    adv = ai_mod.load(ctx) if ctx.get("ai.enabled", False) else None
+    ai_w = float(ctx.get("ai.apply.score_weight", 0.0)) if adv else 0.0
+    all_pieces = [dict(p) for p in pool["pieces"]]
+    rank_of(all_pieces, ai_w)
+    ok = [p for p in all_pieces if p["ok"]]
+
+    picked, keeps_order, stats = PICKERS[mode](
+        all_pieces if mode == "manual" else ok, cfg, ctx)
+    if not keeps_order:
+        picked = order_pieces(picked, ctx, adv)
+    # manual กับ ai เลือกชิ้นและลำดับมาเองแล้ว — ไม่เอา run_max ไปทับเจตนาคน
+    run_dropped = []
+    if mode not in ("manual", "ai"):
+        picked, run_dropped = limit_runs(picked, int(ctx.get("broll.run_max", 0)))
+
+    timeline = [{k: p[k] for k in SEG_KEYS if k in p} for p in picked]
+    d_t = sum(s["dur"] for s in timeline if s["kind"] == "TALK")
+    d_b = sum(s["dur"] for s in timeline if s["kind"] == "BROLL")
+
+    chapters = []
+    if adv:
+        for ch in adv.get("chapters", []):
+            segs = [s for s in timeline if s.get("chapter") == ch["id"]]
+            if segs:
+                chapters.append({"id": ch["id"], "title": ch["title"],
+                                 "segments": len(segs),
+                                 "duration": round(sum(s["dur"] for s in segs), 1)})
+
+    edl = {
+        "config": ctx.cfg.get("_meta", {}).get("config_files", []),
+        "compose": {"mode": mode, "stats": stats,
+                    "pool": pool["summary"], "dropped_run": len(run_dropped)},
+        "ai": ({"goal": adv.get("goal", ""), "apply": ctx.get("ai.apply", {}),
+                "tasks": list(adv.get("tasks", {}).keys())} if adv
+               else {"enabled": False}),
+        "chapters": chapters,
+        "params": {"talk": ctx.get("talk", {}), "broll": ctx.get("broll", {}),
+                   "order": ctx.get("order", {}), "compose": cfg,
+                   "audio": ctx.get("audio", {}), "video": ctx.get("video", {}),
+                   "encode": ctx.get("encode", {})},
+        "summary": {
+            "segments": len(timeline),
+            "segments_talk": sum(1 for s in timeline if s["kind"] == "TALK"),
+            "segments_broll": sum(1 for s in timeline if s["kind"] == "BROLL"),
+            "segments_vertical": sum(1 for s in timeline if s["orient"] == "V"),
+            "duration_talk": round(d_t, 1),
+            "duration_broll": round(d_b, 1),
+            "duration_total": round(d_t + d_b, 1),
+            "clips_dropped_run": len(run_dropped),
+        },
+        "timeline": timeline,
+    }
+    if write:
+        write_json(ctx.edl, edl)
+        report(edl, pool)
+    return edl
+
+
+def report(edl, pool):
+    s, cm = edl["summary"], edl["compose"]
+    info("─" * 62)
+    info(f"  วิธีเลือก          {c(cm['mode'], 'b')}"
+         + ("   " + " · ".join(f"{k} {v}" for k, v in cm["stats"].items())
+            if cm["stats"] else ""))
+    info(f"  จากคลัง            {pool['summary']['usable']} ชิ้น "
+         f"→ ใช้จริง {s['segments']} ชิ้น "
+         f"({s['segments_talk']} พูด + {s['segments_broll']} วิว)")
+    info(f"  ช่วงพูด           {s['duration_talk'] / 60:>6.1f} นาที")
+    info(f"  ช่วงวิว            {s['duration_broll'] / 60:>6.1f} นาที")
+    total = c(f"{s['duration_total'] / 60:>6.1f} นาที", "g")
+    info(f"  {c('รวม', 'g')}               {total}")
+    if cm["dropped_run"]:
+        info(f"  ตัดเพราะวิวติดกันเกิน  {cm['dropped_run']:>3} ชิ้น")
+    info("─" * 62)
+    for i, ch in enumerate(edl.get("chapters", []), 1):
+        mins = c(f"{ch['duration'] / 60:.1f} นาที", "d")
+        info(f"  {c('บท ' + str(i), 'b')} {ch['title']:<26} {ch['segments']:>3} ชิ้น  {mins}")
+    if edl.get("chapters"):
+        info("─" * 62)
+    seq = "".join("T" if x["kind"] == "TALK" else "B" for x in edl["timeline"])
+    for i in range(0, min(len(seq), 300), 60):
+        info(f"  {c(seq[i:i + 60], 'd')}")
+    if len(seq) > 300:
+        info(f"  {c('… (' + str(len(seq)) + ' ชิ้น)', 'd')}")
+    info(f"  {c('T = ช่วงพูด   B = ช่วงวิว', 'd')}")

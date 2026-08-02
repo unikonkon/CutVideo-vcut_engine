@@ -16,6 +16,29 @@ rotation ผิด · คลิปกลับหัว · HEVC full range · fp
    เรียก `ai` ใหม่เฉพาะเมื่อโจทย์การเล่าเรื่องเปลี่ยน
 3. **`render` ครั้งแรกใช้เวลา ~40 นาที** — บอกผู้ใช้ก่อนเสมอ ส่วน `assemble` ~1 นาที
 
+## โครงสร้าง 3 ขั้น
+
+```
+ขั้น 1  เลือกฟุตเทจ   scan + thumbs          → manifest.json
+ขั้น 2  เตรียมวิดีโอ  listen + ai + prepare  → pool.json   (คลังชิ้น)
+ขั้น 3  รวมเป็นหนัง   compose + render       → edl.json → final.mp4
+```
+
+`prepare` ดูทีละคลิป · `compose` ดูทั้งกอง — สองงานคนละเรื่อง แยกไฟล์กัน
+`vcut decide` = ทำสองอันต่อกัน (คำสั่งเดิม ยังใช้ได้)
+
+**7 วิธีเลือกในขั้น 3** — `--mode`:
+`all` · `pattern` · `budget` · `numbers` · `timerange` · `manual` · `ai`
+
+```bash
+./vcut compose --mode pattern --set compose.pattern=TALK,BROLL,BROLL --set compose.target_minutes=10
+./vcut compose --mode budget --set compose.talk_minutes=6 --set compose.broll_minutes=4
+./vcut compose --mode numbers --set compose.numbers=7068-7200
+./vcut compose --ask --context "เล่าตามลำดับการเดินทาง"
+```
+
+`manual` กับ `ai` เลือกชิ้นและลำดับมาเองแล้ว — `broll.run_max` จะไม่ไปทับ
+
 ## ทำอะไรก่อน
 
 ```bash
@@ -86,15 +109,14 @@ rotation ผิด · คลิปกลับหัว · HEVC full range · fp
 ## หน้าเว็บ
 
 ```bash
-./vcut view -c <preset>            # /       เลือกช็อต/สลับลำดับ/กดสร้างไฟล์
-./vcut view -c <preset> --setup    # /setup  ตั้งค่าและสั่งรันทีละขั้น
+./vcut view -c <preset>      # http://127.0.0.1:8765 — หน้าเดียว 3 ขั้น
 ```
 
 รันเป็น background process แล้วบอก URL — **อย่ารอให้คำสั่งจบ** เพราะมันไม่จบเอง
 
-- ผู้ใช้อยากเลือกช็อตเอง / เห็นภาพก่อน → หน้า `/`
-- ผู้ใช้อยากลองปรับค่าแล้วดูว่าจะได้อะไร → หน้า `/setup`
-  แผงขวาบอกทันทีว่าแก้ค่านั้นแล้วต้อง render ใหม่กี่ชิ้น กี่นาที ก่อนลงมือจริง
+หน้าเดียวจบ: ขั้น 1 เลือกฟุตเทจ · ขั้น 2 เตรียมวิดีโอ (เห็นคลังแยกพูด/วิว) ·
+ขั้น 3 รวมเป็นหนัง (7 วิธีเลือก + ไทม์ไลน์ + AI ติชม) แผงขวาบอกทันทีว่าแก้ค่านั้น
+แล้วต้อง render ใหม่กี่ชิ้น กี่นาที ก่อนลงมือจริง
 
 ถ้าผู้ใช้ถามว่า "แก้ค่านี้แล้วจะเสียเวลาเท่าไร" ตอบได้เองโดยไม่ต้องเปิดหน้าเว็บ:
 
@@ -110,24 +132,20 @@ print(settings.estimate(config.Ctx(config.load('<preset>',['talk.min_shot=6'])))
 
 ```bash
 ./vcut run -c <preset>                # ทำตามแผนใน [run] — พิมพ์แผนออกมาก่อนเสมอ
-./vcut run -c <preset> --from decide  # ข้ามขั้นที่ทำไปแล้ว
+./vcut run -c <preset> --from compose # ข้ามขั้นที่ทำไปแล้ว
 ```
 
 `vcut run` เลือกได้ทีละ Phase จาก `[run]` ในไฟล์โปรเจกต์ — ปิดไว้ = ข้ามไปใช้ของเดิม
 
 ```toml
 [run]
-prepare = true   # Phase 1 · scan + thumbs + listen
-advise  = true   # Phase 2 · ai
-decide  = true   # Phase 3 · decide
-produce = true   # Phase 4 · render + assemble
+source  = true   # ขั้น 1 · scan + thumbs
+prepare = true   # ขั้น 2 · listen + ai + prepare
+compose = true   # ขั้น 3 · compose + render + assemble
 ```
 
-⚠️ เลข Phase ในโค้ดเรียงตาม**ลำดับที่รันจริง** ไม่ตรงกับเอกสารแผนเดิม
-(แผนเดิม: AI = Phase 4, render = Phase 2) ถ้าผู้ใช้อ้างเลขจากเอกสารแผน ให้ถามย้ำก่อน
-
-`run.advise = false` ≠ `ai.enabled = false` — อันแรกคือไม่ถาม AI ใหม่แต่ยังใช้
-`ai.json` เดิม อันหลังคือไม่เอาความเห็น AI ไปใช้เลย
+`run.prepare = false` ≠ `ai.enabled = false` — อันแรกคือไม่ทำขั้น 2 ใหม่แต่ยังใช้
+`pool.json` เดิม อันหลังคือไม่เอาความเห็น AI ไปใช้เลย
 
 ## อ่านผลให้ผู้ใช้ฟัง
 

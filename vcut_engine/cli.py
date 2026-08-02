@@ -16,8 +16,8 @@ import sys
 import time
 from pathlib import Path
 
-from . import (ai, assemble, config, decide, listen, render, review, scan,
-               serve, settings, thumbs)
+from . import (ai, assemble, compose, config, decide, listen, prepare, render,
+               review, scan, serve, settings, thumbs)
 from .util import (c, die, disk_free_gb, hhmmss, info, read_json,
                    require_tools, warn)
 
@@ -28,7 +28,9 @@ USAGE = """vcut — ตัดต่อวิดีโออัตโนมัต
   vcut listen                     ถอดเสียง (whisper.cpp)
   vcut thumbs                     ภาพตัวอย่าง + contact sheet
   vcut ai                         ถาม AI → .vcut/ai.json (บท · คะแนน · ช่วงที่ควรเก็บ)
-  vcut decide                     สร้าง EDL ตามกติกาใน config
+  vcut prepare                    ขั้น 2 · เตรียมวิดีโอทีละคลิป → pool.json
+  vcut compose                    ขั้น 3 · หยิบจากคลังมาเรียงเป็นหนัง → edl.json
+  vcut decide                     ทำ prepare + compose รวดเดียว (ของเดิม)
   vcut render                     ตัด+แก้ภาพ/เสียงเป็นชิ้น ๆ (มี cache)
   vcut assemble                   ต่อเป็นไฟล์เดียว
   vcut review                     ให้ AI ดูหนังที่ตัดแล้ว → เสนอให้เอาออก/สลับที่
@@ -61,8 +63,9 @@ def build_parser():
     ap.add_argument("-h", "--help", action="store_true")
     sub = ap.add_subparsers(dest="cmd")
 
-    for name in ("scan", "listen", "thumbs", "ai", "decide", "render", "assemble",
-                 "review", "view", "run", "info", "gc", "presets", "config"):
+    for name in ("scan", "listen", "thumbs", "ai", "prepare", "compose", "decide",
+                 "render", "assemble", "review", "view", "run", "info", "gc",
+                 "presets", "config"):
         p = sub.add_parser(name, add_help=False)
         p.add_argument("-h", "--help", action="store_true")
         add_common(p)
@@ -71,6 +74,16 @@ def build_parser():
                            help="ไม่ใช้ cache ทำใหม่ทั้งหมด")
         if name in ("assemble", "run"):
             p.add_argument("-o", "--out", help="ไฟล์ผลลัพธ์")
+        if name == "compose":
+            p.add_argument("--mode", choices=list(compose.MODES),
+                           help="ทับ [compose] mode ชั่วคราว")
+            p.add_argument("--ask", action="store_true",
+                           help="ให้ AI เลือกให้ก่อน แล้วค่อยรวม (mode = ai)")
+            p.add_argument("--context", default="",
+                           help="โจทย์ที่จะบอก AI ตอน --ask")
+        if name in ("prepare", "compose", "decide"):
+            p.add_argument("--ai", dest="use_ai", action="store_true",
+                           help="ใช้ความเห็นจาก .vcut/ai.json")
         if name == "review":
             p.add_argument("--context", default="",
                            help="บอก AI ว่าอยากให้ดูอะไรเป็นพิเศษ")
@@ -82,7 +95,7 @@ def build_parser():
             p.add_argument("--task", dest="tasks", action="append",
                            choices=list(ai.TASKS),
                            help="เลือกเฉพาะบางงานของ AI ใช้ซ้ำได้")
-        if name in ("decide", "run"):
+        if name == "run":
             p.add_argument("--ai", dest="use_ai", action="store_true",
                            help="ใช้ความเห็นจาก .vcut/ai.json (= --set ai.enabled=true)")
         if name == "run":
@@ -234,7 +247,8 @@ def cmd_run(ctx, args):
         "thumbs": lambda: thumbs.run(ctx),
         "listen": lambda: listen.run(ctx, force=args.force),
         "ai": lambda: ai.run(ctx, tasks=args.tasks, goal=args.goal, force=args.force),
-        "decide": lambda: decide.run(ctx),
+        "prepare": lambda: prepare.run(ctx),
+        "compose": lambda: compose.run(ctx),
         "render": lambda: render.run(ctx, force=args.force),
         "assemble": lambda: assemble.run(ctx, out=args.out),
     }
@@ -279,6 +293,15 @@ def main(argv=None):
         thumbs.run(ctx)
     elif args.cmd == "ai":
         ai.run(ctx, tasks=args.tasks, goal=args.goal, force=args.force)
+    elif args.cmd == "prepare":
+        prepare.run(ctx)
+    elif args.cmd == "compose":
+        if args.mode:
+            ctx.cfg.setdefault("compose", {})["mode"] = args.mode
+        if args.ask:
+            ai.pick_compose(ctx, context=args.context)
+            ctx.cfg.setdefault("compose", {})["mode"] = "ai"
+        compose.run(ctx)
     elif args.cmd == "decide":
         decide.run(ctx)
     elif args.cmd == "render":
