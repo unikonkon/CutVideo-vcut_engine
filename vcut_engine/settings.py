@@ -120,6 +120,7 @@ FIELDS = [
     # ── สามค่านี้เลือกด้วยการกดที่ตัวคลิปในขั้น 1 ไม่ใช่กรอกในฟอร์ม ──
     # อยู่ใน FIELDS เพื่อให้ปุ่มรีเซ็ตกับตัวจับ "ค่าเปลี่ยนไปแล้ว" มองเห็น
     F("scan.exclude", "คลิปที่ไม่เอา", "clips", "edl", "scan"),
+    F("scan.order", "ลำดับที่จัดเอง", "clips", "edl", "scan"),
     F("scan.rotation_overrides", "คลิปที่หมุนเอง", "clips", "scan", "scan"),
     F("video.vertical_overrides", "โหมดแนวตั้งรายคลิป", "clips", "render", "render"),
 

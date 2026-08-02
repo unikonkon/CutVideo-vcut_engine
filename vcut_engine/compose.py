@@ -20,6 +20,7 @@ import re
 import time
 
 from . import ai as ai_mod
+from . import clips as clips_mod
 from .util import c, die, info, read_json, warn, write_json
 
 MODES = ("all", "pattern", "budget", "numbers", "timerange", "manual", "ai")
@@ -119,12 +120,28 @@ def parse_when(s):
 
 # ─────────────────────────── 7 วิธีเลือก ───────────────────────────
 
-def _by_num(p):
-    return (p["num"], p["id"])
+def apply_order(pieces, ctx):
+    """ติดเลขลำดับ _seq ให้ทุกชิ้นตามที่คนลากจัดไว้ในขั้น 1
+
+    ไม่ไปทับ num — num คือเลขบนชื่อไฟล์ ซึ่ง "ตามเลขคลิป" กับ "ห้ามเอาวิวจาก
+    คลิปที่อยู่ติดกัน" ยังต้องใช้ตามความหมายเดิม _seq เป็นคนละเรื่อง: ตำแหน่ง
+    ในลำดับเล่าเรื่อง ไม่มี order ที่จัดเองก็เท่ากับเรียงตามเลขไฟล์พอดี ผลจึง
+    เหมือนเดิมเป๊ะ
+    """
+    natural = [n for _, n in sorted({(p["num"], p["name"]) for p in pieces})]
+    seq = clips_mod.seq_index(ctx, natural)
+    for p in pieces:
+        p["_seq"] = seq.get(p["name"], p["num"])
+
+
+def _by_seq(p):
+    """ชิ้นจากคลิปเดียวกันได้ _seq เท่ากัน — แยกกันเองด้วยเวลาในคลิปต้นทาง
+    (ไม่ใช้ id เป็นตัวหลักเพราะ "#10" เรียงก่อน "#2" ตามตัวอักษร)"""
+    return (p.get("_seq", p["num"]), p["start"], p["id"])
 
 
 def mode_all(pool_ok, cfg, ctx):
-    return sorted(pool_ok, key=_by_num), False, {}
+    return sorted(pool_ok, key=_by_seq), False, {}
 
 
 def mode_numbers(pool_ok, cfg, ctx):
@@ -132,7 +149,7 @@ def mode_numbers(pool_ok, cfg, ctx):
     if not want:
         die("[compose] mode = numbers แต่ยังไม่ได้ใส่เลขคลิป เช่น numbers = \"7068-7200\"")
     got = [p for p in pool_ok if p["num"] in want]
-    return sorted(got, key=_by_num), False, {"เลขที่ระบุ": len(want), "เจอจริง": len(got)}
+    return sorted(got, key=_by_seq), False, {"เลขที่ระบุ": len(want), "เจอจริง": len(got)}
 
 
 def mode_timerange(pool_ok, cfg, ctx):
@@ -142,7 +159,7 @@ def mode_timerange(pool_ok, cfg, ctx):
     got = [p for p in pool_ok
            if (a is None or p.get("mtime", 0) >= a)
            and (b is None or p.get("mtime", 0) <= b)]
-    return sorted(got, key=_by_num), False, {"อยู่ในช่วง": len(got)}
+    return sorted(got, key=_by_seq), False, {"อยู่ในช่วง": len(got)}
 
 
 def mode_manual(pool_all, cfg, ctx):
@@ -175,7 +192,7 @@ def mode_pattern(pool_ok, cfg, ctx):
     for k in ("TALK", "BROLL"):
         qs = [p for p in pool_ok if p["kind"] == k]
         # เรียงตามลำดับไฟล์ แต่ถ้ามีเป้าความยาว ให้เอาชิ้นดีก่อน
-        queues[k] = sorted(qs, key=(lambda p: -p.get("_rank", 0)) if target else _by_num)
+        queues[k] = sorted(qs, key=(lambda p: -p.get("_rank", 0)) if target else _by_seq)
 
     out, used, i, stall = [], 0.0, 0, 0
     while stall < len(pat):
@@ -191,7 +208,7 @@ def mode_pattern(pool_ok, cfg, ctx):
         out.append(p)
         used += p["dur"]
     if target:
-        out.sort(key=_by_num)          # คุมสัดส่วนแล้ว แต่ยังเล่าตามลำดับเวลาจริง
+        out.sort(key=_by_seq)          # คุมสัดส่วนแล้ว แต่ยังเล่าตามลำดับเวลาจริง
         out, _ = _reflow(out, pat)
     return out, True, {"รูปแบบ": " → ".join(pat), "ได้": len(out)}
 
@@ -243,7 +260,7 @@ def mode_budget(pool_ok, cfg, ctx):
                 used += p["dur"]
         out += keep
         stats[key] = f"{len(keep)} ชิ้น {used / 60:.1f} นาที"
-    return sorted(out, key=_by_num), False, stats
+    return sorted(out, key=_by_seq), False, stats
 
 
 def mode_ai(pool_ok, cfg, ctx):
@@ -275,10 +292,10 @@ def order_pieces(pieces, ctx, adv):
             for n in ch["clips"]:
                 rank.setdefault(n, len(rank))
         tail = len(rank)
-        return sorted(pieces, key=lambda p: (rank.get(p["name"], tail + p["num"]),
-                                             p["num"], p["id"]))
+        return sorted(pieces, key=lambda p: (rank.get(p["name"], tail + p["_seq"]),
+                                             _by_seq(p)))
     mode = ctx.get("order.mode", "filename")
-    keyf = {"filename": lambda p: (p["num"], p["id"]),
+    keyf = {"filename": _by_seq,
             "mtime": lambda p: p.get("mtime", 0),
             "duration": lambda p: p["dur"]}[mode]
     return sorted(pieces, key=keyf, reverse=bool(ctx.get("order.reverse", False)))
@@ -327,6 +344,7 @@ def run_with_pool(ctx, pool, write=True):
     adv = ai_mod.load(ctx) if ctx.get("ai.enabled", False) else None
     ai_w = float(ctx.get("ai.apply.score_weight", 0.0)) if adv else 0.0
     all_pieces = [dict(p) for p in pool["pieces"]]
+    apply_order(all_pieces, ctx)      # ต้องมาก่อนทุกโหมด — ทุกโหมดเรียงด้วย _seq
     rank_of(all_pieces, ai_w)
     ok = [p for p in all_pieces if p["ok"]]
 

@@ -176,7 +176,13 @@ video{width:100%;border-radius:5px;background:#000;display:block}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(124px,1fr));gap:.45rem;
   max-height:44em;overflow:auto}
 .cl{position:relative;border:1px solid var(--line);border-radius:6px;overflow:hidden;
-  background:var(--off);cursor:pointer}
+  background:var(--off);cursor:grab}
+.cl:active{cursor:grabbing}
+.cl.drag{opacity:.35}
+/* เส้นบอกว่าปล่อยแล้วจะไปแทรกด้านไหนของคลิปที่ชี้อยู่ */
+.cl.dl::after,.cl.dr::after{content:'';position:absolute;top:0;bottom:0;width:4px;
+  background:var(--accent);z-index:3}
+.cl.dl::after{left:0} .cl.dr::after{right:0}
 .cl img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#000}
 .cl.off img{opacity:.28;filter:grayscale(1)}
 .cl.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
@@ -336,8 +342,8 @@ const el = (t, cls, txt) => { const e = document.createElement(t);
   if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 
 let D = null, POOL = null, S = null, RV = null, RST = null, CL = null;
-let clFilter = 'all', clOpen = -1;
-let clEdits = {pick: {}, rot: {}, vmode: {}};
+let clFilter = 'all', clOpen = -1, clDrag = null;
+let clEdits = {pick: {}, rot: {}, vmode: {}, order: null};
 let poolFilter = 'all', poolKeep = null, pcOpen = null;
 let step = 1, edits = {}, items = [], sel = -1, dragFrom = -1;
 let logSince = 0, polling = null, estTimer = null, taken = new Set();
@@ -386,7 +392,7 @@ async function load(keepEdits){
     api('/api/clips').catch(() => ({clips:[], summary:{total:0}}))]);
   D = d; POOL = pool; S = st; CL = cl;
   if (!keepEdits){
-    edits = {}; poolKeep = null; clEdits = {pick: {}, rot: {}, vmode: {}};
+    edits = {}; poolKeep = null; clEdits = {pick: {}, rot: {}, vmode: {}, order: null};
   }
   if (S && S.timeline){ items = S.timeline.map(x => ({...x, off:false})); sel = -1; }
   $('#title').textContent = D.values['project.name'] || 'vcut';
@@ -483,7 +489,11 @@ const clPicked = x => x.name in clEdits.pick ? clEdits.pick[x.name] : x.picked;
 const clRot    = x => x.name in clEdits.rot ? clEdits.rot[x.name] : x.rot;
 const clVmode  = x => x.name in clEdits.vmode ? clEdits.vmode[x.name] : x.vmode;
 const clDirty  = () => Object.keys(clEdits.pick).length + Object.keys(clEdits.rot).length
-                     + Object.keys(clEdits.vmode).length;
+                     + Object.keys(clEdits.vmode).length + (clEdits.order ? 1 : 0);
+// ลำดับปัจจุบัน: ที่ลากค้างไว้ยังไม่บันทึก ถ้าไม่มีก็ตามที่เซิร์ฟเวอร์ส่งมา
+const clOrder   = () => clEdits.order || (CL.clips || []).map(x => x.name);
+const clNatural = () => (CL.clips || []).slice()
+  .sort((a, b) => a.num - b.num || (a.name < b.name ? -1 : 1)).map(x => x.name);
 // transpose จำนวนคี่ครั้งเท่านั้นที่สลับกว้าง/สูง — 180° ขนาดเท่าเดิม
 const swaps = o => ((o || '').split('transpose').length - 1) % 2 === 1;
 
@@ -491,10 +501,38 @@ function clOrient(x){
   return swaps(x.rot) === swaps(clRot(x)) ? x.orient : (x.orient === 'V' ? 'H' : 'V');
 }
 function clList(){
-  return (CL.clips || []).filter(x => clFilter === 'all' || clOrient(x) === clFilter);
+  const by = new Map((CL.clips || []).map(x => [x.name, x]));
+  return clOrder().map(n => by.get(n))
+    .filter(x => x && (clFilter === 'all' || clOrient(x) === clFilter));
 }
 function clSet(kind, name, v, orig){
   if (v === orig) delete clEdits[kind][name]; else clEdits[kind][name] = v;
+}
+
+// ── ลากสลับตำแหน่ง ────────────────────────────────────────────
+//
+// ลากในมุมมองที่กรองอยู่ก็ได้ — ย้ายในรายการเต็มโดยอิงคลิปที่ปล่อยทับ
+// ผลจึงชัดเจนเสมอ ไม่ต้องเดาว่าคลิปที่ถูกซ่อนอยู่จะไปโผล่ตรงไหน
+
+function clSetOrder(list){
+  const base = (CL.clips || []).map(x => x.name).join('\n');
+  // ลากแล้ววนกลับมาที่เดิม = ไม่มีอะไรค้าง ไม่ต้องกดบันทึก
+  clEdits.order = list.join('\n') === base ? null : list;
+  render();
+}
+function clMove(name, onto, after){
+  const list = clOrder().filter(n => n !== name);
+  const i = list.indexOf(onto);
+  if (i < 0) return;
+  list.splice(after ? i + 1 : i, 0, name);
+  clSetOrder(list);
+}
+function clDropSide(cell, e){
+  const r = cell.getBoundingClientRect();
+  return e.clientX > r.left + r.width / 2;
+}
+function clDragOff(){
+  document.querySelectorAll('.cl').forEach(c => c.classList.remove('dl', 'dr', 'drag'));
 }
 function btn(label, fn, cls){
   const b = el('button', 'sm' + (cls ? ' ' + cls : ''), label);
@@ -527,22 +565,42 @@ function clipBrowser(){
   const shown = clList();
   bar.append(btn('เลือกทั้งหมด', () => bulk(shown, true)),
              btn('ไม่เอาทั้งหมด', () => bulk(shown, false)),
-             btn('กลับด้าน', () => bulk(shown, null)),
-             el('span', 'spacer'));
+             btn('กลับด้าน', () => bulk(shown, null)));
+  const custom = s.custom_order || !!clEdits.order;
+  if (custom) bar.append(btn('เรียงตามเลขไฟล์', () => clSetOrder(clNatural())));
+  bar.append(el('span', 'spacer'));
   const n = clDirty();
   const sv = el('button', 'primary', n ? `บันทึกการเลือก (${n})` : 'บันทึกการเลือก');
   sv.disabled = !n; sv.onclick = saveClips;
   bar.append(sv);
   if (n) bar.append(btn('ทิ้งที่แก้', () => {
-    clEdits = {pick:{}, rot:{}, vmode:{}}; render(); }));
+    clEdits = {pick:{}, rot:{}, vmode:{}, order:null}; render(); }));
   c.appendChild(bar);
 
   const g = el('div', 'grid');
-  shown.forEach((x, i) => g.appendChild(clCell(x, i)));
+  const pos = new Map(clOrder().map((n, i) => [n, i + 1]));
+  shown.forEach((x, i) => g.appendChild(clCell(x, i, custom ? pos.get(x.name) : 0)));
   c.appendChild(g);
+
+  const notes = ['ลากคลิปไปวางตำแหน่งที่ต้องการได้ — เส้นสีน้ำเงินบอกว่าจะแทรกด้านไหน'];
   if (clFilter !== 'all')
-    c.appendChild(el('p', 'note', `กรองอยู่ — แสดง ${shown.length} จาก ${s.total} คลิป`));
+    notes.push(`กรองอยู่ — แสดง ${shown.length} จาก ${s.total} คลิป`
+      + ' (ลากตอนกรองก็ได้ ตำแหน่งอิงคลิปที่ปล่อยทับ)');
+  if (custom && val('order.mode') !== 'filename')
+    notes.push(`ลำดับที่จัดเองจะยังไม่มีผลกับหนัง เพราะขั้น 2 ตั้ง "เรียงลำดับตาม"`
+      + ` เป็น "${orderLabel(val('order.mode'))}" อยู่`);
+  else if (custom && val('order.reverse'))
+    notes.push('ขั้น 2 เปิด "กลับลำดับ" อยู่ — หนังจะเรียงจากท้ายรายการนี้ขึ้นมา');
+  else if (custom)
+    notes.push('หนังจะเรียงตามลำดับนี้ — กด "รวมเป็นหนัง" ในขั้น 3 ใหม่หลังบันทึก');
+  notes.forEach(t => c.appendChild(el('p', 'note', t)));
   return c;
+}
+
+// ชื่อโหมดการเรียงมาจาก settings.FIELDS ที่เดียว ไม่ได้พิมพ์ซ้ำไว้ที่นี่
+function orderLabel(mode){
+  const f = (D.fields || []).find(x => x.key === 'order.mode');
+  return (f && f.labels && f.labels[mode]) || mode;
 }
 
 function bulk(list, want){
@@ -551,13 +609,42 @@ function bulk(list, want){
   render();
 }
 
-function clCell(x, i){
+function clCell(x, i, pos){
   const on = clPicked(x), or = clOrient(x);
   const d = el('div', 'cl' + (on ? '' : ' off') + (i === clOpen ? ' sel' : ''));
   const img = el('img'); img.loading = 'lazy'; img.src = `/thumb/${x.name}.jpg`;
   img.alt = x.name;
+  img.draggable = false;        // ไม่งั้นเบราว์เซอร์ลากรูปแทนที่จะลากทั้งใบ
   d.append(img);
+
+  d.draggable = true;
+  d.title = 'ลากไปวางตำแหน่งที่ต้องการได้';
+  d.ondragstart = e => {
+    clDrag = x.name;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', x.name);
+    setTimeout(() => d.classList.add('drag'), 0);
+  };
+  d.ondragend = () => { clDrag = null; clDragOff(); };
+  d.ondragover = e => {
+    if (!clDrag || clDrag === x.name) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const after = clDropSide(d, e);
+    d.classList.toggle('dl', !after);
+    d.classList.toggle('dr', after);
+  };
+  d.ondragleave = () => d.classList.remove('dl', 'dr');
+  d.ondrop = e => {
+    e.preventDefault();
+    const name = clDrag || e.dataTransfer.getData('text/plain');
+    const after = clDropSide(d, e);
+    clDrag = null; clDragOff();
+    if (name && name !== x.name) clMove(name, x.name, after);
+  };
   const tag = el('div', 'tag');
+  // เลขตำแหน่งโผล่เฉพาะตอนมีลำดับที่จัดเอง — ตอนเรียงตามเลขไฟล์มันคือข้อมูลซ้ำ
+  if (pos) tag.append(el('span', 'b', '#' + pos));
   if (or === 'V') tag.append(el('span', 'b v', 'ตั้ง'));
   if (clRot(x)) tag.append(el('span', 'b r', '↻'));
   if (clVmode(x)) tag.append(el('span', 'b', vmShort(clVmode(x))));
@@ -668,10 +755,12 @@ async function saveClips(){
     return toast('ต้องเหลืออย่างน้อย 1 คลิป', true);
   try {
     const r = await post('/api/clips', {exclude,
-      rotations: {...clEdits.rot}, vmodes: {...clEdits.vmode}});
-    clEdits = {pick:{}, rot:{}, vmode:{}};
+      rotations: {...clEdits.rot}, vmodes: {...clEdits.vmode},
+      order: clEdits.order});      // null = ไม่ได้แตะลำดับ ของเดิมอยู่ต่อ
+    clEdits = {pick:{}, rot:{}, vmode:{}, order:null};
     const s = r.clips.summary;
     let msg = `บันทึกแล้ว · เอาไปทำต่อ ${s.picked}/${s.total} คลิป`;
+    if (r.reordered) msg += ' · ลำดับที่จัดเอง';
     if (r.retagged.length)
       msg += ` · หมุนใหม่ ${r.retagged.length} คลิป (ไม่ต้องอ่านคลิปใหม่)`;
     toast(msg);

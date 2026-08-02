@@ -1,8 +1,9 @@
 """CLIPS — งานของขั้น 1 ที่ทำกับคลิปเป็นราย ๆ
 
-สามอย่างที่ตัดสินตั้งแต่ตอนเลือกฟุตเทจ ก่อนจะรู้ด้วยซ้ำว่าหนังจะเล่าอะไร:
+สี่อย่างที่ตัดสินตั้งแต่ตอนเลือกฟุตเทจ ก่อนจะรู้ด้วยซ้ำว่าหนังจะเล่าอะไร:
 
     เอาคลิปไหนบ้าง        [scan] exclude
+    เรียงคลิปยังไง         [scan] order
     คลิปไหนต้องหมุน        [scan.rotation_overrides]
     แนวตั้งทำเป็นแนวนอนยังไง  [video.vertical_overrides]
 
@@ -53,6 +54,44 @@ def _video_only(args):
     return out
 
 
+# ─────────────────────────── ลำดับที่จัดเอง ───────────────────────────
+
+def arrange(natural, order):
+    """เรียงชื่อคลิปตาม [scan] order — ชื่อที่ไม่อยู่ในนั้นแทรกกลับตามธรรมชาติ
+
+    natural = ชื่อคลิปเรียงตามเลขไฟล์ (ลำดับตั้งต้น)  order = ที่คนลากจัดไว้
+
+    สองกรณีที่ต้องรอด: ชื่อใน order ที่ไฟล์หายไปแล้ว → ข้ามทิ้ง · คลิปที่เพิ่ง
+    ก๊อปเข้าโฟลเดอร์ทีหลังจึงยังไม่มีชื่อใน order → แทรกต่อจากคลิปที่อยู่ก่อน
+    หน้ามันตามเลขไฟล์ ไม่ใช่ไปกองต่อท้าย เพราะคนที่เติมคลิปเก่าเลข 7000 เข้ามา
+    ย่อมคาดว่ามันจะไปโผล่ตรงที่เลขไฟล์บอก ไม่ใช่ท้ายเรื่อง
+    """
+    known, seen, placed = set(natural), set(), []
+    for n in (order or []):
+        if n in known and n not in seen:
+            seen.add(n)
+            placed.append(n)
+
+    after, anchor = {}, None
+    for n in natural:
+        if n in seen:
+            anchor = n
+        else:
+            after.setdefault(anchor, []).append(n)
+
+    out = list(after.get(None, []))
+    for n in placed:
+        out.append(n)
+        out += after.get(n, [])
+    return out
+
+
+def seq_index(ctx, natural):
+    """{ชื่อคลิป: ตำแหน่งในลำดับเล่าเรื่อง} — ตัวเลขที่ใช้แทน num ตอนเรียง"""
+    order = ctx.get("scan.order", []) or []
+    return {n: i for i, n in enumerate(arrange(natural, order))}
+
+
 # ─────────────────────────── อ่าน ───────────────────────────
 
 def _base(rel):
@@ -94,7 +133,11 @@ def view(ctx):
             "vmode": vm, "vmode_eff": vm or vdefault,
             "picked": name not in excl,
         })
+    # ส่งไปตามลำดับที่คนจัดไว้ — หน้าเว็บวาดตามลำดับใน list นี้ตรง ๆ
     out.sort(key=lambda x: (x["num"], x["name"]))
+    seq = seq_index(ctx, [x["name"] for x in out])
+    out.sort(key=lambda x: seq[x["name"]])
+
     n_v = sum(1 for x in out if x["orient"] == "V")
     return {
         "clips": out,
@@ -105,6 +148,9 @@ def view(ctx):
             "total": len(out), "picked": sum(1 for x in out if x["picked"]),
             "vertical": n_v, "horizontal": len(out) - n_v,
             "duration": round(sum(x["dur"] for x in out if x["picked"]), 1),
+            "custom_order": bool(ctx.get("scan.order", []) or []),
+            "order_mode": str(ctx.get("order.mode", "filename")),
+            "order_reverse": bool(ctx.get("order.reverse", False)),
         },
     }
 
@@ -161,12 +207,20 @@ def save(ctx, rel, payload):
         for name, v in vals.items():
             values[f"{tbl}.{name}"] = v
 
+    # ลำดับ: เขียนเต็มรายการเสมอ แต่ถ้าจัดจนกลับไปเท่าเลขไฟล์ก็เขียนว่าง
+    # (write_keys จะลบบรรทัดทิ้งให้เอง) — ไม่เก็บรายชื่อ 300 ตัวที่ไม่ได้ทำอะไร
+    if payload.get("order") is not None:
+        natural = sorted(known, key=scan.sort_key)
+        ordered = arrange(natural, [n for n in payload["order"] if n in known])
+        values["scan.order"] = [] if ordered == natural else ordered
+
     path, err = write_keys(rel, values)
     if err:
         return None, err
     return {"path": path, "excluded": len(excl),
             "rotated": sum(1 for v in rots.values() if v),
-            "vmodes": sum(1 for v in vmodes.values() if v)}, None
+            "vmodes": sum(1 for v in vmodes.values() if v),
+            "reordered": bool(values.get("scan.order"))}, None
 
 
 def sync_manifest(ctx):

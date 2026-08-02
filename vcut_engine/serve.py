@@ -381,6 +381,11 @@ def build_pool(ctx):
     else:
         for pc in pool.get("pieces", []):
             pc["used"] = pc["id"] in used
+    # เรียงตามลำดับที่คนจัดไว้ในขั้น 1 ให้ตรงกับที่หนังจะออกมา
+    if pool.get("pieces"):
+        seq = clips.seq_index(
+            ctx, [n for _, n in sorted({(p["num"], p["name"]) for p in pool["pieces"]})])
+        pool["pieces"].sort(key=lambda p: (seq.get(p["name"], p["num"]), p["start"]))
     pool["has"] = bool(pool.get("pieces"))
     return pool
 
