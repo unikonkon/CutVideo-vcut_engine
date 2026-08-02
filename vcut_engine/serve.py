@@ -28,7 +28,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from . import config, settings
+from . import config, reset, settings
 from .util import c, die, info, read_json, warn, write_json
 
 WEB = Path(__file__).resolve().parent.parent / "viewer"
@@ -470,6 +470,16 @@ def make_handler(ctx, job):
             if p == "/api/pool":
                 return self._json(build_pool(ctx))
 
+            if p == "/api/reset":
+                q = dict(x.split("=", 1) for x in u.query.split("&") if "=" in x)
+                scope = unquote(q.get("scope", "all"))
+                if scope != "all" and scope not in settings.PHASE_STAGES:
+                    return self._json({"error": f"ไม่รู้จักขอบเขต '{scope}'"}, 400)
+                return self._json(reset.preview(ctx, project_rel(ctx), scope))
+
+            if p == "/api/history":
+                return self._json({"snaps": reset.history(project_rel(ctx))})
+
             if p == "/api/probe_dir":
                 q = dict(x.split("=", 1) for x in u.query.split("&") if "=" in x)
                 return self._json(probe_dir(ctx, unquote(q.get("path", ""))))
@@ -546,6 +556,35 @@ def make_handler(ctx, job):
                     return self._json({"error": "บันทึกแล้วแต่โหลดกลับไม่ได้"}, 500)
                 return self._json({"ok": True, "path": path,
                                    "setup": build_setup(ctx)})
+
+            if p == "/api/reset":
+                # ลบไฟล์ระหว่างที่ render วิ่งอยู่ = ทำให้งานที่กำลังทำพังกลางคัน
+                if job.running:
+                    return self._json({"error": "มีงานกำลังรันอยู่ — หยุดก่อน"}, 409)
+                out, err = reset.apply(
+                    ctx, project_rel(ctx), payload.get("scope") or "all",
+                    keys=payload.get("keys", True),
+                    artifact_ids=payload.get("artifacts") or [])
+                if err:
+                    return self._json({"error": err}, 400)
+                try:
+                    reload_ctx(ctx)
+                except SystemExit:
+                    return self._json({"error": "รีเซ็ตแล้วแต่โหลด config กลับไม่ได้"}, 500)
+                return self._json({"ok": True, **out, "setup": build_setup(ctx)})
+
+            if p == "/api/history":
+                if job.running:
+                    return self._json({"error": "มีงานกำลังรันอยู่ — หยุดก่อน"}, 409)
+                out, err = reset.restore(project_rel(ctx), payload.get("id") or "",
+                                         payload.get("scope"))
+                if err:
+                    return self._json({"error": err}, 400)
+                try:
+                    reload_ctx(ctx)
+                except SystemExit:
+                    return self._json({"error": "กู้คืนแล้วแต่โหลด config กลับไม่ได้"}, 500)
+                return self._json({"ok": True, **out, "setup": build_setup(ctx)})
 
             if p == "/api/estimate":
                 try:

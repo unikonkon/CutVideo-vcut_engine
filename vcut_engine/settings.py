@@ -64,6 +64,33 @@ PHASES = [
 ]
 PHASE_OF_STEP = {s: p["id"] for p in PHASES for s in p["steps"]}
 
+# ── คีย์ไหนเป็นของขั้นไหน — ใช้ตอนรีเซ็ตทีละขั้น ────────────────
+#
+# `stage` ของแต่ละ FIELD บอกอยู่แล้วว่าคีย์นั้นรับใช้งานไหน จับกลุ่มขึ้นมา
+# เป็น "ขั้น" อีกทีตรงนี้ที่เดียว ปุ่ม "รีเซ็ตขั้นนี้" กับการ์ดในหน้าเว็บ
+# จึงใช้ขอบเขตเดียวกันเป๊ะ ไม่มีทางที่ปุ่มล้างเกินกว่าที่การ์ดแสดงไว้
+PHASE_STAGES = {
+    "source":  ["project", "scan", "thumbs"],
+    "prepare": ["listen", "ai", "prepare"],
+    "compose": ["compose", "render", "assemble"],
+}
+SCOPES = ["all"] + [p["id"] for p in PHASES]
+SCOPE_LABEL = {"all": "ทุกขั้น",
+               **{p["id"]: f"ขั้น {p['no']} · {p['label']}" for p in PHASES}}
+
+
+def scope_keys(scope):
+    """คีย์ทั้งหมดที่อยู่ในขอบเขตนี้ — 'all' = ทุกคีย์ที่ฟอร์มรู้จัก"""
+    if scope in (None, "", "all"):
+        return [f["key"] for f in FIELDS]
+    stages = PHASE_STAGES.get(scope)
+    if stages is None:
+        return []
+    keys = [f["key"] for f in FIELDS if f["stage"] in stages]
+    if f"run.{scope}" in FIELD_BY_KEY:      # สวิตช์เปิด/ปิดขั้น อยู่ stage "run"
+        keys.append(f"run.{scope}")
+    return keys
+
 
 def F(key, label, typ, tier, stage, **kw):
     """stage = อยู่ในขั้นไหนของไปป์ไลน์ (ใช้จัดกลุ่มในหน้าเว็บ)
@@ -260,6 +287,18 @@ def get_at(cfg, dotted, default=None):
     return node
 
 
+_MISSING = object()
+
+
+def has_at(cfg, dotted):
+    """คีย์นี้ *มีอยู่จริง* ในต้นไม้นี้ไหม — ต่างจาก get_at ตรงที่ค่า None ก็นับว่ามี
+
+    ตอนกู้คืนต้องแยกให้ออกว่า "ไฟล์เก่าตั้งค่าไว้เป็น null" กับ "ไฟล์เก่าไม่ได้
+    ตั้งคีย์นี้เลย" เพราะอย่างแรกต้องเขียนกลับ อย่างหลังต้องลบทิ้ง
+    """
+    return get_at(cfg, dotted, _MISSING) is not _MISSING
+
+
 def set_at(cfg, dotted, value):
     keys = dotted.split(".")
     node = cfg
@@ -374,7 +413,11 @@ _HEADER = re.compile(r"^\s*\[([^\]]+)\]\s*$")
 
 
 def _trailing_comment(rest):
-    """แยกคอมเมนต์ท้ายบรรทัดออกจากค่า โดยไม่หลงเครื่องหมาย # ที่อยู่ในสตริง"""
+    """แยกคอมเมนต์ท้ายบรรทัดออกจากค่า โดยไม่หลงเครื่องหมาย # ที่อยู่ในสตริง
+
+    เอาช่องว่างที่คั่นอยู่ข้างหน้ามาด้วย — คอมเมนต์ในไฟล์นี้จัดคอลัมน์ไว้สวย ๆ
+    ถ้าเขียนกลับด้วยระยะห่างมาตรฐาน ค่าที่ความกว้างเท่าเดิมก็ยังโผล่ใน git diff
+    """
     in_str = esc = False
     for i, ch in enumerate(rest):
         if in_str:
@@ -387,40 +430,61 @@ def _trailing_comment(rest):
         elif ch == '"':
             in_str = True
         elif ch == "#":
-            return rest[i:]
+            j = i
+            while j > 0 and rest[j - 1] in " \t":
+                j -= 1
+            return (rest[j:i] or "   ") + rest[i:]
     return ""
 
 
-def patch_toml(text, changes):
+def patch_toml(text, changes, drop=()):
     """แก้ค่าทีละบรรทัดในไฟล์เดิม — ไม่เขียนใหม่ทั้งไฟล์
 
     ไฟล์ config ของโปรเจกต์นี้มีคอมเมนต์อธิบายเหตุผลอยู่เต็มไปหมด ซึ่งเป็น
     เอกสารตัวจริง ถ้าหน้าเว็บ dump ทับทั้งไฟล์ทุกครั้งที่กดบันทึก คอมเมนต์
     หายหมด และคีย์ที่ฟอร์มไม่รู้จักก็หายไปด้วยโดยไม่มีใครรู้
+
+    `drop` = คีย์ที่ให้ *ลบบรรทัดทิ้ง* ไม่ใช่ตั้งค่าใหม่ — นี่คือความหมายจริงของ
+    "รีเซ็ต": เอาค่าที่ทับไว้ออก แล้วปล่อยให้ค่าตกมาจาก preset ตามเดิม
+    ถ้าไปเขียนค่า inherited ทับลงไปแทน ไฟล์จะบวมขึ้นทุกครั้งที่กดรีเซ็ต และ
+    วันที่ preset เปลี่ยน โปรเจกต์นี้จะไม่ได้ตามไปด้วย
     """
     todo = dict(changes)
+    kill = {k for k in drop if k not in todo}
     lines = text.splitlines()
     out, table = [], ""
-    last_of = {}                       # ตาราง → บรรทัดสุดท้ายที่เป็นคีย์ของตารางนั้น
+
+    # ตาราง → บรรทัดสุดท้ายของตารางนั้นที่ไม่ใช่บรรทัดว่าง (นับคอมเมนต์ด้วย)
+    #
+    # ที่ต้องนับคอมเมนต์เพราะคีย์ที่ถูกลบไปแล้วอาจมีคอมเมนต์อธิบายอยู่ข้างบน
+    # ถ้าไม่นับ พอกู้คืนกลับมาคีย์จะไปแทรกใต้หัวตารางทันที = ไปโผล่ *เหนือ*
+    # คอมเมนต์ของตัวเอง ทำแบบนั้นซ้ำ ๆ คอมเมนต์กับคีย์ก็หลุดจากกันไปเรื่อย ๆ
+    last_of = {}
+    width = {}                         # ตาราง → ความกว้างชื่อคีย์ที่ยาวสุด
 
     for line in lines:
         h = _HEADER.match(line)
         if h:
             table = h.group(1).strip()
             out.append(line)
-            last_of.setdefault(table, len(out) - 1)
+            last_of[table] = len(out) - 1
             continue
         m = _KEYLINE.match(line)
         if m:
             dotted = f"{table}.{m.group(2)}" if table else m.group(2)
-            last_of[table] = len(out)
+            width[table] = max(width.get(table, 0), len(m.group(2)))
+            if dotted in kill:
+                continue                   # ลบทิ้ง — อย่าขยับ last_of ตามไปด้วย
             if dotted in todo:
                 tail = _trailing_comment(m.group(4))
-                out.append(f"{m.group(1)}{m.group(2)}{m.group(3)}= "
-                           f"{_atom(todo.pop(dotted))}" + (f"   {tail}" if tail else ""))
-                last_of[table] = len(out) - 1
-                continue
+                line = (f"{m.group(1)}{m.group(2)}{m.group(3)}= "
+                        f"{_atom(todo.pop(dotted))}" + tail)
+            out.append(line)
+            last_of[table] = len(out) - 1
+            continue
         out.append(line)
+        if line.strip():
+            last_of[table] = len(out) - 1
 
     # คีย์ที่ยังไม่มีในไฟล์ — แทรกต่อท้ายตารางเดิม หรือเปิดตารางใหม่
     rest = {}
@@ -430,7 +494,10 @@ def patch_toml(text, changes):
     for tbl, kv in rest.items():
         if tbl in last_of:
             at = last_of[tbl] + 1
-            block = [f"{k} = {_atom(v)}" for k, v in kv.items()]
+            # จัด = ให้ตรงกับคีย์ที่มีอยู่แล้วในตารางนั้น ไม่งั้นทุกครั้งที่รีเซ็ต
+            # แล้วกู้คืน ไฟล์จะเสียการจัดคอลัมน์ไปทีละนิดจนอ่านยาก
+            w = max([width.get(tbl, 0)] + [len(k) for k in kv])
+            block = [f"{k:<{w}} = {_atom(v)}" for k, v in kv.items()]
             out[at:at] = block
             for t, i in list(last_of.items()):
                 if i >= at:
@@ -461,11 +528,12 @@ def read_raw(path):
     return p.read_text(encoding="utf-8") if p.exists() else ""
 
 
-def save_project(rel_path, changes, extends=None, raw=None):
+def save_project(rel_path, changes, extends=None, raw=None, drop=()):
     """เขียนไฟล์โปรเจกต์ — changes คือเฉพาะคีย์ที่ผู้ใช้แก้ ไม่ใช่ทั้งชุด
 
     ถ้าไฟล์มีอยู่แล้วจะแก้ทีละบรรทัด (คอมเมนต์และคีย์อื่นอยู่ครบ)
     ถ้ายังไม่มีจะสร้างใหม่ · ส่ง raw มาก็เขียนตามนั้นตรง ๆ (แท็บ TOML ดิบ)
+    `drop` = คีย์ที่ให้ลบออกจากไฟล์ (ใช้ตอนรีเซ็ต — ดู patch_toml)
     ตรวจด้วย config.load() ก่อนเสมอ ไฟล์ที่ผ่านออกมาจึงรันได้แน่นอน
     """
     p = Path(rel_path)
@@ -479,10 +547,11 @@ def save_project(rel_path, changes, extends=None, raw=None):
         return None, "เขียนได้เฉพาะไฟล์ที่อยู่ในโฟลเดอร์โปรเจกต์เท่านั้น"
 
     changes = {k: v for k, v in (changes or {}).items() if k in FIELD_BY_KEY}
+    drop = [k for k in (drop or ()) if k in FIELD_BY_KEY]
     if raw is not None:
         body = raw if raw.endswith("\n") else raw + "\n"
     elif p.exists():
-        body = patch_toml(p.read_text(encoding="utf-8"), changes)
+        body = patch_toml(p.read_text(encoding="utf-8"), changes, drop=drop)
     else:
         tree = {}
         for k, v in changes.items():

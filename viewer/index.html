@@ -165,6 +165,38 @@ video{width:100%;border-radius:5px;background:#000;display:block}
   border-left:2px solid var(--line);padding-left:.6rem}
 #log{font:11.5px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;max-height:15em;
   overflow:auto;color:var(--dim);word-break:break-word}
+/* กล่องรีเซ็ต */
+dialog{border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);
+  color:var(--fg);padding:0;width:min(660px,92vw);box-shadow:0 12px 50px rgba(0,0,0,.32)}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+dialog .dh{padding:.85rem 1rem .6rem;border-bottom:1px solid var(--line)}
+dialog h2{font-size:15px;margin:0;font-weight:700}
+dialog .dh .m{font:11.5px ui-monospace,Menlo,monospace;color:var(--dim)}
+dialog .db{padding:.9rem 1rem;max-height:min(62vh,620px);overflow:auto}
+dialog .df{padding:.7rem 1rem;border-top:1px solid var(--line);display:flex;gap:.45rem;
+  align-items:center}
+.sect{margin:0 0 1.1rem} .sect:last-child{margin-bottom:0}
+.sect>h4{font-size:11.5px;margin:0 0 .45rem;color:var(--dim);font-weight:700;
+  letter-spacing:.05em;text-transform:uppercase}
+.diff{display:grid;grid-template-columns:1fr auto auto;gap:.1rem .7rem;font-size:12px;
+  margin-top:.5rem}
+.diff>div{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:15em}
+.diff .k{font:11.5px ui-monospace,Menlo,monospace;color:var(--dim)}
+.diff .a{text-align:right;text-decoration:line-through;opacity:.6}
+.diff .z{text-align:right;color:var(--ok)}
+.art{display:grid;grid-template-columns:auto 1fr auto;gap:.55rem;align-items:start;
+  padding:.42rem .55rem;border:1px solid var(--line);border-radius:5px;
+  margin-bottom:.3rem;font-size:12.5px}
+.art.danger{border-color:var(--warn)}
+.art .c{font-size:11.5px;color:var(--dim)} .art.danger .c{color:var(--warn)}
+.art .sz{font-size:11.5px;color:var(--dim);font-variant-numeric:tabular-nums;
+  white-space:nowrap}
+.snap{display:grid;grid-template-columns:1fr auto;gap:.5rem;align-items:center;
+  padding:.4rem .1rem;border-bottom:1px solid var(--off);font-size:12.5px}
+.snap:last-child{border-bottom:0}
+.snap .m{font-size:11.5px;color:var(--dim)}
+.hd{display:flex;align-items:center;gap:.6rem}
+
 .toast{position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);z-index:60;
   background:var(--fg);color:var(--bg);padding:.55em 1.1em;border-radius:100px;
   font-size:13px;box-shadow:0 4px 20px rgba(0,0,0,.25);max-width:80vw}
@@ -179,11 +211,25 @@ video{width:100%;border-radius:5px;background:#000;display:block}
     <span class="chip" id="c-proj">—</span>
     <span class="spacer"></span>
     <span class="chip" id="c-dirty" hidden></span>
+    <button id="reset" title="ล้างค่าทั้งหมดกลับเป็นค่าตั้งต้น — ของเดิมเก็บไว้กู้ได้">รีเซ็ตทั้งหมด</button>
     <button id="save" disabled>บันทึกค่า</button>
     <button id="run" class="primary">ทำทุกขั้น</button>
   </div>
   <div class="steps" id="steps"></div>
 </header>
+
+<dialog id="rst">
+  <div class="dh">
+    <h2 id="rst-title">รีเซ็ต</h2>
+    <div class="m" id="rst-sub"></div>
+  </div>
+  <div class="db" id="rst-body"></div>
+  <div class="df">
+    <button id="rst-go" class="primary">ล้างค่า</button>
+    <span class="spacer"></span>
+    <button id="rst-close">ปิด</button>
+  </div>
+</dialog>
 
 <main>
   <section id="body"></section>
@@ -208,7 +254,7 @@ const $ = s => document.querySelector(s);
 const el = (t, cls, txt) => { const e = document.createElement(t);
   if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 
-let D = null, POOL = null, S = null, RV = null;
+let D = null, POOL = null, S = null, RV = null, RST = null;
 let step = 1, edits = {}, items = [], sel = -1, dragFrom = -1;
 let logSince = 0, polling = null, estTimer = null, taken = new Set();
 
@@ -217,6 +263,21 @@ const hhmm = s => s < 60 ? `${Math.round(s)} วิ`
   : s < 3600 ? `${Math.round(s/60)} นาที` : `${(s/3600).toFixed(1)} ชม.`;
 const val = k => k in edits ? edits[k] : (D && D.values[k]);
 const tlDirty = () => items.some(x => x.off) || items.some((x,i) => x.i !== i);
+const size = b => b >= 1e9 ? (b/1e9).toFixed(2) + ' GB' : b >= 1e6 ? (b/1e6).toFixed(1)
+  + ' MB' : b >= 1e3 ? Math.round(b/1e3) + ' KB' : b + ' B';
+// path ยาว ๆ ต้องตัดหัวไม่ใช่ตัดท้าย — ส่วนที่ต่างกันอยู่ท้ายเสมอ ตัดท้ายแล้ว
+// สองฝั่งจะเหลือ "/Users/macbook3lf1/web work…" เหมือนกันเป๊ะ อ่านไม่ได้ความ
+const shortv = v => {
+  if (v == null) return '—';
+  if (v === '') return '(ว่าง)';
+  if (Array.isArray(v)) return v.length ? v.join(', ') : '(ว่าง)';
+  if (typeof v === 'boolean') return v ? 'เปิด' : 'ปิด';
+  const s = String(v);
+  return s.startsWith('/') && s.length > 28
+    ? '…/' + s.split('/').filter(Boolean).slice(-2).join('/') : s;
+};
+const when = t => new Date(t * 1000).toLocaleString('th-TH',
+  {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
 
 function toast(msg, err){
   const t = el('div', 'toast' + (err ? ' err' : ''), msg);
@@ -292,11 +353,23 @@ function render(){
 
 // ── ขั้น 1 · เลือกฟุตเทจ ─────────────────────────────────────────
 
+function head(title, lead, scope){
+  const w = el('div');
+  const r = el('div', 'hd');
+  r.append(el('h2', null, title), el('span', 'spacer'));
+  const b = el('button', 'sm', 'รีเซ็ตขั้นนี้');
+  b.title = 'ล้างค่าของขั้นนี้กลับเป็นค่าตั้งต้น — ของเดิมเก็บไว้ให้กู้กลับได้';
+  b.onclick = () => openReset(scope);
+  r.append(b);
+  w.append(r, el('p', 'lead', lead));
+  return w;
+}
+
 function stepSource(box){
   const c = el('div', 'card');
-  c.append(el('h2', null, 'ขั้น 1 · เลือกฟุตเทจ'),
-           el('p', 'lead', 'ชี้ไปที่โฟลเดอร์คลิปดิบ แล้วอ่านคุณสมบัติทุกคลิปครั้งเดียวจบ '
-                         + '— หลังจากนี้ไม่ต้องแตะไฟล์วิดีโออีกเลย'));
+  c.appendChild(head('ขั้น 1 · เลือกฟุตเทจ',
+    'ชี้ไปที่โฟลเดอร์คลิปดิบ แล้วอ่านคุณสมบัติทุกคลิปครั้งเดียวจบ '
+    + '— หลังจากนี้ไม่ต้องแตะไฟล์วิดีโออีกเลย', 'source'));
   ['project.source', 'project.name', 'project.out'].forEach(k => {
     const f = D.fields.find(x => x.key === k);
     if (f) c.appendChild(field(f));
@@ -337,9 +410,9 @@ function clipGrid(){
 
 function stepPrepare(box){
   const c = el('div', 'card');
-  c.append(el('h2', null, 'ขั้น 2 · เตรียมวิดีโอ'),
-           el('p', 'lead', 'ดูทีละคลิป — แยกคลิปพูดกับคลิปวิว ตัดเอาเฉพาะช่วงที่ใช้ได้ '
-                         + 'เก็บเข้าคลังไว้รอประกอบในขั้นถัดไป'));
+  c.appendChild(head('ขั้น 2 · เตรียมวิดีโอ',
+    'ดูทีละคลิป — แยกคลิปพูดกับคลิปวิว ตัดเอาเฉพาะช่วงที่ใช้ได้ '
+    + 'เก็บเข้าคลังไว้รอประกอบในขั้นถัดไป', 'prepare'));
 
   const jobs = el('div', 'acts');
   [['listen', 'ดึงบทพูด', 'ถอดเสียงทุกคลิปด้วย whisper'],
@@ -434,8 +507,8 @@ const MODE_FIELDS = {
 function stepCompose(box){
   const mode = val('compose.mode') || 'all';
   const c = el('div', 'card');
-  c.append(el('h2', null, 'ขั้น 3 · รวมเป็นหนัง'),
-           el('p', 'lead', 'หยิบชิ้นจากคลังมาเรียง แล้วผลิตเป็นไฟล์เดียว'));
+  c.appendChild(head('ขั้น 3 · รวมเป็นหนัง',
+    'หยิบชิ้นจากคลังมาเรียง แล้วผลิตเป็นไฟล์เดียว', 'compose'));
 
   const modes = el('div', 'modes');
   Object.entries(MODE_HELP).forEach(([m, [t, d]]) => {
@@ -809,7 +882,7 @@ async function poll(){
     const e = $('#log'); e.textContent += j.lines.join('\n') + '\n';
     e.scrollTop = e.scrollHeight;
   }
-  document.querySelectorAll('.runbtn, #run').forEach(b => b.disabled = j.running);
+  document.querySelectorAll('.runbtn, #run, #reset').forEach(b => b.disabled = j.running);
   $('#run').textContent = j.running ? `กำลัง ${j.step}…` : 'ทำทุกขั้น';
   if (j.running) polling = setTimeout(poll, 800);
   else if (j.code === 0){ toast('เสร็จแล้ว'); load(true); }
@@ -894,6 +967,126 @@ async function analyze(){
   } catch(e){ toast(e.message, true); }
 }
 
+// ── รีเซ็ต · ค่าเก่า ─────────────────────────────────────────────
+//
+// ปุ่มล้างที่ไม่บอกว่าจะหายอะไรคือปุ่มที่ไม่มีใครกล้ากด กล่องนี้จึงบอกครบสามอย่าง
+// ก่อนกด: ค่าไหนจะกลายเป็นอะไร · ไฟล์ไหนจะหายและทำใหม่แพงแค่ไหน · ของเก่ามีอะไรให้กู้
+
+async function openReset(scope){
+  try { RST = await api('/api/reset?scope=' + encodeURIComponent(scope)); }
+  catch(e){ return toast(e.message, true); }
+  drawReset();
+  $('#rst').showModal();
+}
+
+function drawReset(){
+  const p = RST, b = $('#rst-body');
+  b.innerHTML = '';
+  $('#rst-title').textContent = 'รีเซ็ต — ' + p.scope_label;
+  $('#rst-sub').textContent = p.project || 'ยังไม่มีไฟล์โปรเจกต์';
+  if (p.blocked) b.appendChild(el('div', 'stale', p.blocked));
+
+  const hit = p.keys.filter(k => k.in_file);
+  const s1 = el('div', 'sect');
+  s1.appendChild(el('h4', null, 'ค่าที่ตั้งไว้'));
+  if (hit.length){
+    const l = el('label', 'ck');
+    const i = el('input'); i.type = 'checkbox'; i.id = 'rst-keys';
+    i.checked = !p.blocked; i.disabled = !!p.blocked; i.onchange = syncGo;
+    l.append(i, document.createTextNode(`ลบค่าที่ทับไว้ ${hit.length} ตัว `
+      + `แล้วปล่อยให้ค่าตกมาจาก ${p.extends || 'default.toml'} ตามเดิม`));
+    s1.appendChild(l);
+    const g = el('div', 'diff');
+    hit.forEach(k => g.append(el('div', 'k', k.key), el('div', 'a', shortv(k.now)),
+                              el('div', 'z', '→ ' + shortv(k.back))));
+    s1.appendChild(g);
+  } else {
+    s1.appendChild(el('p', 'note',
+      'ขั้นนี้ไม่มีค่าที่ไฟล์โปรเจกต์ทับไว้ — เป็นค่าตั้งต้นอยู่แล้ว'));
+  }
+  b.appendChild(s1);
+
+  const live = p.artifacts.filter(a => a.exists);
+  const s2 = el('div', 'sect');
+  s2.appendChild(el('h4', null, 'ผลงานที่ทำไว้แล้ว'));
+  if (!live.length) s2.appendChild(el('p', 'note', 'ยังไม่มีผลงานของขั้นนี้'));
+  live.forEach(a => {
+    const r = el('div', 'art' + (a.danger ? ' danger' : ''));
+    const i = el('input'); i.type = 'checkbox'; i.dataset.art = a.id; i.onchange = syncGo;
+    const mid = el('div');
+    mid.append(el('div', null, a.label), el('div', 'c', 'ลบแล้ว ' + a.cost));
+    r.append(i, mid, el('div', 'sz', size(a.bytes)));
+    s2.appendChild(r);
+  });
+  if (live.length)
+    s2.appendChild(el('p', 'note', 'ไม่ติ๊ก = ไม่แตะ · ไฟล์ที่ลบแล้วกู้กลับไม่ได้ ต้องทำใหม่'));
+  b.appendChild(s2);
+
+  const s3 = el('div', 'sect');
+  s3.appendChild(el('h4', null, `ค่าเก่าที่เก็บไว้ (${p.history.length})`));
+  if (!p.history.length)
+    s3.appendChild(el('p', 'note',
+      'ยังไม่มี — ทุกครั้งที่กดรีเซ็ตจะถ่ายสำเนาไฟล์เดิมมาเก็บไว้ที่นี่เอง (ไม่เข้า git)'));
+  p.history.forEach(s => {
+    const r = el('div', 'snap');
+    const mid = el('div');
+    mid.append(el('div', null, s.label));
+    mid.append(el('div', 'm', when(s.at) + ' · ' + s.id
+      + (s.deleted && s.deleted.length
+         ? ` · ลบไฟล์ไปด้วย ${s.deleted.length} รายการ (กู้ไม่ได้)` : '')));
+    const btn = el('button', 'sm', p.scope === 'all' ? 'กู้ทั้งไฟล์' : 'กู้เฉพาะขั้นนี้');
+    btn.onclick = () => doRestore(s.id);
+    r.append(mid, btn);
+    s3.appendChild(r);
+  });
+  b.appendChild(s3);
+  syncGo();
+}
+
+function rstPicked(){
+  return [...$('#rst-body').querySelectorAll('input[data-art]:checked')]
+    .map(i => i.dataset.art);
+}
+
+function syncGo(){
+  const k = $('#rst-keys'), keys = !!(k && k.checked), n = rstPicked().length;
+  const go = $('#rst-go');
+  go.disabled = (!keys && !n) || !!(RST && RST.blocked);
+  go.textContent = n ? `ล้างค่า + ลบผลงาน ${n} รายการ` : 'ล้างค่า';
+}
+
+async function doReset(){
+  const k = $('#rst-keys'), keys = !!(k && k.checked), ids = rstPicked();
+  const lines = [`รีเซ็ต ${RST.scope_label}`, ''];
+  if (keys) lines.push(`· ลบค่าที่ทับไว้ ${RST.keys.filter(x => x.in_file).length} ตัว`);
+  RST.artifacts.filter(a => ids.includes(a.id))
+    .forEach(a => lines.push(`· ลบ ${a.label} — ${a.cost}`));
+  lines.push('', 'ค่าเดิมจะถูกเก็บไว้ให้กู้กลับได้ แต่ไฟล์ที่ลบแล้วต้องทำใหม่');
+  if (!confirm(lines.join('\n'))) return;
+  try {
+    const r = await post('/api/reset', {scope: RST.scope, keys, artifacts: ids});
+    $('#rst').close();
+    toast(`รีเซ็ตแล้ว · ลบค่า ${r.dropped.length} ตัว · ลบผลงาน ${r.removed.length} รายการ`);
+    await load();
+  } catch(e){ toast(e.message, true); }
+}
+
+async function doRestore(id){
+  if (!confirm(`เอาค่าเก่า ${id} กลับมาใช้กับ ${RST.scope_label}?\n\n`
+             + 'ค่าปัจจุบันจะถูกเก็บไว้ให้กู้กลับได้อีกชั้น')) return;
+  try {
+    await post('/api/history', {id, scope: RST.scope});
+    $('#rst').close();
+    toast('กู้คืนแล้ว');
+    await load();
+  } catch(e){ toast(e.message, true); }
+}
+
+$('#reset').onclick = () => openReset('all');
+$('#rst-go').onclick = doReset;
+$('#rst-close').onclick = () => $('#rst').close();
+// คลิกนอกกล่องแล้วปิด — ESC ใช้ได้อยู่แล้วเพราะเป็น <dialog> จริง
+$('#rst').addEventListener('click', e => { if (e.target === $('#rst')) $('#rst').close(); });
 $('#save').onclick = saveConfig;
 $('#run').onclick = () => runStep('plan');
 window.addEventListener('beforeunload', e => {

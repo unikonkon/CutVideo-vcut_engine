@@ -11,13 +11,14 @@
   assemble →  final.mp4
 """
 import argparse
+import re
 import shutil
 import sys
 import time
 from pathlib import Path
 
 from . import (ai, assemble, compose, config, decide, listen, prepare, render,
-               review, scan, serve, settings, thumbs)
+               reset, review, scan, serve, settings, thumbs)
 from .util import (c, die, disk_free_gb, hhmmss, info, read_json,
                    require_tools, warn)
 
@@ -37,6 +38,7 @@ USAGE = """vcut — ตัดต่อวิดีโออัตโนมัต
   vcut view                       เปิดหน้าเว็บดู/แก้ EDL ในเครื่อง
   vcut info                       สรุปสถานะโปรเจกต์
   vcut presets                    ดู preset ที่มี
+  vcut reset                      ล้างค่ากลับเป็นค่าตั้งต้น (เก็บของเดิมไว้กู้ได้)
   vcut gc                         ล้าง segment ที่ EDL ปัจจุบันไม่ได้ใช้
 
 ตัวอย่าง
@@ -46,6 +48,10 @@ USAGE = """vcut — ตัดต่อวิดีโออัตโนมัต
 
   vcut ai -c story-ai --goal "ตัดเหลือ 10 นาที เล่าตามลำดับการเดินทาง"
   vcut decide -c story-ai --ai         # ใช้ ai.json ที่มีอยู่ ไม่เรียก AI ซ้ำ
+
+  vcut reset -c <project> --scope prepare      # ล้างค่าขั้น 2 กลับเป็นค่าตั้งต้น
+  vcut reset -c <project> --list               # ดูค่าเก่าที่เก็บไว้
+  vcut reset -c <project> --restore 20260803-091500
 """
 
 
@@ -65,7 +71,7 @@ def build_parser():
 
     for name in ("scan", "listen", "thumbs", "ai", "prepare", "compose", "decide",
                  "render", "assemble", "review", "view", "run", "info", "gc",
-                 "presets", "config"):
+                 "presets", "config", "reset"):
         p = sub.add_parser(name, add_help=False)
         p.add_argument("-h", "--help", action="store_true")
         add_common(p)
@@ -112,6 +118,17 @@ def build_parser():
         if name == "gc":
             p.add_argument("--all", action="store_true",
                            help="ลบ cache ทั้งหมดรวมทั้ง manifest/transcript")
+        if name == "reset":
+            p.add_argument("--scope", choices=settings.SCOPES, default="all",
+                           help="ล้างเฉพาะขั้นไหน (ค่าตั้งต้น = ทุกขั้น)")
+            p.add_argument("--files", default="",
+                           help="ลบผลงานด้วย: ชื่อรายการคั่นจุลภาค หรือ 'all'")
+            p.add_argument("--list", dest="show_history", action="store_true",
+                           help="ดูค่าเก่าที่เก็บไว้ ไม่ล้างอะไร")
+            p.add_argument("--restore", metavar="ID",
+                           help="เอาค่าเก่ารายการนี้กลับมาใช้")
+            p.add_argument("-y", "--yes", action="store_true",
+                           help="ไม่ต้องถามยืนยัน")
     return ap
 
 
@@ -225,6 +242,113 @@ def cmd_presets():
         info(f"  {c(p.stem, 'g'):<28} {head}")
 
 
+def _project_rel(name):
+    """ที่อยู่ไฟล์ config เทียบกับรากโปรเจกต์ — คืน "" ถ้าอยู่นอกราก"""
+    if not name:
+        return ""
+    try:
+        return str(config.resolve_config_path(name).resolve()
+                   .relative_to(settings.PKG_ROOT.resolve()))
+    except (ValueError, OSError):
+        return ""
+
+
+def _short(v, width=26):
+    s = "—" if v is None else ("" if v == "" else str(v))
+    s = s.replace("\n", " ")
+    return s if len(s) <= width else s[:width - 1] + "…"
+
+
+# สระบน/ล่างกับวรรณยุกต์ไทยไม่กินความกว้างบนจอ — len() จึงนับเกินจริง
+# ทำให้ตารางที่จัดด้วย f"{s:<40}" เหลื่อมกันหมดเวลามีข้อความไทย
+_THAI_ZW = re.compile(r"[ัิ-ฺ็-๎]")
+
+
+def _pad(s, w):
+    return s + " " * max(0, w - len(_THAI_ZW.sub("", s)))
+
+
+def cmd_reset(ctx, args):
+    """ล้างค่ากลับเป็นค่าตั้งต้น — พิมพ์ให้ดูก่อนเสมอว่าจะหายอะไรบ้าง"""
+    rel = _project_rel(getattr(args, "config", None))
+
+    if args.show_history:
+        snaps = reset.history(rel)
+        info(f"{c('ค่าเก่าที่เก็บไว้', 'b')}  {rel or '(ยังไม่มีไฟล์โปรเจกต์)'}")
+        info(f"  {c(str(reset.HISTORY_DIR), 'd')}  {c('(ไม่เข้า git)', 'd')}")
+        if not snaps:
+            info(c("  ยังไม่มี — จะมีขึ้นเองครั้งแรกที่กดรีเซ็ต", "d"))
+            return
+        for s in snaps:
+            when = time.strftime("%d/%m %H:%M", time.localtime(s["at"]))
+            info(f"  {c(s['id'], 'g')}  {when}  {s['label']}")
+            if s.get("deleted"):
+                info(c("      ลบไฟล์ไปด้วย: " + " · ".join(s["deleted"])
+                       + " (กู้กลับไม่ได้)", "d"))
+        return
+
+    if args.restore:
+        out, err = reset.restore(rel, args.restore, args.scope)
+        if err:
+            die(err)
+        info(f"{c('กู้คืนแล้ว', 'g')}  {out['restored']} → {out['path']} "
+             f"({settings.SCOPE_LABEL.get(out['scope'], out['scope'])})")
+        info(f"  {c('ก่อนกู้คืนเก็บไว้เป็น ' + out['undo'], 'd')}")
+        return
+
+    pv = reset.preview(ctx, rel, args.scope)
+    if pv["blocked"]:
+        die(pv["blocked"])
+    hit = [k for k in pv["keys"] if k["in_file"]]
+    known = {a["id"] for a in pv["artifacts"]}
+    want = args.files.strip()
+    ids = ([a["id"] for a in pv["artifacts"] if a["exists"]] if want == "all"
+           else [x.strip() for x in want.split(",") if x.strip()])
+    bad = [i for i in ids if i not in known]
+    if bad:
+        die(f"ไม่รู้จักผลงานชื่อ {', '.join(bad)}\n"
+            f"   ในขอบเขตนี้มี: {', '.join(sorted(known))}")
+    picked = [a for a in pv["artifacts"] if a["id"] in set(ids) and a["exists"]]
+
+    info(f"{c('รีเซ็ต', 'b')}  {pv['scope_label']}  ·  "
+         f"{rel or c('ยังไม่มีไฟล์โปรเจกต์', 'r')}")
+    if hit:
+        info(f"  ลบคีย์ออกจากไฟล์ {len(hit)} ตัว "
+             f"แล้วปล่อยให้ค่าตกมาจาก {pv['extends'] or 'default.toml'}")
+        for k in hit:
+            info(f"    {k['key']:<30} {_short(k['now']):<27} → {_short(k['back'])}")
+    else:
+        info(c("  ไม่มีคีย์ในขอบเขตนี้ที่ไฟล์โปรเจกต์ทับไว้ "
+               "— ค่าเป็นค่าตั้งต้นอยู่แล้ว", "d"))
+    if picked:
+        info(f"  ลบผลงาน {len(picked)} รายการ")
+        for a in picked:
+            info(f"    {a['id']:<11}{_pad(a['label'], 40)}{a['bytes'] / 1e6:8.1f} MB   "
+                 + c(a["cost"], "r" if a["danger"] else "d"))
+    elif want:
+        info(c("  ผลงานที่เลือกไว้ไม่มีอยู่จริง — ไม่มีอะไรให้ลบ", "d"))
+    else:
+        avail = [a for a in pv["artifacts"] if a["exists"]]
+        if avail:
+            info(c("  ไม่แตะผลงานที่ทำไว้ — ถ้าจะลบด้วยให้ใส่ --files "
+                   + ",".join(a["id"] for a in avail), "d"))
+
+    if not hit and not picked:
+        return
+    if not args.yes and input("  ยืนยัน? [y/N] ").strip().lower() != "y":
+        info("  ยกเลิก")
+        return
+
+    out, err = reset.apply(ctx, rel, args.scope, keys=True, artifact_ids=ids)
+    if err:
+        die(err)
+    info(f"{c('เสร็จ', 'g')}  ลบคีย์ {len(out['dropped'])} ตัว · "
+         f"ลบผลงาน {len(out['removed'])} รายการ "
+         f"({sum(r['bytes'] for r in out['removed']) / 1e9:.2f} GB)")
+    info(f"  ค่าเก่าเก็บไว้แล้ว — เอากลับด้วย  "
+         f"{c('vcut reset --restore ' + out['snapshot'], 'g')}")
+
+
 def cmd_run(ctx, args):
     """ทำตามแผนใน [run] — ขั้นที่ปิดไว้จะข้ามไปใช้ของที่ทำไว้แล้ว
 
@@ -282,6 +406,9 @@ def main(argv=None):
         return 0
     if args.cmd == "gc":
         cmd_gc(ctx, args)
+        return 0
+    if args.cmd == "reset":
+        cmd_reset(ctx, args)
         return 0
 
     require_tools("ffmpeg", "ffprobe")
