@@ -29,11 +29,9 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from . import config, reset, settings
-from .util import c, die, info, read_json, warn, write_json
+from .util import c, info, read_json, warn, write_json
 
-WEB = Path(__file__).resolve().parent.parent / "viewer"
-VIEWER = WEB / "index.html"
-SETUP = WEB / "setup.html"
+VIEWER = Path(__file__).resolve().parent.parent / "viewer" / "index.html"
 SAFE_NAME = re.compile(r"^[A-Za-z0-9_.\-]+$")
 
 # ทุกขั้นที่ปุ่มในหน้าเว็บสั่งได้ — ชื่อ → argv ของ vcut
@@ -41,9 +39,7 @@ JOB_STEPS = {
     "scan": ["scan"], "listen": ["listen"], "thumbs": ["thumbs"], "ai": ["ai"],
     "prepare": ["prepare"], "compose": ["compose"], "decide": ["decide"],
     "render": ["render"], "assemble": ["assemble"],
-    "build": ["run", "--from", "render"],
-    "plan": ["run"],          # ทำตามแผนใน [run] — ปุ่ม "สร้างไฟล์" ในหน้าหลักใช้ตัวนี้
-    "all": ["run"],
+    "plan": ["run"],          # ทำตามแผนใน [run] — ปุ่ม "ทำทุกขั้น" ใช้ตัวนี้
 }
 # ปุ่ม "รัน Phase นี้" — รันทุกขั้นใน Phase เดียว โดยไม่แตะ Phase อื่น
 PHASE_JOBS = {p["id"]: p["steps"] for p in settings.PHASES}
@@ -305,8 +301,7 @@ def build_plan(ctx):
         elif s["id"] in ("scan", "listen", "ai", "thumbs"):
             notes.append(s["label"])
     return {"steps": steps, "estimate": est, "error": err,
-            "seconds": secs, "unknown": notes,
-            "phases": settings.phase_view(ctx, ctx.cfg)}
+            "seconds": secs, "unknown": notes}
 
 
 def project_rel(ctx):
@@ -658,7 +653,7 @@ def make_handler(ctx, job):
                 else:
                     argvs = [head + JOB_STEPS[step] + ctx.argv_tail
                              + (force if step in ("scan", "listen", "ai",
-                                                  "render", "all", "plan") else [])]
+                                                  "render", "plan") else [])]
                 job.start(argvs, step, ctx.launcher.parent)
                 return self._json({"ok": True, "step": step})
 
@@ -668,27 +663,23 @@ def make_handler(ctx, job):
 
 
 def run(ctx, port=8765, open_browser=True, config_args=None,
-        config_name=None, sets=None, start="/"):
+        config_name=None, sets=None):
     ctx.launcher = Path(__file__).resolve().parent.parent / "vcut"
     ctx.argv_tail = list(config_args or [])
     ctx.config_name = config_name
     ctx.sets = list(sets or [])
 
-    if start == "/" and not ctx.edl.exists():
-        warn("ยังไม่มี edl.json — เปิดหน้า setup ให้แทน")
-        start = "/setup"
     if not list(ctx.thumb_dir.glob("*.jpg")):
-        warn("ยังไม่มีภาพตัวอย่าง — สั่ง 'ภาพตัวอย่าง' ในหน้า setup ก่อนจะได้มีรูปให้ดู")
+        warn("ยังไม่มีภาพตัวอย่าง — สั่ง 'ภาพตัวอย่าง' ในขั้น 1 ก่อนจะได้มีรูปให้ดู")
 
     job = Job()
     httpd = ThreadingHTTPServer(("127.0.0.1", port), make_handler(ctx, job))
-    url = f"http://127.0.0.1:{port}{start}"
+    url = f"http://127.0.0.1:{port}/"
     st = build_state(ctx)
     info(f"VIEW  {st['summary'].get('segments', 0)} ชิ้น · "
          f"{st['summary'].get('duration_total', 0) / 60:.1f} นาที · "
          f"render แล้ว {st['rendered']} ชิ้น")
     info(f"  {c('→ ' + url, 'g')}   {c('(Ctrl-C เพื่อปิด)', 'd')}")
-    info(f"  {c('ตั้งค่า  http://127.0.0.1:' + str(port) + '/setup', 'd')}")
     if open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
     try:

@@ -39,7 +39,6 @@ binary   = "whisper-cli"
 model    = "~/.cache/whisper/ggml-large-v3-turbo.bin"
 language = "th"
 threads  = 6
-workers  = 1             # whisper กิน RAM มาก — บน 8GB ห้ามเกิน 1
 keep_wav = false         # true = เก็บ wav 16k ไว้ (กินดิสก์ ~30MB/ชม.)
 
 # ถ้ามี transcript จากรอบก่อนอยู่แล้ว ชี้มาที่นี่เพื่อข้ามขั้นถอดเสียง
@@ -126,7 +125,6 @@ context = ""             # โจทย์ที่จะบอก AI เมื�
 enabled        = false
 target_minutes = 0.0     # 0 = ไม่จำกัด
 talk_ratio     = 0.62    # สัดส่วนเวลาที่ให้ช่วงพูด (ที่เหลือเป็นวิว)
-min_unique_words = 2     # ช็อตพูดที่มีคำไม่ซ้ำน้อยกว่านี้ ตัดทิ้งก่อนเพื่อน
 avoid_adjacent = true    # ห้ามเลือกวิวสองชิ้นที่อยู่ติดกันในไทม์ไลน์
 
 
@@ -217,7 +215,6 @@ concat_mode = "copy"     # copy = ต่อโดยไม่เข้ารห�
 
 # ─────────────────────────── THUMBS ───────────────────────────
 [thumbs]
-per_clip   = 1
 width      = 320
 sheet_cols = 5
 sheet_rows = 5           # 25 ภาพ/แผ่น → 273 คลิปเหลือ 11 แผ่นให้ AI ดู
@@ -229,7 +226,6 @@ sheet_rows = 5           # 25 ภาพ/แผ่น → 273 คลิปเห�
 # ปิด enabled เมื่อไหร่ ผลลัพธ์กลับไปเหมือน Phase 3 ทุกประการ
 [ai]
 enabled  = false
-provider = "claude_code_cli"
 binary   = "claude"
 model    = "sonnet"         # sonnet = คุ้มสุดสำหรับงานนี้ | opus ถ้าอยากให้แบ่งบทละเอียดกว่า
 tasks    = ["story_arc", "shot_scoring", "trim_suggest"]

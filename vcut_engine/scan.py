@@ -5,7 +5,6 @@ cache ตรวจด้วย (ขนาดไฟล์ + mtime) ถ้าไ�
 """
 import re
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 
 from .util import (Progress, c, info, measure_loudness, measure_motion_bright,
                    probe_video, read_json, warn, write_json)

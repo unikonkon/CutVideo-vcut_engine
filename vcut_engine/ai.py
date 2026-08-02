@@ -21,7 +21,6 @@ import json
 import re
 import subprocess
 import time
-from pathlib import Path
 
 from .util import c, die, info, read_json, warn, write_json
 

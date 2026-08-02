@@ -28,7 +28,6 @@ target_minutes   = 11.0
 # ฟุตเทจชุดนี้มี B-roll ที่ผ่านตัวกรองแค่ ~2.5 นาที ถ้าตั้ง talk_ratio ต่ำ
 # จะเติมวิวไม่พอแล้วได้ไม่ถึงเป้า — 0.80 ทำให้ลงที่ ~10.8 นาทีพอดี
 talk_ratio       = 0.80
-min_unique_words = 2
 avoid_adjacent   = true
 
 [audio]

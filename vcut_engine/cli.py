@@ -113,8 +113,6 @@ def build_parser():
             p.add_argument("--port", type=int, default=8765)
             p.add_argument("--no-open", action="store_true",
                            help="ไม่ต้องเปิดเบราว์เซอร์ให้")
-            p.add_argument("--setup", action="store_true",
-                           help="เปิดที่หน้าตั้งค่าแทนหน้าดูผล")
         if name == "gc":
             p.add_argument("--all", action="store_true",
                            help="ลบ cache ทั้งหมดรวมทั้ง manifest/transcript")
@@ -440,7 +438,7 @@ def main(argv=None):
     elif args.cmd == "view":
         serve.run(ctx, port=args.port, open_browser=not args.no_open,
                   config_args=config_args(args), config_name=args.config,
-                  sets=args.sets, start="/setup" if args.setup else "/")
+                  sets=args.sets)
     elif args.cmd == "run":
         cmd_run(ctx, args)
     return 0

@@ -184,6 +184,5 @@ B-roll ที่ผ่านตัวกรองมีไม่พอ → เ�
   auto-normalize ทับค่า gain ที่คำนวณมา แล้ว true peak ทะลุ 0 dBFS
 - เปลี่ยนค่าใน `[encode]` แล้ว **ต้อง render ใหม่ทั้งหมด** เพราะ `assemble`
   ต่อไฟล์แบบ stream copy ซึ่งต้องการพารามิเตอร์เดียวกันทุกชิ้น
-- `[listen] workers` ห้ามเกิน 1 บนเครื่อง RAM 8 GB
 - ดิสก์ต้องเหลือ > 5 GB ก่อน render (`vcut gc` ล้าง segment ที่ไม่ได้ใช้)
 - commit `.vcut/edl.json` + `.vcut/ai.json` เข้า git ได้ → reproduce ผลได้ 100%

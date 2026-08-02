@@ -404,7 +404,8 @@ compose = true   # ขั้น 3 · compose + render + assemble
 ## ข้อจำกัดที่ควรรู้
 
 - `[render] workers` ตั้งไว้ 2 เพราะ videotoolbox บน M3 เป็นคอขวดอยู่แล้ว เพิ่มแล้วไม่เร็วขึ้น
-- `[listen] workers` ต้องเป็น 1 บนเครื่อง RAM 8 GB — whisper large กิน RAM หนัก
+- `listen` ถอดเสียงทีละคลิปเรียงกันไป ไม่ขนาน — whisper large กิน RAM หนักเกินกว่า
+  จะรันพร้อมกันบนเครื่อง 8 GB
 - `assemble` แบบ stream copy ต้องการให้ทุก segment เข้ารหัสด้วยพารามิเตอร์เดียวกัน
   เปลี่ยน `[encode]` แล้วต้อง render ใหม่ทั้งหมด
 - ความยาวไฟล์ผลลัพธ์อาจต่างจาก EDL ระดับเสี้ยววินาที จาก keyframe ที่ไม่ตรงพอดี

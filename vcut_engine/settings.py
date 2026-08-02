@@ -29,14 +29,14 @@ TIERS = {
 
 # ── ขั้นในไปป์ไลน์ เรียงตามลำดับที่มันทำงานจริง ────────────────────────────────
 STEPS = [
-    {"id": "scan",     "label": "อ่านคลิป",       "artifact": "manifest.json"},
-    {"id": "thumbs",   "label": "ภาพตัวอย่าง",    "artifact": "thumbs/"},
-    {"id": "listen",   "label": "ดึงบทพูด",       "artifact": "transcript.json"},
-    {"id": "ai",       "label": "ดึงความหมาย",    "artifact": "ai.json"},
-    {"id": "prepare",  "label": "ตัดทีละคลิป",    "artifact": "pool.json"},
-    {"id": "compose",  "label": "เรียงเป็นหนัง",  "artifact": "edl.json"},
-    {"id": "render",   "label": "ตัดเป็นชิ้น",    "artifact": "segments/"},
-    {"id": "assemble", "label": "ต่อเป็นไฟล์",    "artifact": "final.mp4"},
+    {"id": "scan",     "label": "อ่านคลิป"},
+    {"id": "thumbs",   "label": "ภาพตัวอย่าง"},
+    {"id": "listen",   "label": "ดึงบทพูด"},
+    {"id": "ai",       "label": "ดึงความหมาย"},
+    {"id": "prepare",  "label": "ตัดทีละคลิป"},
+    {"id": "compose",  "label": "เรียงเป็นหนัง"},
+    {"id": "render",   "label": "ตัดเป็นชิ้น"},
+    {"id": "assemble", "label": "ต่อเป็นไฟล์"},
 ]
 STEP_ORDER = [s["id"] for s in STEPS]
 STEP_LABEL = {s["id"]: s["label"] for s in STEPS}
@@ -47,22 +47,17 @@ STEP_LABEL = {s["id"]: s["label"] for s in STEPS}
 # กำลังทำอะไรอยู่ ตอนนี้เรียงตามงานจริงที่คนทำ: หาของ → เตรียมของ → ประกอบ
 PHASES = [
     {"id": "source", "no": 1, "label": "เลือกฟุตเทจ",
-     "was": "Phase 1 · SCAN",
-     "why": "ชี้ไปที่โฟลเดอร์คลิปดิบ แล้วอ่านคุณสมบัติทุกคลิปครั้งเดียวจบ",
+     "why": "ชี้ไปที่โฟลเดอร์คลิปดิบ แล้วอ่านคุณสมบัติทุกคลิปครั้งเดียวจบ "
+            "— หลังจากนี้ไม่ต้องแตะไฟล์วิดีโออีกเลย",
      "steps": ["scan", "thumbs"], "key": "run.source"},
     {"id": "prepare", "no": 2, "label": "เตรียมวิดีโอ",
-     "was": "Phase 1+4 · LISTEN + AI",
      "why": "ดูทีละคลิป — แยกคลิปพูดกับคลิปวิว ตัดเอาเฉพาะช่วงที่ใช้ได้ "
-            "เก็บเข้าคลังไว้รอประกอบ",
-     "steps": ["listen", "ai", "prepare"], "key": "run.prepare",
-     "toggle": "ai.enabled",
-     "toggle_label": "ให้ AI ช่วยคิดด้วย (อ่านความหมาย ให้คะแนน แนะนำช่วงที่ควรเก็บ)"},
+            "เก็บเข้าคลังไว้รอประกอบในขั้นถัดไป",
+     "steps": ["listen", "ai", "prepare"], "key": "run.prepare"},
     {"id": "compose", "no": 3, "label": "รวมเป็นหนัง",
-     "was": "Phase 3+2 · DECIDE + RENDER",
      "why": "หยิบชิ้นจากคลังมาเรียง แล้วผลิตเป็นไฟล์เดียว",
      "steps": ["compose", "render", "assemble"], "key": "run.compose"},
 ]
-PHASE_OF_STEP = {s: p["id"] for p in PHASES for s in p["steps"]}
 
 # ── คีย์ไหนเป็นของขั้นไหน — ใช้ตอนรีเซ็ตทีละขั้น ────────────────
 #
@@ -195,8 +190,6 @@ FIELDS = [
       help="เป็นเพดาน ไม่ใช่การรับประกัน — ถ้า B-roll ที่ผ่านตัวกรองมีไม่พอ จะได้สั้นกว่าเป้า"),
     F("select.talk_ratio", "สัดส่วนเวลาที่ให้ช่วงพูด", "float", "edl", "prepare",
       min=0, max=1, step=0.02),
-    F("select.min_unique_words", "ช็อตพูดต้องมีคำไม่ซ้ำอย่างน้อย", "int", "edl", "prepare",
-      min=0, max=20, step=1, unit="คำ"),
     F("select.avoid_adjacent", "ห้ามเลือกวิวสองชิ้นที่ติดกัน", "bool", "edl", "prepare"),
 
     # ── เตรียมวิดีโอ: ตัดคลิปที่ไม่มีเสียงพูดออก ──
@@ -268,8 +261,7 @@ STEP_PARAMS = {
              "scan.color"],
     "listen": ["listen.enabled", "listen.model", "listen.language",
                "listen.import_dir", "listen.filter"],
-    "thumbs": ["thumbs.width", "thumbs.sheet_cols", "thumbs.sheet_rows",
-               "thumbs.per_clip"],
+    "thumbs": ["thumbs.width", "thumbs.sheet_cols", "thumbs.sheet_rows"],
     "ai": ["ai.model", "ai.tasks", "ai.sheets", "ai.transcript_chars",
            "ai.batch_clips", "ai.goal"],
     "prepare": ["talk", "broll", "classify.min_speech_total", "prepare.drop_silent",
@@ -343,25 +335,11 @@ def plan(cfg, start=None, no_thumbs=False):
 
 
 def phase_view(ctx, cfg):
-    """สถานะราย Phase — รวมสถานะของขั้นที่อยู่ข้างในเข้าด้วยกัน"""
+    """สถานะราย Phase — หัวการ์ดในหน้าเว็บอ่านคำอธิบายจากที่นี่ที่เดียว
+    ไม่ได้เขียนซ้ำไว้ในหน้าเว็บอีกชุด"""
     steps = {s["id"]: s for s in step_status(ctx, cfg)}
-    pl = {s["id"]: s for s in plan(cfg)}
-    out = []
-    for ph in PHASES:
-        inner = [{**steps[s], **{"run": pl[s]["run"], "skip": pl[s]["skip"]}}
-                 for s in ph["steps"]]
-        done = [x for x in inner if x["exists"]]
-        stale = [x for x in inner if x["exists"] and x["changed"]]
-        out.append({
-            **{k: ph[k] for k in ("id", "no", "label", "was", "why", "key")},
-            "toggle": ph.get("toggle"), "toggle_label": ph.get("toggle_label"),
-            "toggle_on": bool(get_at(cfg, ph["toggle"], False)) if ph.get("toggle") else None,
-            "enabled": bool(get_at(cfg, ph["key"], True)),
-            "steps": inner,
-            "state": ("stale" if stale else "ok") if len(done) == len(inner)
-                     else ("part" if done else "none"),
-        })
-    return out
+    return [{**{k: ph[k] for k in ("id", "no", "label", "why")},
+             "steps": [steps[s] for s in ph["steps"]]} for ph in PHASES]
 
 
 # ─────────────────────────── เขียน TOML ───────────────────────────
