@@ -76,6 +76,10 @@ def run(ctx):
         if r.returncode == 0:
             made += 1
 
+    from .settings import params_of
+    from .util import write_json
+    write_json(ctx.thumb_dir / "params.json", {"params": params_of(ctx.cfg, "thumbs")})
+
     info(f"  {c('✓', 'g')} contact sheet {made} แผ่น ({per} ภาพ/แผ่น) → "
          f"{sheets.relative_to(ctx.work.parent) if sheets.is_relative_to(ctx.work.parent) else sheets}")
     return sheets

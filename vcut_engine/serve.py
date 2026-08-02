@@ -28,10 +28,42 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+from . import config, settings
 from .util import c, die, info, read_json, warn, write_json
 
-VIEWER = Path(__file__).resolve().parent.parent / "viewer" / "index.html"
+WEB = Path(__file__).resolve().parent.parent / "viewer"
+VIEWER = WEB / "index.html"
+SETUP = WEB / "setup.html"
 SAFE_NAME = re.compile(r"^[A-Za-z0-9_.\-]+$")
+
+# ทุกขั้นที่ปุ่มในหน้าเว็บสั่งได้ — ชื่อ → argv ของ vcut
+JOB_STEPS = {
+    "scan": ["scan"], "listen": ["listen"], "thumbs": ["thumbs"], "ai": ["ai"],
+    "decide": ["decide"], "render": ["render"], "assemble": ["assemble"],
+    "build": ["run", "--from", "render"],
+    "plan": ["run"],          # ทำตามแผนใน [run] — ปุ่ม "สร้างไฟล์" ในหน้าหลักใช้ตัวนี้
+    "all": ["run"],
+}
+# ปุ่ม "รัน Phase นี้" — รันทุกขั้นใน Phase เดียว โดยไม่แตะ Phase อื่น
+PHASE_JOBS = {p["id"]: p["steps"] for p in settings.PHASES}
+
+
+def reload_ctx(ctx):
+    """อ่าน config จากดิสก์ใหม่ — เรียกหลังหน้า setup เขียนไฟล์โปรเจกต์ทับ"""
+    fresh = config.Ctx(config.load(ctx.config_name, ctx.sets))
+    ctx.cfg, ctx.source, ctx.work, ctx.out = \
+        fresh.cfg, fresh.source, fresh.work, fresh.out
+    return ctx
+
+
+def proposed_ctx(ctx, values):
+    """Ctx จำลองจากค่าที่ยังไม่ได้บันทึก — ใช้ตอบคำถาม 'ถ้าแก้แบบนี้จะเป็นยังไง'"""
+    cfg = config.load(ctx.config_name, ctx.sets)
+    for k, v in (values or {}).items():
+        if k in settings.FIELD_BY_KEY:
+            settings.set_at(cfg, k, v)
+    cfg = config.validate(cfg)
+    return config.Ctx(cfg)
 
 
 # ─────────────────────────── งานที่สั่งจากหน้าเว็บ ───────────────────────────
@@ -46,38 +78,54 @@ class Job:
         self.proc = None
         self.code = None
         self.started = 0.0
+        self.active = False        # True ตั้งแต่รับงานจนคิวคำสั่งหมด
+        self._queue, self._cwd = [], "."
 
     @property
     def running(self):
-        return self.proc is not None and self.proc.poll() is None
+        return self.active
 
-    def start(self, argv, step, cwd):
+    def start(self, argvs, step, cwd):
+        """argvs = คำสั่งเดียว หรือหลายคำสั่งที่ต้องรันต่อกัน (หยุดทันทีถ้าอันไหนพัง)"""
+        if argvs and isinstance(argvs[0], str):
+            argvs = [argvs]
         with self.lock:
             if self.running:
                 return False
-            self.lines = [f"$ {' '.join(argv[1:])}"]
+            self.lines = []
             self.step, self.code, self.started = step, None, time.time()
-            self.proc = subprocess.Popen(
-                argv, cwd=str(cwd), stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, text=True, bufsize=1)
+            self._queue = list(argvs)
+            self._cwd = cwd
+            self.active = True
         threading.Thread(target=self._pump, daemon=True).start()
         return True
 
     def _pump(self):
-        proc = self.proc
-        for raw in proc.stdout:
-            # แถบความคืบหน้าของ engine เขียนทับบรรทัดเดิมด้วย \r — เอาแค่ท่อนหลังสุด
-            line = raw.rstrip("\n").split("\r")[-1].rstrip()
-            if not line:
-                continue
+        code = 0
+        for argv in self._queue:
             with self.lock:
-                self.lines.append(line)
-                if len(self.lines) > 4000:
-                    del self.lines[:1000]
-        proc.wait()
+                self.lines.append(f"$ {' '.join(argv[1:])}")
+                self.proc = subprocess.Popen(
+                    argv, cwd=str(self._cwd), stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT, text=True, bufsize=1)
+            proc = self.proc
+            for raw in proc.stdout:
+                # แถบความคืบหน้าของ engine เขียนทับบรรทัดเดิมด้วย \r — เอาแค่ท่อนหลังสุด
+                line = raw.rstrip("\n").split("\r")[-1].rstrip()
+                if not line:
+                    continue
+                with self.lock:
+                    self.lines.append(line)
+                    if len(self.lines) > 4000:
+                        del self.lines[:1000]
+            proc.wait()
+            code = proc.returncode
+            if code != 0:
+                break
         with self.lock:
-            self.code = proc.returncode
-            self.lines.append(f"— จบด้วยรหัส {proc.returncode} "
+            self.code = code
+            self.active = False
+            self.lines.append(f"— จบด้วยรหัส {code} "
                               f"({time.time() - self.started:.0f} วินาที) —")
 
     def state(self, since=0):
@@ -196,6 +244,91 @@ def build_state(ctx):
     }
 
 
+def build_setup(ctx):
+    """ทุกอย่างที่หน้า setup ต้องใช้ — รายการค่า ค่าปัจจุบัน และสถานะแต่ละขั้น"""
+    cur = Path(ctx.config_name).resolve() if ctx.config_name else None
+    rel = ""
+    if cur:
+        try:
+            rel = str(cur.relative_to(settings.PKG_ROOT.resolve()))
+        except ValueError:
+            rel = str(cur)
+
+    # ค่าที่จะกลับไปเป็นถ้าลบคีย์นี้ออกจากไฟล์โปรเจกต์ = ค่าจาก default + preset chain
+    base = config.load(None, [])
+    extends = ""
+    if cur and cur.exists():
+        try:
+            with cur.open("rb") as f:
+                import tomllib
+                extends = tomllib.load(f).get("extends", "") or ""
+        except (OSError, ValueError):
+            extends = ""
+    if extends:
+        try:
+            base = config.load(extends, [])
+        except SystemExit:
+            pass
+
+    return {
+        "fields": settings.FIELDS,
+        "tiers": settings.TIERS,
+        "phases": settings.phase_view(ctx, ctx.cfg),
+        "steps": settings.step_status(ctx, ctx.cfg),
+        "values": {f["key"]: settings.get_at(ctx.cfg, f["key"])
+                   for f in settings.FIELDS},
+        "inherited": {f["key"]: settings.get_at(base, f["key"])
+                      for f in settings.FIELDS},
+        "project": {"path": rel, "extends": extends,
+                    "raw": settings.read_raw(rel) if rel else "",
+                    "chain": [Path(x).name for x in ctx.get("_meta.config_files", [])]},
+        "projects": settings.project_files(),
+        "presets": settings.preset_names(),
+        "work": str(ctx.work),
+        "source_ok": ctx.source.is_dir(),
+    }
+
+
+def build_plan(ctx):
+    """หน้าหลักถามมาก่อนกด "สร้างไฟล์" ว่าจะได้รันอะไรบ้าง ใช้เวลาเท่าไร"""
+    steps = settings.plan(ctx.cfg)
+    est, err = None, None
+    try:
+        est = settings.estimate(ctx) if ctx.manifest.exists() else None
+    except SystemExit:
+        err = "ประเมินเวลาไม่ได้ด้วย config ชุดนี้"
+
+    secs, notes = 0, []
+    for s in steps:
+        if not s["run"]:
+            continue
+        if s["id"] == "render" and est:
+            secs += est["render_seconds"] + est["measure_seconds"]
+        elif s["id"] == "assemble":
+            secs += 60
+        elif s["id"] in ("scan", "listen", "ai", "thumbs"):
+            notes.append(s["label"])
+    return {"steps": steps, "estimate": est, "error": err,
+            "seconds": secs, "unknown": notes,
+            "phases": settings.phase_view(ctx, ctx.cfg)}
+
+
+def probe_dir(ctx, path):
+    """ตรวจโฟลเดอร์ฟุตเทจให้ก่อนกดรัน scan จริง — เบราว์เซอร์เลือกโฟลเดอร์เองไม่ได้"""
+    p = Path(path).expanduser()
+    if not path:
+        return {"ok": False, "msg": "ยังไม่ได้ใส่ที่อยู่"}
+    if not p.is_dir():
+        return {"ok": False, "msg": "ไม่พบโฟลเดอร์นี้"}
+    exts = {e.lower() for e in ctx.get("scan.extensions", [".MOV"])}
+    files = [f for f in p.iterdir()
+             if f.is_file() and f.suffix.lower() in exts and not f.name.startswith(".")]
+    size = sum(f.stat().st_size for f in files) / 1e9
+    return {"ok": bool(files), "count": len(files), "gb": round(size, 1),
+            "msg": (f"พบ {len(files)} คลิป · {size:.1f} GB" if files
+                    else "ไม่พบไฟล์วิดีโอที่นามสกุลตรงกับ [scan] extensions")}
+
+
 # ─────────────────────────── HTTP ───────────────────────────
 
 def make_handler(ctx, job):
@@ -268,13 +401,28 @@ def make_handler(ctx, job):
             u = urlparse(self.path)
             p = unquote(u.path)
 
-            if p in ("/", "/index.html"):
+            if p in ("/", "/index.html", "/viewer"):
                 if not VIEWER.exists():
                     return self._send(500, f"ไม่พบ {VIEWER}", "text/plain; charset=utf-8")
                 return self._send(200, VIEWER.read_bytes(), "text/html; charset=utf-8")
 
+            if p in ("/setup", "/setup.html"):
+                if not SETUP.exists():
+                    return self._send(500, f"ไม่พบ {SETUP}", "text/plain; charset=utf-8")
+                return self._send(200, SETUP.read_bytes(), "text/html; charset=utf-8")
+
             if p == "/api/state":
                 return self._json(build_state(ctx))
+
+            if p == "/api/setup":
+                return self._json(build_setup(ctx))
+
+            if p == "/api/plan":
+                return self._json(build_plan(ctx))
+
+            if p == "/api/probe_dir":
+                q = dict(x.split("=", 1) for x in u.query.split("&") if "=" in x)
+                return self._json(probe_dir(ctx, unquote(q.get("path", ""))))
 
             if p == "/api/job":
                 since = 0
@@ -332,19 +480,60 @@ def make_handler(ctx, job):
                 prev.unlink()
                 return self._json({"ok": True})
 
+            if p == "/api/setup":
+                path, err = settings.save_project(
+                    payload.get("path") or "", payload.get("values") or {},
+                    extends=payload.get("extends") or None,
+                    raw=payload.get("raw"))
+                if err:
+                    return self._json({"error": err}, 400)
+                if payload.get("activate", True):
+                    ctx.config_name = str(settings.PKG_ROOT / path)
+                    ctx.argv_tail = ["-c", ctx.config_name]
+                try:
+                    reload_ctx(ctx)
+                except SystemExit:
+                    return self._json({"error": "บันทึกแล้วแต่โหลดกลับไม่ได้"}, 500)
+                return self._json({"ok": True, "path": path,
+                                   "setup": build_setup(ctx)})
+
+            if p == "/api/estimate":
+                try:
+                    ctx2 = proposed_ctx(ctx, payload.get("values") or {})
+                except SystemExit:
+                    return self._json({"error": "ค่าที่ตั้งไว้ใช้ด้วยกันไม่ได้ "
+                                                "— ดูข้อความในเทอร์มินัล"}, 400)
+                if not ctx2.manifest.exists():
+                    return self._json({"error": "ยังไม่มี manifest — รันขั้นอ่านคลิปก่อน"}, 400)
+                try:
+                    return self._json(settings.estimate(ctx2))
+                except SystemExit:
+                    return self._json({"error": "ประเมินไม่ได้ด้วยค่าชุดนี้"}, 400)
+
             if p == "/api/job":
                 step = payload.get("step")
-                steps = {"decide": ["decide"], "render": ["render"],
-                         "assemble": ["assemble"], "build": ["render", "assemble"]}
-                if step not in steps:
+                if step not in JOB_STEPS and step not in PHASE_JOBS:
                     return self._json({"error": f"ไม่รู้จักงาน '{step}'"}, 400)
                 if job.running:
                     return self._json({"error": "มีงานกำลังรันอยู่"}, 409)
-                argv = [sys.executable, str(ctx.launcher)] + steps[step][:1] + ctx.argv_tail
-                if step == "build":
-                    argv = [sys.executable, str(ctx.launcher), "run", "--from", "render"] \
-                        + ctx.argv_tail
-                job.start(argv, step, ctx.launcher.parent)
+                head = [sys.executable, str(ctx.launcher)]
+                force = ["--force"] if payload.get("force") else []
+
+                if step in PHASE_JOBS:
+                    # รันเฉพาะขั้นใน Phase นี้ที่แผนบอกว่าให้รัน
+                    ok = {s["id"] for s in settings.plan(ctx.cfg) if s["run"]}
+                    todo = [s for s in PHASE_JOBS[step] if s in ok]
+                    if not todo:
+                        return self._json(
+                            {"error": "ทุกขั้นใน Phase นี้ถูกปิดหรือข้ามไว้"}, 400)
+                    argvs = [head + [s] + ctx.argv_tail
+                             + (force if s in ("scan", "listen", "ai", "render") else [])
+                             for s in todo]
+                else:
+                    argvs = [head + JOB_STEPS[step] + ctx.argv_tail
+                             + (force if step in ("scan", "listen", "ai",
+                                                  "render", "all", "plan") else [])]
+                job.start(argvs, step, ctx.launcher.parent)
                 return self._json({"ok": True, "step": step})
 
             return self._json({"error": "ไม่รู้จักเส้นทางนี้"}, 404)
@@ -352,23 +541,28 @@ def make_handler(ctx, job):
     return H
 
 
-def run(ctx, port=8765, open_browser=True, config_args=None):
-    if not ctx.edl.exists():
-        die("ยังไม่มี edl.json — รัน `vcut decide` ก่อน")
-    if not list(ctx.thumb_dir.glob("*.jpg")):
-        warn("ยังไม่มีภาพตัวอย่าง — รัน `vcut thumbs` เพื่อให้หน้าเว็บมีรูปให้ดู")
-
+def run(ctx, port=8765, open_browser=True, config_args=None,
+        config_name=None, sets=None, start="/"):
     ctx.launcher = Path(__file__).resolve().parent.parent / "vcut"
     ctx.argv_tail = list(config_args or [])
+    ctx.config_name = config_name
+    ctx.sets = list(sets or [])
+
+    if start == "/" and not ctx.edl.exists():
+        warn("ยังไม่มี edl.json — เปิดหน้า setup ให้แทน")
+        start = "/setup"
+    if not list(ctx.thumb_dir.glob("*.jpg")):
+        warn("ยังไม่มีภาพตัวอย่าง — สั่ง 'ภาพตัวอย่าง' ในหน้า setup ก่อนจะได้มีรูปให้ดู")
 
     job = Job()
     httpd = ThreadingHTTPServer(("127.0.0.1", port), make_handler(ctx, job))
-    url = f"http://127.0.0.1:{port}/"
+    url = f"http://127.0.0.1:{port}{start}"
     st = build_state(ctx)
     info(f"VIEW  {st['summary'].get('segments', 0)} ชิ้น · "
          f"{st['summary'].get('duration_total', 0) / 60:.1f} นาที · "
          f"render แล้ว {st['rendered']} ชิ้น")
     info(f"  {c('→ ' + url, 'g')}   {c('(Ctrl-C เพื่อปิด)', 'd')}")
+    info(f"  {c('ตั้งค่า  http://127.0.0.1:' + str(port) + '/setup', 'd')}")
     if open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
     try:

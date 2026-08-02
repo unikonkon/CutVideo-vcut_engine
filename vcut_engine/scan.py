@@ -108,7 +108,9 @@ def run(ctx, force=False):
     for x in bad:
         warn(f"{x['name']}: {x['error']}")
 
-    data = {"source": str(ctx.source), "clips": [x for x in out if "error" not in x]}
+    from .settings import params_of
+    data = {"source": str(ctx.source), "params": params_of(ctx.cfg, "scan"),
+            "clips": [x for x in out if "error" not in x]}
     write_json(ctx.manifest, data)
     report(data)
     return data

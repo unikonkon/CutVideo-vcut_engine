@@ -245,7 +245,12 @@ def select(timeline, cfg, ai_weight=0.0):
 
 # ─────────────────────────── main ───────────────────────────
 
-def run(ctx):
+def run(ctx, write=True):
+    """write=False = คำนวณอย่างเดียว ไม่แตะ edl.json และไม่พิมพ์อะไร
+
+    หน้า setup ใช้โหมดนี้ตอบคำถาม "แก้ค่านี้แล้วต้อง render ใหม่กี่ชิ้น"
+    ก่อนที่ผู้ใช้จะกดลงมือจริง
+    """
     man = read_json(ctx.manifest)
     if not man:
         die("ยังไม่มี manifest — รัน `vcut scan` ก่อน")
@@ -356,7 +361,7 @@ def run(ctx):
             timeline.append({**base, "kind": "BROLL", "start": a, "end": b,
                              "dur": round(b - a, 3), "target_lufs": lufs_b,
                              "motion": cl["motion"], "bright": cl["bright"]})
-    if trim_empty:
+    if trim_empty and write:
         warn(f"ช่วงที่ AI แนะนำไม่ทับกับช่วงที่พูดจริงใน {len(trim_empty)} คลิป "
              f"— ใช้ช่วงจาก VAD ตามเดิม")
 
@@ -407,8 +412,9 @@ def run(ctx):
         },
         "timeline": timeline,
     }
-    write_json(ctx.edl, edl)
-    report(edl, pre_drop, run_dropped)
+    if write:
+        write_json(ctx.edl, edl)
+        report(edl, pre_drop, run_dropped)
     return edl
 
 

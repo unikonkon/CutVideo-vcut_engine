@@ -75,7 +75,9 @@ def run(ctx, force=False):
 
     if not ctx.get("listen.enabled", True):
         info("LISTEN  ปิดอยู่ ([listen] enabled = false) — ทุกคลิปจะถูกจัดเป็น BROLL")
-        write_json(ctx.transcript, {"clips": {}})
+        from .settings import params_of
+        write_json(ctx.transcript,
+                   {"params": params_of(ctx.cfg, "listen"), "clips": {}})
         return {"clips": {}}
 
     pats = _patterns(ctx)
@@ -133,7 +135,8 @@ def run(ctx, force=False):
     if not keep_wav and ctx.audio_dir.exists() and not any(ctx.audio_dir.iterdir()):
         ctx.audio_dir.rmdir()
 
-    data = {"clips": result}
+    from .settings import params_of
+    data = {"params": params_of(ctx.cfg, "listen"), "clips": result}
     write_json(ctx.transcript, data)
     report(clips, result, ctx)
     return data

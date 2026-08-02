@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vcut setup</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='13' font-size='13'%3E%E2%9A%99%3C/text%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#fbfaf8; --panel:#fff; --line:#e5e1da; --fg:#24211d; --dim:#8a8378;
+  --accent:#2f6fd0; --warn:#b4462a; --ok:#3d7d5a; --hot:#a8571f;
+  --off:#f2efe9; --radius:7px;
+}
+@media (prefers-color-scheme:dark){
+  :root{ --bg:#171614; --panel:#1e1d1a; --line:#332f2a; --fg:#e8e3da; --dim:#8f877b;
+         --accent:#77a9f0; --warn:#e07a5c; --ok:#6fbf92; --hot:#d99a52; --off:#252320; }
+}
+:root[data-theme=dark]{ --bg:#171614; --panel:#1e1d1a; --line:#332f2a; --fg:#e8e3da;
+  --dim:#8f877b; --accent:#77a9f0; --warn:#e07a5c; --ok:#6fbf92; --hot:#d99a52; --off:#252320; }
+:root[data-theme=light]{ --bg:#fbfaf8; --panel:#fff; --line:#e5e1da; --fg:#24211d;
+  --dim:#8a8378; --accent:#2f6fd0; --warn:#b4462a; --ok:#3d7d5a; --hot:#a8571f; --off:#f2efe9; }
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+button{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:.4em .85em;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--accent)}
+button:disabled{opacity:.4;cursor:default}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button.sm{padding:.25em .6em;font-size:12.5px}
+a{color:var(--accent)}
+
+header{position:sticky;top:0;z-index:20;background:var(--panel);
+  border-bottom:1px solid var(--line);padding:.7rem 1rem}
+.hrow{display:flex;gap:.7rem;align-items:center;flex-wrap:wrap}
+h1{font-size:15px;margin:0;font-weight:700}
+.spacer{flex:1}
+.chip{border:1px solid var(--line);border-radius:100px;padding:.15em .7em;
+  font-size:12px;color:var(--dim);white-space:nowrap}
+.chip b{color:var(--fg)}
+.chip.warn{border-color:var(--warn);color:var(--warn)}
+.chip.warn b{color:var(--warn)}
+
+main{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:1rem;
+  padding:1rem;align-items:start;max-width:1480px;margin:0 auto}
+@media (max-width:1000px){ main{grid-template-columns:minmax(0,1fr)} aside{position:static!important} }
+
+.tabs{display:flex;border:1px solid var(--line);border-radius:var(--radius);
+  overflow:hidden;margin-bottom:.9rem;width:fit-content}
+.tabs button{border:0;border-radius:0;color:var(--dim);padding:.4em 1em}
+.tabs button[aria-pressed=true]{background:var(--accent);color:#fff}
+
+.stage{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  margin-bottom:.55rem;overflow:hidden}
+.stage.off{opacity:.5}
+.stage>summary{list-style:none;cursor:pointer;padding:.7rem .9rem;display:flex;
+  gap:.6rem;align-items:center}
+.stage>summary::-webkit-details-marker{display:none}
+.stage>summary:hover{background:var(--off)}
+.dot{width:9px;height:9px;border-radius:50%;flex:none;background:var(--line)}
+.dot.ok{background:var(--ok)} .dot.stale{background:var(--hot)}
+.dot.part{background:var(--accent)} .dot.none{background:var(--line)}
+.stage h2{font-size:13.5px;margin:0;font-weight:700;flex:none}
+.stage .sum{font-size:12px;color:var(--dim);flex:1;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.body{padding:.2rem .9rem 1rem;border-top:1px solid var(--line)}
+
+/* การ์ด Phase */
+.pno{font-size:11px;font-weight:800;color:var(--bg);background:var(--fg);
+  border-radius:5px;padding:.12em .5em;flex:none;font-variant-numeric:tabular-nums}
+.stage.off .pno{background:var(--dim)}
+.was{font-size:10.5px;color:var(--dim);border:1px dashed var(--line);
+  border-radius:4px;padding:.05em .45em;white-space:nowrap}
+.sw{display:flex;gap:.35rem;align-items:center;font-size:12px;color:var(--dim);
+  cursor:pointer;white-space:nowrap}
+.why{font-size:12px;color:var(--dim);padding:.55rem 0 .2rem;border-bottom:1px solid var(--off)}
+.stepbar{display:flex;flex-wrap:wrap;gap:.35rem;padding:.55rem 0}
+.stepbar .st{display:flex;gap:.35rem;align-items:center;font-size:11.5px;
+  border:1px solid var(--line);border-radius:100px;padding:.1em .6em;color:var(--dim)}
+.stepbar .st.skip{opacity:.45;text-decoration:line-through}
+.substep{font-size:11.5px;color:var(--dim);font-weight:700;letter-spacing:.03em;
+  text-transform:uppercase;margin:.9rem 0 -.2rem}
+.arrow{text-align:center;color:var(--dim);font-size:15px;line-height:1;margin:-.15rem 0 .4rem}
+
+.field{display:grid;grid-template-columns:1fr 210px;gap:.6rem;align-items:center;
+  padding:.5rem 0;border-bottom:1px solid var(--off)}
+.field:last-child{border-bottom:0}
+.field .lab{min-width:0}
+.field .nm{font-size:13px;display:flex;gap:.45rem;align-items:center;flex-wrap:wrap}
+.field .hlp{font-size:11.5px;color:var(--dim);margin-top:.1rem}
+.field .key{font:11px ui-monospace,Menlo,monospace;color:var(--dim);opacity:.7}
+.tier{font-size:10px;padding:.05em .45em;border-radius:3px;font-weight:700;
+  border:1px solid currentColor;opacity:.85}
+.t-render,.t-scan,.t-listen{color:var(--warn)}
+.t-ai{color:var(--hot)}
+.t-edl,.t-thumbs{color:var(--ok)}
+.t-free{color:var(--dim)}
+input[type=text],input[type=number],select,textarea{width:100%;padding:.35em .5em;
+  background:var(--bg);border:1px solid var(--line);border-radius:5px}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.field.on input,.field.on select,.field.on textarea{border-color:var(--accent)}
+.rng{display:flex;gap:.5rem;align-items:center}
+.rng input[type=range]{flex:1;min-width:0}
+.rng output{font-size:12px;font-variant-numeric:tabular-nums;min-width:3.6em;
+  text-align:right;color:var(--dim)}
+.multi{display:flex;flex-direction:column;gap:.2rem;font-size:12.5px}
+label.ck{display:flex;gap:.4rem;align-items:center;cursor:pointer}
+textarea.raw{width:100%;min-height:26em;font:12.5px/1.6 ui-monospace,Menlo,monospace;
+  white-space:pre;overflow-x:auto}
+.acts{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem}
+
+aside{position:sticky;top:64px;display:flex;flex-direction:column;gap:.75rem}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:.85rem}
+.card h3{font-size:12px;margin:0 0 .55rem;color:var(--dim);font-weight:700;
+  letter-spacing:.04em;text-transform:uppercase}
+.kv{display:grid;grid-template-columns:1fr auto;gap:.2rem .7rem;font-size:12.5px}
+.kv dt{color:var(--dim)} .kv dd{margin:0;font-variant-numeric:tabular-nums}
+.big{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.2}
+.big.hot{color:var(--warn)} .big.ok{color:var(--ok)}
+#log{font:11.5px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;
+  max-height:16em;overflow:auto;color:var(--dim);word-break:break-word}
+.toast{position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);z-index:50;
+  background:var(--fg);color:var(--bg);padding:.55em 1.1em;border-radius:100px;
+  font-size:13px;box-shadow:0 4px 20px rgba(0,0,0,.25);max-width:80vw}
+.toast.err{background:var(--warn);color:#fff}
+.note{font-size:12px;color:var(--dim);margin:.4rem 0 0}
+.probe{font-size:12px;margin-top:.25rem}
+.probe.ok{color:var(--ok)} .probe.bad{color:var(--warn)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hrow">
+    <h1>vcut · ตั้งค่า</h1>
+    <span class="chip" id="c-proj">—</span>
+    <span class="chip" id="c-chain">—</span>
+    <span class="spacer"></span>
+    <a href="/" id="tolink">ไปหน้าดูผล →</a>
+    <button id="revert">ทิ้งที่แก้</button>
+    <button id="save" disabled>บันทึกลงไฟล์</button>
+    <button id="runall" class="primary">รันตามแผน</button>
+  </div>
+</header>
+
+<main>
+  <section>
+    <div class="tabs" id="tabs">
+      <button data-t="form" aria-pressed="true">ตามขั้นตอน</button>
+      <button data-t="raw" aria-pressed="false">TOML ดิบ</button>
+    </div>
+    <div id="form"></div>
+    <div id="raw" hidden>
+      <div class="card">
+        <h3>ไฟล์โปรเจกต์</h3>
+        <p class="note">แก้ตรง ๆ ได้ทุกคีย์ใน 99 คีย์ ไม่จำกัดแค่ที่ฟอร์มมีให้
+          — กดบันทึกแล้วระบบจะลองโหลดดูก่อน ถ้า config ใช้ไม่ได้จะไม่เขียนทับ</p>
+        <textarea class="raw" id="rawbox" spellcheck="false"></textarea>
+        <div class="acts">
+          <button id="saveraw" class="primary">บันทึก TOML นี้</button>
+          <button id="reloadraw">โหลดจากดิสก์ใหม่</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <aside>
+    <div class="card">
+      <h3>ถ้ากดรันตอนนี้</h3>
+      <div id="est"><p class="note">กำลังคำนวณ…</p></div>
+    </div>
+    <div class="card">
+      <h3>บันทึกการทำงาน</h3>
+      <div id="log">ยังไม่มีงานที่สั่ง</div>
+    </div>
+  </aside>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+let D = null, edits = {}, logSince = 0, polling = null, estTimer = null;
+
+const mmss = s => `${Math.floor(s/60)}:${String(Math.round(s%60)).padStart(2,'0')}`;
+const hhmm = s => s < 60 ? `${Math.round(s)} วิ`
+  : s < 3600 ? `${Math.round(s/60)} นาที` : `${(s/3600).toFixed(1)} ชม.`;
+const dirty = () => Object.keys(edits).length > 0;
+const val = k => k in edits ? edits[k] : (D.values[k]);
+
+function toast(msg, err){
+  const t = document.createElement('div');
+  t.className = 'toast' + (err ? ' err' : '');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), err ? 6000 : 2600);
+}
+
+async function api(path, opts){
+  const r = await fetch(path, opts);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `${r.status} ${r.statusText}`);
+  return j;
+}
+const post = (p, body) => api(p, {method:'POST', headers:{'Content-Type':'application/json'},
+                                  body: JSON.stringify(body || {})});
+
+// ── โหลดสถานะ ────────────────────────────────────────────────
+
+async function load(keepEdits){
+  D = await api('/api/setup');
+  if (!keepEdits) edits = {};
+  $('#rawbox').value = D.project.raw;
+  $('#c-proj').innerHTML = D.project.path
+    ? `<b>${D.project.path}</b>` : 'ยังไม่มีไฟล์โปรเจกต์';
+  $('#c-chain').textContent = D.project.chain.join(' ← ');
+  renderForm();
+  scheduleEstimate();
+}
+
+// ── ฟอร์ม ────────────────────────────────────────────────────
+
+function renderForm(){
+  const box = $('#form');
+  const open = new Set([...box.querySelectorAll('details[open]')].map(d => d.dataset.id));
+  box.innerHTML = '';
+
+  box.appendChild(plainCard('project', 'โปรเจกต์', open));
+  D.phases.forEach((ph, i) => {
+    if (i) box.insertAdjacentHTML('beforeend', '<div class="arrow">↓</div>');
+    box.appendChild(phaseCard(ph, open));
+  });
+  head();
+}
+
+function plainCard(id, label, open){
+  const fields = D.fields.filter(f => f.stage === id);
+  const d = document.createElement('details');
+  d.className = 'stage'; d.dataset.id = id; d.open = open.has(id);
+  const sm = document.createElement('summary');
+  sm.innerHTML = `<span class="dot"></span><h2></h2><span class="sum"></span>`;
+  sm.querySelector('h2').textContent = label;
+  sm.querySelector('.sum').textContent = D.project.path || '';
+  d.appendChild(sm);
+  const body = document.createElement('div');
+  body.className = 'body';
+  fields.forEach(f => body.appendChild(field(f)));
+  d.appendChild(body);
+  return d;
+}
+
+function phaseCard(ph, open){
+  const on = ph.key in edits ? edits[ph.key] : ph.enabled;
+  const fields = D.fields.filter(f => ph.steps.some(s => s.id === f.stage));
+  const changedHere = fields.filter(f => f.key in edits).length;
+
+  const d = document.createElement('details');
+  d.className = 'stage' + (on ? '' : ' off');
+  d.dataset.id = 'ph-' + ph.id;
+  d.open = open.has('ph-' + ph.id);
+
+  // ── หัวการ์ด ──
+  const sm = document.createElement('summary');
+  sm.innerHTML = `<span class="dot ${on ? ph.state : ''}"></span>`;
+  const no = document.createElement('span');
+  no.className = 'pno'; no.textContent = 'Phase ' + ph.no;
+  const h = document.createElement('h2'); h.textContent = ph.label;
+  const was = document.createElement('span');
+  was.className = 'was'; was.textContent = ph.was;
+  was.title = 'ชื่อในเอกสารแผนเดิม — เลขต่างกันเพราะแผนเรียงตามลำดับที่สร้าง '
+            + 'ส่วนหน้านี้เรียงตามลำดับที่รันจริง';
+  const sum = document.createElement('span');
+  sum.className = 'sum';
+  sum.textContent = !on ? 'ข้ามไว้ — ใช้ของที่ทำไว้แล้ว'
+    : ({ok:'ทำแล้วทั้งหมด', stale:'เก่าแล้ว', part:'ทำไปบางส่วน', none:'ยังไม่ได้ทำ'}[ph.state]);
+  sm.append(no, h, was, sum);
+
+  if (changedHere){
+    const b = document.createElement('span');
+    b.className = 'chip warn'; b.innerHTML = `<b>${changedHere}</b> ค่าที่แก้`;
+    sm.appendChild(b);
+  }
+  sm.appendChild(swLabel('รัน', on, v => {
+    setKey(ph.key, ph.enabled, v); renderForm(); scheduleEstimate();
+  }));
+  const btn = document.createElement('button');
+  btn.className = 'sm runbtn'; btn.textContent = 'รัน Phase นี้';
+  btn.disabled = !on;
+  btn.onclick = e => { e.preventDefault(); e.stopPropagation(); runStep(ph.id); };
+  sm.appendChild(btn);
+  d.appendChild(sm);
+
+  // ── เนื้อการ์ด ──
+  const body = document.createElement('div');
+  body.className = 'body';
+  const why = document.createElement('p');
+  why.className = 'why'; why.textContent = ph.why;
+  body.appendChild(why);
+
+  const bar = document.createElement('div');
+  bar.className = 'stepbar';
+  ph.steps.forEach(s => {
+    const el = document.createElement('span');
+    el.className = 'st' + (s.run && on ? '' : ' skip');
+    el.innerHTML = `<span class="dot ${s.exists ? (s.changed.length ? 'stale' : 'ok') : 'none'}"></span>`;
+    el.append(s.label + (s.summary ? ' · ' + s.summary : ''));
+    if (!s.run) el.title = s.skip || '';
+    bar.appendChild(el);
+  });
+  body.appendChild(bar);
+
+  if (ph.toggle){
+    const box = document.createElement('div');
+    box.className = 'why';
+    box.appendChild(swLabel(ph.toggle_label,
+      ph.toggle in edits ? edits[ph.toggle] : ph.toggle_on,
+      v => { setKey(ph.toggle, ph.toggle_on, v); renderForm(); scheduleEstimate(); }));
+    const n = document.createElement('div');
+    n.className = 'hlp';
+    n.textContent = 'คนละเรื่องกับสวิตช์ "รัน" ข้างบน — ปิดอันนี้ = ไม่เอาความเห็น AI '
+                  + 'ไปใช้เลย (ผลกลับไปเป็นกฎล้วน) ส่วนปิด "รัน" = ไม่ถามใหม่ '
+                  + 'แต่ยังใช้ ai.json เดิมอยู่';
+    box.appendChild(n);
+    body.appendChild(box);
+  }
+
+  ph.steps.forEach(s => {
+    const fs = D.fields.filter(f => f.stage === s.id);
+    if (!fs.length) return;
+    const hd = document.createElement('div');
+    hd.className = 'substep'; hd.textContent = s.label;
+    body.appendChild(hd);
+    fs.forEach(f => body.appendChild(field(f)));
+  });
+  d.appendChild(body);
+  return d;
+}
+
+function swLabel(text, checked, fn){
+  const l = document.createElement('label');
+  l.className = 'sw';
+  const i = document.createElement('input');
+  i.type = 'checkbox'; i.checked = !!checked;
+  i.onclick = e => e.stopPropagation();
+  i.onchange = () => fn(i.checked);
+  l.append(i, document.createTextNode(text));
+  return l;
+}
+
+function setKey(key, orig, v){
+  if (JSON.stringify(v) === JSON.stringify(orig)) delete edits[key];
+  else edits[key] = v;
+}
+
+function field(f){
+  const row = document.createElement('div');
+  row.className = 'field' + (f.key in edits ? ' on' : '');
+
+  const lab = document.createElement('div');
+  lab.className = 'lab';
+  const nm = document.createElement('div');
+  nm.className = 'nm';
+  nm.append(f.label);
+  const t = document.createElement('span');
+  t.className = 'tier t-' + f.tier; t.textContent = D.tiers[f.tier].label;
+  nm.appendChild(t);
+  const kk = document.createElement('span');
+  kk.className = 'key'; kk.textContent = f.key;
+  nm.appendChild(kk);
+  lab.appendChild(nm);
+  if (f.help){
+    const h = document.createElement('div');
+    h.className = 'hlp'; h.textContent = f.help;
+    lab.appendChild(h);
+  }
+
+  const ctl = document.createElement('div');
+  ctl.appendChild(widget(f, row));
+  if (f.type === 'path'){
+    const p = document.createElement('div');
+    p.className = 'probe'; p.id = 'probe-' + f.key.replace(/\./g,'_');
+    ctl.appendChild(p);
+    if (f.key === 'project.source') probe(f.key);
+  }
+  row.append(lab, ctl);
+  return row;
+}
+
+function set(f, v, row){
+  const orig = D.values[f.key];
+  if (JSON.stringify(v) === JSON.stringify(orig)) delete edits[f.key];
+  else edits[f.key] = v;
+  if (row) row.classList.toggle('on', f.key in edits);
+  head();
+  scheduleEstimate();
+  if (f.key === 'project.source') probe(f.key);
+}
+
+function widget(f, row){
+  const v = val(f.key);
+  if (f.type === 'bool'){
+    const l = document.createElement('label');
+    l.className = 'ck';
+    const i = document.createElement('input');
+    i.type = 'checkbox'; i.checked = !!v;
+    i.onchange = () => set(f, i.checked, row);
+    l.append(i, document.createTextNode(v === true ? '' : ''));
+    return l;
+  }
+  if (f.type === 'select'){
+    const s = document.createElement('select');
+    (f.options || []).forEach(o => {
+      const op = document.createElement('option');
+      op.value = o; op.textContent = (f.labels && f.labels[o]) || o;
+      s.appendChild(op);
+    });
+    s.value = v == null ? '' : String(v);
+    s.onchange = () => set(f, s.value, row);
+    return s;
+  }
+  if (f.type === 'multi'){
+    const d = document.createElement('div');
+    d.className = 'multi';
+    const cur = Array.isArray(v) ? v.slice() : [];
+    (f.options || []).forEach(o => {
+      const l = document.createElement('label');
+      l.className = 'ck';
+      const i = document.createElement('input');
+      i.type = 'checkbox'; i.checked = cur.includes(o);
+      i.onchange = () => {
+        const now = (f.options || []).filter(x =>
+          d.querySelector(`input[data-o="${x}"]`).checked);
+        set(f, now, row);
+      };
+      i.dataset.o = o;
+      l.append(i, document.createTextNode((f.labels && f.labels[o]) || o));
+      d.appendChild(l);
+    });
+    return d;
+  }
+  if ((f.type === 'int' || f.type === 'float') && f.min != null){
+    const d = document.createElement('div');
+    d.className = 'rng';
+    const i = document.createElement('input');
+    i.type = 'range'; i.min = f.min; i.max = f.max; i.step = f.step || 1;
+    i.value = v ?? f.min;
+    const o = document.createElement('output');
+    const show = x => o.textContent = x + (f.unit ? ' ' + f.unit : '');
+    show(i.value);
+    i.oninput = () => show(i.value);
+    i.onchange = () => set(f, f.type === 'int' ? parseInt(i.value,10) : parseFloat(i.value), row);
+    d.append(i, o);
+    return d;
+  }
+  if (f.type === 'list_float'){
+    const i = document.createElement('input');
+    i.type = 'text'; i.value = (v || []).join(', ');
+    i.onchange = () => {
+      const arr = i.value.split(',').map(x => parseFloat(x.trim())).filter(x => !isNaN(x));
+      set(f, arr, row);
+    };
+    return i;
+  }
+  if (f.type === 'text'){
+    const i = document.createElement('textarea');
+    i.rows = 2; i.value = v || ''; i.placeholder = f.placeholder || '';
+    i.onchange = () => set(f, i.value, row);
+    return i;
+  }
+  const i = document.createElement('input');
+  i.type = f.type === 'int' || f.type === 'float' ? 'number' : 'text';
+  if (f.step) i.step = f.step;
+  i.value = v == null ? '' : v;
+  i.placeholder = f.placeholder || '';
+  i.onchange = () => set(f, f.type === 'int' ? parseInt(i.value,10)
+                          : f.type === 'float' ? parseFloat(i.value) : i.value, row);
+  return i;
+}
+
+async function probe(key){
+  const el = $('#probe-' + key.replace(/\./g,'_'));
+  if (!el) return;
+  el.textContent = '…'; el.className = 'probe';
+  try {
+    const r = await api('/api/probe_dir?path=' + encodeURIComponent(val(key) || ''));
+    el.textContent = r.msg;
+    el.className = 'probe ' + (r.ok ? 'ok' : 'bad');
+  } catch(e){ el.textContent = ''; }
+}
+
+function head(){
+  const n = Object.keys(edits).length;
+  $('#save').disabled = !n;
+  $('#save').textContent = n ? `บันทึกลงไฟล์ (${n})` : 'บันทึกลงไฟล์';
+  $('#revert').disabled = !n;
+}
+
+// ── ประเมิน ──────────────────────────────────────────────────
+
+function scheduleEstimate(){
+  clearTimeout(estTimer);
+  estTimer = setTimeout(estimate, 350);
+}
+
+async function estimate(){
+  const box = $('#est');
+  let e;
+  try { e = await post('/api/estimate', {values: edits}); }
+  catch(err){ box.innerHTML = `<p class="note">${err.message}</p>`; return; }
+
+  const total = e.render_seconds + e.measure_seconds;
+  const worst = [...new Set(Object.keys(edits).map(k =>
+    (D.fields.find(f => f.key === k) || {}).tier))].filter(Boolean);
+
+  box.innerHTML = '';
+  const big = document.createElement('div');
+  big.className = 'big ' + (e.new ? 'hot' : 'ok');
+  big.textContent = e.new ? `render ใหม่ ${e.new} ชิ้น` : 'ไม่ต้อง render ใหม่';
+  box.appendChild(big);
+  const sub = document.createElement('p');
+  sub.className = 'note';
+  sub.textContent = e.new
+    ? `ประมาณ ${hhmm(total)} (${e.sec_per_segment} วิ/ชิ้น จากที่วัดได้จริง)`
+    : 'ต่อไฟล์ใหม่อย่างเดียว ไม่ถึงนาที';
+  box.appendChild(sub);
+
+  const rows = [
+    ['ความยาวที่จะได้', mmss(e.duration)],
+    ['จำนวนชิ้น', `${e.segments} (${e.talk} พูด + ${e.broll} วิว)`],
+    ['ใช้ของเดิมได้', `${e.reuse} ชิ้น`],
+  ];
+  if (e.chapters) rows.push(['แบ่งบท', `${e.chapters} บท`]);
+  if (e.unmeasured) rows.push(['ต้องวัดเสียงก่อน', `${e.unmeasured} ชิ้น`]);
+  if (e.orphans) rows.push(['ไฟล์เก่าที่จะไม่ได้ใช้', `${e.orphans} ชิ้น`]);
+  const dl = document.createElement('dl');
+  dl.className = 'kv'; dl.style.marginTop = '.6rem';
+  rows.forEach(([k,v]) => {
+    const dt = document.createElement('dt'), dd = document.createElement('dd');
+    dt.textContent = k; dd.textContent = v; dl.append(dt, dd);
+  });
+  box.appendChild(dl);
+
+  if (e.select && e.select.skipped){
+    const p = document.createElement('p');
+    p.className = 'note'; p.textContent = 'ตัดตามเป้าความยาว: ข้าม — ' + e.select.skipped;
+    box.appendChild(p);
+  }
+  const heavy = worst.filter(t => ['scan','listen','ai'].includes(t));
+  if (heavy.length){
+    const p = document.createElement('p');
+    p.className = 'note';
+    p.textContent = 'ตัวเลขนี้ยังไม่รวมงานที่ต้องทำใหม่ก่อน: '
+      + heavy.map(t => D.tiers[t].label).join(' · ');
+    box.appendChild(p);
+  }
+}
+
+// ── บันทึก / สั่งงาน ──────────────────────────────────────────
+
+async function save(raw){
+  const body = {path: D.project.path || 'projects/untitled.toml',
+                extends: D.project.extends || null};
+  // ส่งเฉพาะคีย์ที่แก้จริง — เซิร์ฟเวอร์จะแก้ทีละบรรทัดในไฟล์เดิม
+  // คอมเมนต์และคีย์ที่ฟอร์มไม่มีจึงอยู่ครบ
+  if (raw) body.raw = $('#rawbox').value;
+  else body.values = edits;
+  try {
+    const r = await post('/api/setup', body);
+    edits = {};
+    D = r.setup;
+    $('#rawbox').value = D.project.raw;
+    renderForm(); scheduleEstimate();
+    toast('บันทึกลง ' + r.path + ' แล้ว');
+  } catch(e){ toast(e.message, true); }
+}
+
+async function runStep(step){
+  if (dirty() && !confirm('ยังมีค่าที่แก้แล้วไม่ได้บันทึก — รันด้วยค่าเดิมในไฟล์?')) return;
+  try {
+    await post('/api/job', {step});
+    logSince = 0; $('#log').textContent = '';
+    poll();
+  } catch(e){ toast(e.message, true); }
+}
+
+async function poll(){
+  clearTimeout(polling);
+  let j;
+  try { j = await api('/api/job?since=' + logSince); } catch(e){ return; }
+  if (j.lines.length){
+    logSince = j.total;
+    const el = $('#log');
+    el.textContent += j.lines.join('\n') + '\n';
+    el.scrollTop = el.scrollHeight;
+  }
+  document.querySelectorAll('.runbtn, #runall').forEach(b => b.disabled = j.running);
+  $('#runall').textContent = j.running ? `กำลัง ${j.step}…` : 'รันตามแผน';
+  if (j.running) polling = setTimeout(poll, 800);
+  else if (j.code === 0){ toast('เสร็จแล้ว'); load(true); }
+  else if (j.code != null) toast('งานล้มเหลว — ดูบันทึกการทำงาน', true);
+}
+
+$('#save').onclick = () => save(false);
+$('#saveraw').onclick = () => save(true);
+$('#reloadraw').onclick = () => load(true).then(() => toast('โหลดใหม่แล้ว'));
+$('#revert').onclick = () => { edits = {}; renderForm(); scheduleEstimate(); };
+$('#runall').onclick = () => runStep('plan');
+$('#tabs').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  [...$('#tabs').children].forEach(x => x.setAttribute('aria-pressed', x === b));
+  $('#form').hidden = b.dataset.t !== 'form';
+  $('#raw').hidden = b.dataset.t !== 'raw';
+};
+window.addEventListener('beforeunload', e => { if (dirty()){ e.preventDefault(); e.returnValue = ''; } });
+
+load().catch(e => toast(e.message, true));
+poll();
+</script>
+</body>
+</html>

@@ -109,6 +109,7 @@ video{width:100%;border-radius:5px;background:#000;display:block}
     <span class="chip" id="c-mix">—</span>
     <span class="chip" id="c-render">—</span>
     <span class="spacer"></span>
+    <a href="/setup">← ตั้งค่า</a>
     <button id="undo" title="ย้อนกลับไปฉบับก่อนบันทึกล่าสุด">ย้อนกลับ</button>
     <button id="reload">โหลดใหม่</button>
     <button id="save" disabled>บันทึก EDL</button>
@@ -148,6 +149,8 @@ const $ = s => document.querySelector(s);
 let S = null, items = [], sel = -1, filter = 'all', dragFrom = -1, logSince = 0, polling = null;
 
 const mmss = s => `${Math.floor(s/60)}:${String(Math.round(s%60)).padStart(2,'0')}`;
+const hhmm = s => s < 60 ? `${Math.round(s)} วิ`
+  : s < 3600 ? `${Math.round(s/60)} นาที` : `${(s/3600).toFixed(1)} ชม.`;
 const dirty = () => items.some(x => x.off) || items.some((x,i) => x.i !== i);
 
 function toast(msg, err){
@@ -392,6 +395,33 @@ async function job(step){
   } catch(e){ toast(e.message, true); }
 }
 
+// ปุ่ม "สร้างไฟล์" ทำตามแผนใน [run] ของหน้า setup — บอกก่อนเสมอว่าจะรันอะไรบ้าง
+// เพราะแผนอาจมี scan/listen/ai อยู่ด้วย ซึ่งกินเวลาเป็นสิบนาทีและอาจเสียเงิน
+async function buildFromPlan(){
+  if (dirty()){ toast('ยังไม่ได้บันทึก EDL — กดบันทึกก่อน', true); return; }
+  let p;
+  try { p = await api('/api/plan'); } catch(e){ return toast(e.message, true); }
+
+  const run = p.steps.filter(s => s.run);
+  if (!run.length) return toast('ไม่มีขั้นไหนเปิดไว้เลย — ไปเปิด Phase ที่หน้าตั้งค่า', true);
+
+  const lines = ['จะรันตามลำดับนี้:', '', ...run.map((s,i) => `  ${i+1}. ${s.label}`)];
+  const skipped = p.steps.filter(s => !s.run);
+  if (skipped.length){
+    lines.push('', 'ข้าม:', ...skipped.map(s => `  · ${s.label} — ${s.skip}`));
+  }
+  lines.push('');
+  if (p.estimate && p.estimate.new)
+    lines.push(`render ใหม่ ${p.estimate.new} ชิ้น (ใช้ของเดิมได้ ${p.estimate.reuse})`);
+  else if (p.estimate)
+    lines.push('ไม่ต้อง render ใหม่');
+  if (p.seconds) lines.push(`ประมาณ ${hhmm(p.seconds)}`);
+  if (p.unknown.length)
+    lines.push(`ยังไม่รวมเวลาของ: ${p.unknown.join(' · ')}`);
+
+  if (confirm(lines.join('\n'))) job('plan');
+}
+
 async function poll(){
   clearTimeout(polling);
   let j;
@@ -410,7 +440,7 @@ async function poll(){
 }
 
 $('#save').onclick = save;
-$('#build').onclick = () => job('build');
+$('#build').onclick = buildFromPlan;
 $('#reload').onclick = () => load().then(() => toast('โหลดใหม่แล้ว'));
 $('#undo').onclick = async () => {
   try { await api('/api/undo', {method:'POST'}); await load(); toast('ย้อนกลับแล้ว'); }

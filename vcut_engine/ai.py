@@ -434,6 +434,7 @@ def _merge_into(store, task, part):
 # ─────────────────────────── main ───────────────────────────
 
 def run(ctx, tasks=None, goal="", force=False):
+    goal = goal or str(ctx.get("ai.goal", "") or "")
     man = read_json(ctx.manifest)
     if not man:
         die("ยังไม่มี manifest — รัน `vcut scan` ก่อน")
@@ -509,6 +510,8 @@ def run(ctx, tasks=None, goal="", force=False):
             "chapters": len(agg["chapters"]), "clips": len(agg["clips"]),
         }
         # เขียนทุกครั้งที่จบ task — ถ้า task ถัดไปพัง จะได้ไม่เสียเงินที่จ่ายไปแล้วฟรี ๆ
+        from .settings import params_of
+        store["params"] = params_of(ctx.cfg, "ai")
         write_json(ctx.work / "ai.json", store)
         info(f"    {c('✓', 'g')} {len(agg['clips'])} คลิป"
              + (f" · {len(agg['chapters'])} บท" if agg["chapters"] else "")

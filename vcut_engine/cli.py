@@ -16,7 +16,8 @@ import sys
 import time
 from pathlib import Path
 
-from . import ai, assemble, config, decide, listen, render, scan, serve, thumbs
+from . import (ai, assemble, config, decide, listen, render, scan, serve,
+               settings, thumbs)
 from .util import (c, die, disk_free_gb, hhmmss, info, read_json,
                    require_tools, warn)
 
@@ -80,13 +81,15 @@ def build_parser():
                            help="ใช้ความเห็นจาก .vcut/ai.json (= --set ai.enabled=true)")
         if name == "run":
             p.add_argument("--from", dest="start_at", default="scan",
-                           choices=["scan", "listen", "ai", "decide", "render", "assemble"],
+                           choices=settings.STEP_ORDER,
                            help="เริ่มจากขั้นไหน (ข้ามขั้นก่อนหน้า)")
             p.add_argument("--no-thumbs", action="store_true")
         if name == "view":
             p.add_argument("--port", type=int, default=8765)
             p.add_argument("--no-open", action="store_true",
                            help="ไม่ต้องเปิดเบราว์เซอร์ให้")
+            p.add_argument("--setup", action="store_true",
+                           help="เปิดที่หน้าตั้งค่าแทนหน้าดูผล")
         if name == "gc":
             p.add_argument("--all", action="store_true",
                            help="ลบ cache ทั้งหมดรวมทั้ง manifest/transcript")
@@ -204,25 +207,33 @@ def cmd_presets():
 
 
 def cmd_run(ctx, args):
-    t0 = time.time()
-    order = ["scan", "listen", "ai", "decide", "render", "assemble"]
-    start = order.index(args.start_at)
-    steps = order[start:]
+    """ทำตามแผนใน [run] — ขั้นที่ปิดไว้จะข้ามไปใช้ของที่ทำไว้แล้ว
 
-    if "scan" in steps:
-        scan.run(ctx, force=args.force)
-        if not args.no_thumbs:
-            thumbs.run(ctx)
-    if "listen" in steps:
-        listen.run(ctx, force=args.force)
-    if "ai" in steps and ctx.get("ai.enabled", False):
-        ai.run(ctx, tasks=args.tasks, goal=args.goal, force=args.force)
-    if "decide" in steps:
-        decide.run(ctx)
-    if "render" in steps:
-        render.run(ctx, force=args.force)
-    if "assemble" in steps:
-        assemble.run(ctx, out=args.out)
+    แผนมาจาก settings.plan() ตัวเดียวกับที่หน้าเว็บใช้ ปุ่มในเบราว์เซอร์กับ
+    คำสั่งในเทอร์มินัลจึงทำเหมือนกันเสมอ
+    """
+    t0 = time.time()
+    steps = settings.plan(ctx.cfg, start=args.start_at, no_thumbs=args.no_thumbs)
+    todo = [s["id"] for s in steps if s["run"]]
+
+    info(f"{c('แผนการรัน', 'b')}  " + " → ".join(s["label"] for s in steps if s["run"]))
+    for s in steps:
+        if not s["run"]:
+            info(f"  {c('ข้าม ' + s['label'] + ' — ' + s['skip'], 'd')}")
+    if not todo:
+        die("ไม่มีขั้นไหนให้รันเลย — เปิด Phase สักอันใน [run] ก่อน")
+
+    runner = {
+        "scan": lambda: scan.run(ctx, force=args.force),
+        "thumbs": lambda: thumbs.run(ctx),
+        "listen": lambda: listen.run(ctx, force=args.force),
+        "ai": lambda: ai.run(ctx, tasks=args.tasks, goal=args.goal, force=args.force),
+        "decide": lambda: decide.run(ctx),
+        "render": lambda: render.run(ctx, force=args.force),
+        "assemble": lambda: assemble.run(ctx, out=args.out),
+    }
+    for sid in todo:
+        runner[sid]()
     info(f"{c('เสร็จทั้งหมด', 'g')} ใช้เวลา {hhmmss(time.time() - t0)}")
 
 
@@ -270,7 +281,8 @@ def main(argv=None):
         assemble.run(ctx, out=args.out)
     elif args.cmd == "view":
         serve.run(ctx, port=args.port, open_browser=not args.no_open,
-                  config_args=config_args(args))
+                  config_args=config_args(args), config_name=args.config,
+                  sets=args.sets, start="/setup" if args.setup else "/")
     elif args.cmd == "run":
         cmd_run(ctx, args)
     return 0

@@ -6,6 +6,7 @@ mono→stereo · ปรับระดับเสียง · limiter · fade
 cache: ชื่อไฟล์ = sha1 ของทุกพารามิเตอร์ที่มีผลต่อภาพ/เสียงของชิ้นนั้น
 → เปลี่ยนลำดับใน EDL ไม่ต้อง render ใหม่ · เปลี่ยนความยาว B-roll render ใหม่เฉพาะวิว
 """
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -223,6 +224,7 @@ def run(ctx, force=False):
         todo = plan
 
     failed = []
+    t0 = time.time()
     if todo:
         pr = Progress(len(todo), "render")
 
@@ -253,6 +255,11 @@ def run(ctx, force=False):
                       "limiter": p["limited"]} for p in plan],
         "limiter_engaged": n_lim,
     }
+    # เก็บอัตราเร็วจริงไว้ให้หน้า setup ประเมินเวลาได้แม่นขึ้นทุกครั้งที่ render
+    prev = read_json(ctx.work / "render.json", {}) or {}
+    manifest["sec_per_segment"] = (
+        round((time.time() - t0) / len(todo), 2) if todo
+        else prev.get("sec_per_segment"))
     write_json(ctx.work / "render.json", manifest)
 
     used = sum(p["path"].stat().st_size for p in plan if p["path"].exists()) / 1e9
