@@ -35,7 +35,8 @@ def _entries(ctx):
         "source": [
             ("manifest", "รายการคลิปที่อ่านไว้", [ctx.manifest],
              "ต้องอ่านคลิปใหม่ทั้งโฟลเดอร์ (~40 นาที)", True),
-            ("thumbs", "ภาพตัวอย่าง + contact sheet", [ctx.thumb_dir],
+            ("thumbs", "ภาพตัวอย่าง + contact sheet + คลิปตัวอย่าง",
+             [ctx.thumb_dir, ctx.work / "preview"],
              "ทำภาพใหม่ (~2 นาที)", False),
         ],
         "prepare": [

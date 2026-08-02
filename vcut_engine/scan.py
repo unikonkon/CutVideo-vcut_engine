@@ -26,6 +26,15 @@ def list_sources(ctx):
     return sorted(files, key=lambda p: sort_key(p.stem))
 
 
+def swaps_wh(over):
+    """ฟิลเตอร์ชุดนี้ทำให้กว้าง/สูงสลับกันไหม
+
+    นับจำนวน transpose ไม่ใช่แค่ดูว่ามีไหม — "transpose=1,transpose=1" คือหมุน
+    180° ซึ่งขนาดเท่าเดิม ส่วน hflip/vflip ไม่เคยสลับ
+    """
+    return (over or "").count("transpose") % 2 == 1
+
+
 def _orientation(info_d, rot_override):
     """ทิศทางจริงหลังใช้ rotation_overrides แล้ว
 
@@ -33,7 +42,7 @@ def _orientation(info_d, rot_override):
     ถ้ามี transpose ทับอีกที ขนาดจะสลับกลับ
     """
     dw, dh = info_d["dw"], info_d["dh"]
-    if rot_override and "transpose" in rot_override:
+    if swaps_wh(rot_override):
         dw, dh = dh, dw
     return ("V" if dh > dw else "H"), dw, dh
 

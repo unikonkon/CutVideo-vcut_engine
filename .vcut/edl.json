@@ -9,6 +9,7 @@
   "stats": {},
   "pool": {
    "clips": 273,
+   "deselected": 0,
    "pieces": 280,
    "usable": 234,
    "excluded": 46,
@@ -164,7 +165,8 @@
     "sigma": 9,
     "brightness": -0.1,
     "saturation": 0.85
-   }
+   },
+   "vertical_overrides": {}
   },
   "encode": {
    "vcodec": "h264_videotoolbox",

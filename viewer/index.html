@@ -166,6 +166,44 @@ video{width:100%;border-radius:5px;background:#000;display:block}
   border-left:2px solid var(--line);padding-left:.6rem}
 #log{font:11.5px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;max-height:15em;
   overflow:auto;color:var(--dim);word-break:break-word}
+/* คลังคลิปในขั้น 1 */
+.bar{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-bottom:.7rem}
+.seg{display:flex;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+.seg button{border:0;border-radius:0;background:var(--panel);padding:.3em .75em;
+  font-size:12.5px;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed=true]{background:var(--accent);color:#fff;font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(124px,1fr));gap:.45rem;
+  max-height:44em;overflow:auto}
+.cl{position:relative;border:1px solid var(--line);border-radius:6px;overflow:hidden;
+  background:var(--off);cursor:pointer}
+.cl img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#000}
+.cl.off img{opacity:.28;filter:grayscale(1)}
+.cl.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.cl .tag{position:absolute;top:3px;left:3px;display:flex;gap:2px}
+.cl .b{font-size:9.5px;font-weight:700;padding:.1em .4em;border-radius:3px;
+  background:rgba(0,0,0,.68);color:#fff;line-height:1.5}
+.cl .b.v{background:var(--broll)} .cl .b.r{background:var(--accent)}
+.cl .pick{position:absolute;top:3px;right:3px;width:17px;height:17px;margin:0;
+  accent-color:var(--accent);cursor:pointer}
+.cl .cap{display:flex;justify-content:space-between;gap:.3rem;padding:.2rem .35rem;
+  font-size:10.5px;color:var(--dim);background:var(--panel)}
+.cl .cap b{color:var(--fg);font-weight:600;font-size:11px}
+
+/* กล่องดูคลิปทีละตัว */
+.vwrap{background:#000;border-radius:6px;overflow:hidden;display:grid;place-items:center}
+.vwrap video{display:block;max-width:100%;max-height:46vh;width:auto}
+.vwrap.r90 video,.vwrap.r270 video{max-height:none;max-width:46vh}
+.r90 video{transform:rotate(90deg)} .r270 video{transform:rotate(-90deg)}
+.r180 video{transform:rotate(180deg)}
+.vmodes{display:grid;gap:.4rem}
+.vm{border:1px solid var(--line);border-radius:6px;padding:.5rem .6rem}
+.vm[aria-pressed=true]{border-color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 9%,transparent)}
+.vm .t{font-weight:600;font-size:12.5px;display:flex;gap:.5rem;align-items:center}
+.vm .d{font-size:11.5px;color:var(--dim);margin-top:.1rem}
+.vm video{width:100%;border-radius:4px;margin-top:.45rem;background:#000}
+
 /* กล่องรีเซ็ต */
 dialog{border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);
   color:var(--fg);padding:0;width:min(660px,92vw);box-shadow:0 12px 50px rgba(0,0,0,.32)}
@@ -219,6 +257,21 @@ dialog .df{padding:.7rem 1rem;border-top:1px solid var(--line);display:flex;gap:
   <div class="steps" id="steps"></div>
 </header>
 
+<dialog id="clip">
+  <div class="dh">
+    <h2 id="cl-title">คลิป</h2>
+    <div class="m" id="cl-sub"></div>
+  </div>
+  <div class="db" id="cl-body"></div>
+  <div class="df">
+    <label class="ck"><input type="checkbox" id="cl-pick"> เอาคลิปนี้</label>
+    <span class="spacer"></span>
+    <button id="cl-prev">← ก่อนหน้า</button>
+    <button id="cl-next">ถัดไป →</button>
+    <button id="cl-close">ปิด</button>
+  </div>
+</dialog>
+
 <dialog id="rst">
   <div class="dh">
     <h2 id="rst-title">รีเซ็ต</h2>
@@ -255,7 +308,9 @@ const $ = s => document.querySelector(s);
 const el = (t, cls, txt) => { const e = document.createElement(t);
   if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 
-let D = null, POOL = null, S = null, RV = null, RST = null;
+let D = null, POOL = null, S = null, RV = null, RST = null, CL = null;
+let clFilter = 'all', clOpen = -1;
+let clEdits = {pick: {}, rot: {}, vmode: {}};
 let step = 1, edits = {}, items = [], sel = -1, dragFrom = -1;
 let logSince = 0, polling = null, estTimer = null, taken = new Set();
 
@@ -297,10 +352,11 @@ const post = (p, b) => api(p, {method:'POST', headers:{'Content-Type':'applicati
 // ── โหลดสถานะทั้งหมด ─────────────────────────────────────────────
 
 async function load(keepEdits){
-  const [d, pool, st] = await Promise.all([
+  const [d, pool, st, cl] = await Promise.all([
     api('/api/setup'), api('/api/pool').catch(() => ({has:false, pieces:[]})),
-    api('/api/state').catch(() => null)]);
-  D = d; POOL = pool; S = st;
+    api('/api/state').catch(() => null),
+    api('/api/clips').catch(() => ({clips:[], summary:{total:0}}))]);
+  D = d; POOL = pool; S = st; CL = cl;
   if (!keepEdits) edits = {};
   if (S && S.timeline){ items = S.timeline.map(x => ({...x, off:false})); sel = -1; }
   $('#title').textContent = D.values['project.name'] || 'vcut';
@@ -385,27 +441,212 @@ function stepSource(box){
   c.appendChild(a);
   c.appendChild(advanced(['scan', 'thumbs']));
   box.appendChild(c);
-
-  if (POOL.has || (sc && sc.exists)) box.appendChild(clipGrid());
+  box.appendChild(clipBrowser());
 }
 
-function clipGrid(){
+// ── คลังคลิปดิบ · เลือก / กรอง / หมุน ──────────────────────────
+//
+// ทั้งสามอย่างที่แก้ตรงนี้เก็บเป็น config ไม่ใช่ไฟล์ cache — ค่าที่ยังไม่กด
+// บันทึกอยู่ใน clEdits เท่านั้น หน้าจอจึงกลับไปเป็นของเดิมได้ด้วยการ reload
+
+const clPicked = x => x.name in clEdits.pick ? clEdits.pick[x.name] : x.picked;
+const clRot    = x => x.name in clEdits.rot ? clEdits.rot[x.name] : x.rot;
+const clVmode  = x => x.name in clEdits.vmode ? clEdits.vmode[x.name] : x.vmode;
+const clDirty  = () => Object.keys(clEdits.pick).length + Object.keys(clEdits.rot).length
+                     + Object.keys(clEdits.vmode).length;
+// transpose จำนวนคี่ครั้งเท่านั้นที่สลับกว้าง/สูง — 180° ขนาดเท่าเดิม
+const swaps = o => ((o || '').split('transpose').length - 1) % 2 === 1;
+
+function clOrient(x){
+  return swaps(x.rot) === swaps(clRot(x)) ? x.orient : (x.orient === 'V' ? 'H' : 'V');
+}
+function clList(){
+  return (CL.clips || []).filter(x => clFilter === 'all' || clOrient(x) === clFilter);
+}
+function clSet(kind, name, v, orig){
+  if (v === orig) delete clEdits[kind][name]; else clEdits[kind][name] = v;
+}
+function btn(label, fn, cls){
+  const b = el('button', 'sm' + (cls ? ' ' + cls : ''), label);
+  b.onclick = fn; return b;
+}
+
+function clipBrowser(){
   const c = el('div', 'card');
-  c.append(el('h3', null, 'คลิปที่อ่านได้'));
-  const names = [...new Set((POOL.pieces || []).map(p => p.name))].slice(0, 120);
-  if (!names.length){ c.appendChild(el('p', 'empty', 'ยังไม่มีคลิป')); return c; }
-  const g = el('div');
-  g.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:.35rem';
-  names.forEach(n => {
-    const i = el('img'); i.src = `/thumb/${n}.jpg`; i.loading = 'lazy'; i.title = n;
-    i.style.cssText = 'width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:4px';
-    g.appendChild(i);
+  if (!CL || !(CL.clips || []).length){
+    c.append(el('h3', null, 'คลิปที่อ่านได้'),
+             el('p', 'empty', 'ยังไม่มีคลิป — กด "อ่านคลิปทั้งโฟลเดอร์" ก่อน'));
+    return c;
+  }
+  const s = CL.summary;
+  const on = CL.clips.filter(clPicked);
+  const mins = on.reduce((a, x) => a + x.dur, 0) / 60;
+  c.append(el('h3', null, `คลิปที่อ่านได้ — เอาไปทำต่อ ${on.length}/${s.total} คลิป · `
+    + `${mins.toFixed(1)} นาที`));
+
+  const bar = el('div', 'bar');
+  const seg = el('div', 'seg');
+  [['all', `ทั้งหมด ${s.total}`], ['H', `แนวนอน ${s.horizontal}`],
+   ['V', `แนวตั้ง ${s.vertical}`]].forEach(([k, lab]) => {
+    const b = el('button', null, lab);
+    b.setAttribute('aria-pressed', clFilter === k);
+    b.onclick = () => { clFilter = k; render(); };
+    seg.appendChild(b);
   });
+  bar.append(seg);
+  const shown = clList();
+  bar.append(btn('เลือกทั้งหมด', () => bulk(shown, true)),
+             btn('ไม่เอาทั้งหมด', () => bulk(shown, false)),
+             btn('กลับด้าน', () => bulk(shown, null)),
+             el('span', 'spacer'));
+  const n = clDirty();
+  const sv = el('button', 'primary', n ? `บันทึกการเลือก (${n})` : 'บันทึกการเลือก');
+  sv.disabled = !n; sv.onclick = saveClips;
+  bar.append(sv);
+  if (n) bar.append(btn('ทิ้งที่แก้', () => {
+    clEdits = {pick:{}, rot:{}, vmode:{}}; render(); }));
+  c.appendChild(bar);
+
+  const g = el('div', 'grid');
+  shown.forEach((x, i) => g.appendChild(clCell(x, i)));
   c.appendChild(g);
-  const total = [...new Set((POOL.pieces || []).map(p => p.name))].length;
-  if (total > names.length)
-    c.appendChild(el('p', 'note', `แสดง ${names.length} จาก ${total} คลิป`));
+  if (clFilter !== 'all')
+    c.appendChild(el('p', 'note', `กรองอยู่ — แสดง ${shown.length} จาก ${s.total} คลิป`));
   return c;
+}
+
+function bulk(list, want){
+  list.forEach(x => clSet('pick', x.name,
+    want === null ? !clPicked(x) : want, x.picked));
+  render();
+}
+
+function clCell(x, i){
+  const on = clPicked(x), or = clOrient(x);
+  const d = el('div', 'cl' + (on ? '' : ' off') + (i === clOpen ? ' sel' : ''));
+  const img = el('img'); img.loading = 'lazy'; img.src = `/thumb/${x.name}.jpg`;
+  img.alt = x.name;
+  d.append(img);
+  const tag = el('div', 'tag');
+  if (or === 'V') tag.append(el('span', 'b v', 'ตั้ง'));
+  if (clRot(x)) tag.append(el('span', 'b r', '↻'));
+  if (clVmode(x)) tag.append(el('span', 'b', vmShort(clVmode(x))));
+  if (tag.children.length) d.append(tag);
+  const cb = el('input'); cb.type = 'checkbox'; cb.className = 'pick'; cb.checked = on;
+  cb.title = 'เอาคลิปนี้ไปทำต่อในขั้น 2';
+  cb.onclick = e => { e.stopPropagation(); clSet('pick', x.name, cb.checked, x.picked);
+                      render(); };
+  d.append(cb);
+  const cap = el('div', 'cap');
+  cap.append(el('b', null, x.name.replace(/^IMG_/, '')),
+             el('span', null, x.dur.toFixed(1) + 'ว'));
+  d.append(cap);
+  d.onclick = () => openClip(i);
+  return d;
+}
+
+const vmShort = m => m === 'blur_pad' ? 'เบลอ' : m === 'pillarbox' ? 'ย่อ'
+  : m === 'crop' ? 'ครอป' : m;
+
+// ── ดูคลิปทีละตัว · เล่น · หมุน · เลือกโหมดแนวตั้ง ────────────────
+
+function openClip(i){ clOpen = i; drawClip(); $('#clip').showModal(); }
+
+function drawClip(){
+  const list = clList(), x = list[clOpen];
+  if (!x) return $('#clip').close();
+  const or = clOrient(x), rot = clRot(x);
+  $('#cl-title').textContent = x.name;
+  $('#cl-sub').textContent = `${x.w}×${x.h} · ${x.dur.toFixed(1)} วิ · ${x.codec}`
+    + ` · ${(x.size / 1e6).toFixed(0)} MB · ${or === 'V' ? 'แนวตั้ง' : 'แนวนอน'}`;
+  const b = $('#cl-body'); b.innerHTML = '';
+
+  const spin = rot === 'transpose=1' ? ' r90' : rot === 'transpose=2' ? ' r270'
+             : rot === 'transpose=1,transpose=1' ? ' r180' : '';
+  const w = el('div', 'vwrap' + spin);
+  const v = el('video'); v.controls = true; v.preload = 'metadata'; v.playsInline = true;
+  v.src = `/clip/${x.name}`;
+  v.onerror = () => { w.innerHTML = '';
+    w.append(el('p', 'note', 'เบราว์เซอร์เล่นไฟล์นี้ไม่ได้ (codec ' + x.codec
+      + ') — ลองเปิดด้วย Safari หรือดูจากตัวอย่างที่ ffmpeg ทำให้ข้างล่าง')); };
+  w.append(v); b.append(w);
+
+  const s1 = el('div', 'sect');
+  s1.append(el('h4', null, 'หมุนคลิป'));
+  const seg = el('div', 'seg');
+  CL.rotations.forEach(r => {
+    const bt = el('button', null, r.label);
+    bt.setAttribute('aria-pressed', rot === r.value);
+    bt.onclick = () => { clSet('rot', x.name, r.value, x.rot); drawClip(); render(); };
+    seg.append(bt);
+  });
+  s1.append(seg);
+  s1.append(el('p', 'note', or === x.orient
+    ? 'ภาพข้างบนหมุนด้วยเบราว์เซอร์ให้ดูมุมคร่าว ๆ — ตอนตัดจริง ffmpeg หมุนให้เหมือนกัน'
+    : `หมุนแล้วกลายเป็น${or === 'V' ? 'แนวตั้ง' : 'แนวนอน'} — ชิ้นจากคลิปนี้ต้อง render ใหม่`
+      + ' แต่ไม่ต้องอ่านคลิปใหม่ทั้งโฟลเดอร์'));
+  b.append(s1);
+
+  if (or === 'V'){
+    const cur = clVmode(x) || CL.vertical_default;
+    const s2 = el('div', 'sect');
+    s2.append(el('h4', null, 'คลิปแนวตั้ง → จอ 16:9 เอาแบบไหน'));
+    const wrap = el('div', 'vmodes');
+    CL.vmodes.forEach(m => {
+      const card = el('div', 'vm');
+      card.setAttribute('aria-pressed', cur === m.value);
+      const t = el('div', 't');
+      const rb = el('input'); rb.type = 'radio'; rb.name = 'vm'; rb.checked = cur === m.value;
+      rb.onchange = () => {
+        // ตรงกับค่ากลางอยู่แล้ว = ไม่ต้องเขียนลงไฟล์ ปล่อยให้ตามค่ากลางไป
+        clSet('vmode', x.name, m.value === CL.vertical_default ? '' : m.value, x.vmode);
+        drawClip(); render();
+      };
+      t.append(rb, document.createTextNode(m.label));
+      if (m.value === CL.vertical_default) t.append(el('span', 'sub', '· ค่ากลาง'));
+      card.append(t, el('div', 'd', m.help));
+      const go = el('button', 'sm', 'ดูของจริง');
+      go.onclick = () => go.replaceWith(realPreview(x.name, m.value));
+      card.append(go);
+      wrap.append(card);
+    });
+    s2.append(wrap);
+    s2.append(el('p', 'note', '"ดูของจริง" ตัด 3 วินาทีกลางคลิปด้วยฟิลเตอร์ชุดเดียวกับ'
+      + 'ตอน render จริง ครั้งแรกรอ ~1 วินาที หลังจากนั้นเก็บ cache ไว้'));
+    b.append(s2);
+  }
+  $('#cl-pick').checked = clPicked(x);
+  $('#cl-prev').disabled = clOpen <= 0;
+  $('#cl-next').disabled = clOpen >= list.length - 1;
+}
+
+function realPreview(name, mode){
+  const box = el('div');
+  const msg = el('div', 'd', 'กำลังทำตัวอย่าง…');
+  const v = el('video');
+  v.controls = true; v.loop = true; v.muted = true; v.playsInline = true;
+  v.src = `/preview/${name}/${mode}`;
+  v.oncanplay = () => { msg.remove(); v.play().catch(() => {}); };
+  v.onerror = () => { msg.textContent = 'ทำตัวอย่างไม่สำเร็จ — ดู log ในเทอร์มินัล'; };
+  box.append(msg, v);
+  return box;
+}
+
+async function saveClips(){
+  const exclude = CL.clips.filter(x => !clPicked(x)).map(x => x.name);
+  if (exclude.length >= CL.clips.length)
+    return toast('ต้องเหลืออย่างน้อย 1 คลิป', true);
+  try {
+    const r = await post('/api/clips', {exclude,
+      rotations: {...clEdits.rot}, vmodes: {...clEdits.vmode}});
+    clEdits = {pick:{}, rot:{}, vmode:{}};
+    const s = r.clips.summary;
+    let msg = `บันทึกแล้ว · เอาไปทำต่อ ${s.picked}/${s.total} คลิป`;
+    if (r.retagged.length)
+      msg += ` · หมุนใหม่ ${r.retagged.length} คลิป (ไม่ต้องอ่านคลิปใหม่)`;
+    toast(msg);
+    await load(true);
+  } catch(e){ toast(e.message, true); }
 }
 
 // ── ขั้น 2 · เตรียมวิดีโอ ────────────────────────────────────────
@@ -682,6 +923,8 @@ function advanced(stages){
   const d = el('details', 'adv');
   d.appendChild(el('summary', null, 'ตั้งค่าเพิ่มเติม'));
   const fs = D.fields.filter(f => stages.includes(f.stage)
+    // type "clips" = เลือกด้วยการกดที่ตัวคลิปในขั้น 1 ไม่ใช่ช่องกรอก
+    && f.type !== 'clips'
     && !['project.source','project.name','project.out','ai.enabled','ai.goal',
          'ai.tasks','ai.model','prepare.drop_silent','compose.mode']
         .includes(f.key)
@@ -1081,6 +1324,20 @@ async function doRestore(id){
   } catch(e){ toast(e.message, true); }
 }
 
+$('#cl-close').onclick = () => $('#clip').close();
+$('#cl-prev').onclick = () => { clOpen--; drawClip(); render(); };
+$('#cl-next').onclick = () => { clOpen++; drawClip(); render(); };
+$('#cl-pick').onchange = () => {
+  const x = clList()[clOpen];
+  if (x){ clSet('pick', x.name, $('#cl-pick').checked, x.picked); render(); }
+};
+$('#clip').addEventListener('click', e => { if (e.target === $('#clip')) $('#clip').close(); });
+// วิดีโอที่เล่นค้างไว้ต้องหยุด ไม่งั้นเสียงดังต่อหลังปิดกล่อง
+$('#clip').addEventListener('close', () => {
+  $('#cl-body').querySelectorAll('video').forEach(v => { v.pause(); v.removeAttribute('src'); });
+  clOpen = -1; if (step === 1) render();
+});
+
 $('#reset').onclick = () => openReset('all');
 $('#rst-go').onclick = doReset;
 $('#rst-close').onclick = () => $('#rst').close();
@@ -1089,7 +1346,8 @@ $('#rst').addEventListener('click', e => { if (e.target === $('#rst')) $('#rst')
 $('#save').onclick = saveConfig;
 $('#run').onclick = () => runStep('plan');
 window.addEventListener('beforeunload', e => {
-  if (Object.keys(edits).length || tlDirty()){ e.preventDefault(); e.returnValue = ''; }
+  if (Object.keys(edits).length || tlDirty() || clDirty()){
+    e.preventDefault(); e.returnValue = ''; }
 });
 
 load().then(() => {

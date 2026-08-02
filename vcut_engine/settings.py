@@ -115,6 +115,12 @@ FIELDS = [
     F("scan.workers", "จำนวนงานพร้อมกัน", "int", "free", "scan", min=1, max=12, step=1,
       help="ไม่มีผลต่อผลลัพธ์ มีผลแค่ความเร็ว — M3 8GB: 6 กำลังดี"),
 
+    # ── สามค่านี้เลือกด้วยการกดที่ตัวคลิปในขั้น 1 ไม่ใช่กรอกในฟอร์ม ──
+    # อยู่ใน FIELDS เพื่อให้ปุ่มรีเซ็ตกับตัวจับ "ค่าเปลี่ยนไปแล้ว" มองเห็น
+    F("scan.exclude", "คลิปที่ไม่เอา", "clips", "edl", "scan"),
+    F("scan.rotation_overrides", "คลิปที่หมุนเอง", "clips", "scan", "scan"),
+    F("video.vertical_overrides", "โหมดแนวตั้งรายคลิป", "clips", "render", "render"),
+
     # ── ถอดเสียง ──
     F("listen.enabled", "ถอดเสียง", "bool", "listen", "listen",
       help="ปิด = ทุกคลิปกลายเป็นช่วงวิวหมด ไม่มีช่วงพูดเลย"),
@@ -265,8 +271,8 @@ STEP_PARAMS = {
     "ai": ["ai.model", "ai.tasks", "ai.sheets", "ai.transcript_chars",
            "ai.batch_clips", "ai.goal"],
     "prepare": ["talk", "broll", "classify.min_speech_total", "prepare.drop_silent",
-                "ai.enabled", "ai.apply", "audio.target_lufs_talk",
-                "audio.target_lufs_broll"],
+                "scan.exclude", "ai.enabled", "ai.apply",
+                "audio.target_lufs_talk", "audio.target_lufs_broll"],
 }
 
 

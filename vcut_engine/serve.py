@@ -28,7 +28,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from . import config, reset, settings
+from . import clips, config, reset, settings
 from .util import c, info, read_json, warn, write_json
 
 VIEWER = Path(__file__).resolve().parent.parent / "viewer" / "index.html"
@@ -465,6 +465,27 @@ def make_handler(ctx, job):
             if p == "/api/pool":
                 return self._json(build_pool(ctx))
 
+            if p == "/api/clips":
+                return self._json(clips.view(ctx))
+
+            if p.startswith("/clip/"):
+                name = p[len("/clip/"):]
+                if not SAFE_NAME.match(name):
+                    return self._send(400, b"bad name", "text/plain")
+                src = clips.source_path(ctx, name)
+                if not src:
+                    return self._send(404, b"not found", "text/plain")
+                return self._range_file(src)
+
+            if p.startswith("/preview/"):
+                name, _, mode = p[len("/preview/"):].partition("/")
+                if not SAFE_NAME.match(name) or not SAFE_NAME.match(mode or "x"):
+                    return self._send(400, b"bad name", "text/plain")
+                dst, err = clips.preview(ctx, name, mode)
+                if err:
+                    return self._send(404, err.encode(), "text/plain; charset=utf-8")
+                return self._range_file(dst)
+
             if p == "/api/reset":
                 q = dict(x.split("=", 1) for x in u.query.split("&") if "=" in x)
                 scope = unquote(q.get("scope", "all"))
@@ -580,6 +601,20 @@ def make_handler(ctx, job):
                 except SystemExit:
                     return self._json({"error": "กู้คืนแล้วแต่โหลด config กลับไม่ได้"}, 500)
                 return self._json({"ok": True, **out, "setup": build_setup(ctx)})
+
+            if p == "/api/clips":
+                if job.running:
+                    return self._json({"error": "มีงานกำลังรันอยู่ — หยุดก่อน"}, 409)
+                out, err = clips.save(ctx, project_rel(ctx), payload)
+                if err:
+                    return self._json({"error": err}, 400)
+                try:
+                    reload_ctx(ctx)
+                except SystemExit:
+                    return self._json({"error": "บันทึกแล้วแต่โหลด config กลับไม่ได้"}, 500)
+                # manifest ต้องตามหลัง config เสมอ ไม่ใช่ล่วงหน้า
+                out["retagged"] = clips.sync_manifest(ctx)
+                return self._json({"ok": True, **out, "clips": clips.view(ctx)})
 
             if p == "/api/estimate":
                 try:

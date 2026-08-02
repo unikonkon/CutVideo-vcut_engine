@@ -136,10 +136,16 @@ def run(ctx, write=True):
     min_dur = float(bcfg.get("min_source_duration", 0) or 0)
     drop_silent = bool(ctx.get("prepare.drop_silent", False))
 
+    # คลิปที่ผู้ใช้เอาออกตั้งแต่ขั้น 1 — ไม่เข้าคลังเลย ไม่ใช่เข้ามาแล้วติดป้าย
+    # เพราะมันคือ "ไม่เอา" ไม่ใช่ "ตัวกรองคัดออก" ที่ยังหยิบกลับได้ในขั้น 3
+    excl = set(ctx.get("scan.exclude", []) or [])
+
     ch_title = {ch["id"]: ch["title"] for ch in (adv or {}).get("chapters", [])}
     pieces, trim_empty = [], []
 
     for cl in sorted(man["clips"], key=lambda x: (x.get("num", 0), x["name"])):
+        if cl["name"] in excl:
+            continue
         segs = tr.get(cl["name"], [])
         speech = round(sum(b - a for a, b, _ in segs), 2)
         kind = "TALK" if (segs and speech >= thr) else "BROLL"
@@ -216,6 +222,7 @@ def run(ctx, write=True):
         "ai": {"used": bool(adv), "goal": (adv or {}).get("goal", "")},
         "summary": {
             "clips": len(man["clips"]),
+            "deselected": sum(1 for cl in man["clips"] if cl["name"] in excl),
             "pieces": len(pieces),
             "usable": len(ok),
             "excluded": len(pieces) - len(ok),
@@ -236,7 +243,9 @@ def run(ctx, write=True):
 def report(pool):
     s = pool["summary"]
     info("─" * 62)
-    info(f"  คลิปทั้งหมด        {s['clips']:>4}")
+    info(f"  คลิปทั้งหมด        {s['clips']:>4}"
+         + (c(f"   (ไม่ได้เลือกไว้ในขั้น 1 · {s['deselected']} คลิป)", "d")
+            if s.get("deselected") else ""))
     info(f"  ชิ้นที่เตรียมได้     {s['usable']:>4}   "
          f"({s['talk']} พูด + {s['broll']} วิว)")
     info(f"  ช่วงพูด           {s['duration_talk'] / 60:>6.1f} นาที")

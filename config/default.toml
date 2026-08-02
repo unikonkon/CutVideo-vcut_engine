@@ -20,6 +20,12 @@ bright_fps   = 2
 
 # metadata rotation โกหก — ตรวจด้วยตาแล้วต้องบังคับหมุนเอง
 # transpose=2 หมุนทวนเข็ม 90° | transpose=1 ตามเข็ม 90° | hflip,vflip กลับหัว
+# คลิปที่ไม่เอาเลย — เลือกด้วยการติ๊กที่ตัวคลิปในขั้น 1 ไม่ต้องมาแก้ที่นี่
+# คลิปในนี้ไม่เข้าคลังของขั้น 2 เลย (ต่างจากตัวกรองใน [broll] ที่ยังหยิบกลับได้)
+exclude = []
+
+# metadata rotation ของบางคลิปโกหก — บังคับหมุนเองรายคลิป
+# กดหมุนที่ตัวคลิปในขั้น 1 ได้ ไม่ต้อง scan ใหม่ (ดู clips.sync_manifest)
 [scan.rotation_overrides]
 IMG_7189 = "transpose=2"
 IMG_7405 = "transpose=2"
@@ -133,7 +139,7 @@ avoid_adjacent = true    # ห้ามเลือกวิวสองชิ�
 width  = 1920
 height = 1080
 fps    = "60000/1001"    # 59.94 CFR — บังคับให้ทุกคลิปเท่ากัน กัน sync หลุด
-vertical_mode = "blur_pad"   # blur_pad | pillarbox | crop
+vertical_mode = "blur_pad"   # blur_pad | pillarbox | crop — ค่ากลางของทั้งเรื่อง
 scale_flags   = "lanczos"
 
 # พื้นหลังเบลอสำหรับคลิปแนวตั้ง — ย่อก่อนเบลอแล้วค่อยขยายกลับ เร็วกว่าเบลอที่ 1080p หลายเท่า
@@ -142,6 +148,10 @@ scale      = "480:270"
 sigma      = 9
 brightness = -0.10
 saturation = 0.85
+
+# ทับ vertical_mode เป็นราย ๆ — เลือกที่ตัวคลิปในขั้น 1 พร้อมดูตัวอย่างของจริง
+# เช่น  IMG_7079 = "pillarbox"
+[video.vertical_overrides]
 
 
 # ─────────────────────────── ENCODE ───────────────────────────

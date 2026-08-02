@@ -25,7 +25,10 @@ def build_vfilter(seg, ctx):
     tail = "setsar=1,format=yuv420p"
 
     if seg["orient"] == "V":
-        mode = ctx.get("video.vertical_mode", "blur_pad")
+        # เลือกได้ทีละคลิปตั้งแต่ขั้น 1 — ไม่ได้ก็ตกมาใช้ค่ากลางของทั้งเรื่อง
+        mode = (seg.get("vertical_mode")
+                or (ctx.get("video.vertical_overrides", {}) or {}).get(seg["name"])
+                or ctx.get("video.vertical_mode", "blur_pad"))
         if mode == "blur_pad":
             b = ctx.get("video.blur", {})
             bw, bh = str(b.get("scale", "480:270")).split(":")
