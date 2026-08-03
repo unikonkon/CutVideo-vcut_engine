@@ -66,6 +66,15 @@ def proposed_ctx(ctx, values):
 
 # ─────────────────────────── งานที่สั่งจากหน้าเว็บ ───────────────────────────
 
+# แถบความคืบหน้าที่ util.Progress พิมพ์ออกมา — "ถอดเสียง ███░░ 12/284  เหลือ ~1:20  IMG_x"
+# text=True แปลง \r เป็น \n ให้แล้ว แต่ละครั้งที่ขยับจึงมาถึงเป็นบรรทัดของตัวเอง
+_BAR = re.compile(r"^\s*(?P<label>[^█░]*?)\s*[█░]{4,}\s+(?P<n>\d+)/(?P<total>\d+)"
+                  r"\s+เหลือ\s*~(?P<eta>\S+)\s*(?P<note>.*?)\s*$")
+# ai.py ไม่มีแถบ มีแต่ "· ก้อน 2/8 (30 KB) …" — ขั้นที่รอนานที่สุดจะได้บอกได้ว่าถึงไหน
+_CHUNK = re.compile(r"^\s*·\s*ก้อน\s+(\d+)/(\d+)")
+_TASK = re.compile(r"^\s*→\s*(\S.*?)\s{2,}")
+
+
 class Job:
     """รันได้ทีละงาน — log ไหลเข้ามาทางบรรทัด ให้หน้าเว็บ poll เอา"""
 
@@ -76,8 +85,13 @@ class Job:
         self.proc = None
         self.code = None
         self.started = 0.0
+        self.took = 0.0            # เวลาที่ใช้ของงานล่าสุดที่จบไปแล้ว
         self.active = False        # True ตั้งแต่รับงานจนคิวคำสั่งหมด
         self.stopped = False       # True เมื่อคนกดหยุดเอง (ไม่ใช่งานพัง)
+        self.cmds = []             # ชื่อขั้นของทุกคำสั่งในคิว เช่น ["listen","ai"]
+        self.at = 0                # กำลังทำคำสั่งที่เท่าไร (1 = ตัวแรก)
+        self.prog = None           # แถบความคืบหน้าล่าสุด (dict) หรือ None
+        self.task = ""             # งานย่อยที่กำลังทำ (บรรทัด "→ ..." ของ ai.py)
         self._queue, self._cwd = [], "."
 
     @property
@@ -97,6 +111,9 @@ class Job:
             self._cwd = cwd
             self.active = True
             self.stopped = False
+            # argv = [python, vcut, <ชื่อขั้น>, ...] — เก็บชื่อไว้บอกว่าทำถึงคำสั่งไหน
+            self.cmds = [a[2] if len(a) > 2 else "" for a in argvs]
+            self.at, self.prog, self.took, self.task = 0, None, 0.0, ""
         threading.Thread(target=self._pump, daemon=True).start()
         return True
 
@@ -126,17 +143,34 @@ class Job:
         while self._queue:
             argv = self._queue.pop(0)
             with self.lock:
+                self.at += 1
+                self.prog = None
                 self.lines.append(f"$ {' '.join(argv[1:])}")
                 self.proc = subprocess.Popen(
                     argv, cwd=str(self._cwd), stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT, text=True, bufsize=1)
             proc = self.proc
             for raw in proc.stdout:
-                # แถบความคืบหน้าของ engine เขียนทับบรรทัดเดิมด้วย \r — เอาแค่ท่อนหลังสุด
                 line = raw.rstrip("\n").split("\r")[-1].rstrip()
                 if not line:
                     continue
+                m, mc = _BAR.match(line), _CHUNK.match(line)
                 with self.lock:
+                    if m:
+                        # แถบขยับวินาทีละหลายครั้ง — เก็บเป็นตัวเลขให้หน้าเว็บวาดเอง
+                        # ไม่ยัดลง log ไม่งั้นข้อความจริงจะจมหายไปในแถบเป็นพันบรรทัด
+                        self.prog = {"label": m["label"], "n": int(m["n"]),
+                                     "total": int(m["total"]), "eta": m["eta"],
+                                     "note": m["note"]}
+                        continue
+                    if mc:
+                        self.prog = {"label": self.task or "ก้อน", "n": int(mc[1]),
+                                     "total": int(mc[2]), "eta": "", "note": ""}
+                    else:
+                        self.prog = None      # มีข้อความอื่นแล้ว = แถบนั้นจบไปแล้ว
+                        mt = _TASK.match(line)
+                        if mt:
+                            self.task = mt[1][:40]
                     self.lines.append(line)
                     if len(self.lines) > 4000:
                         del self.lines[:1000]
@@ -147,15 +181,24 @@ class Job:
         with self.lock:
             self.code = code
             self.active = False
+            self.prog = None
+            self.took = time.time() - self.started
             secs = f"({time.time() - self.started:.0f} วินาที)"
             self.lines.append(f"— หยุดแล้ว {secs} —" if self.stopped
                               else f"— จบด้วยรหัส {code} {secs} —")
 
     def state(self, since=0):
         with self.lock:
+            cmd = self.cmds[self.at - 1] if 0 < self.at <= len(self.cmds) else ""
             return {"running": self.running, "step": self.step, "code": self.code,
                     "stopped": self.stopped,
-                    "total": len(self.lines), "lines": self.lines[since:]}
+                    "total": len(self.lines), "lines": self.lines[since:],
+                    # กำลังทำอะไรอยู่ · คำสั่งที่เท่าไรจากทั้งหมด · ไปถึงไหนแล้ว
+                    "cmd": cmd, "cmd_label": settings.STEP_LABEL.get(cmd, cmd),
+                    "at": self.at, "of": len(self.cmds),
+                    "elapsed": round((time.time() - self.started) if self.running
+                                     else self.took, 1),
+                    "progress": self.prog}
 
 
 # ─────────────────────────── ตรวจ EDL ที่ส่งกลับมา ───────────────────────────

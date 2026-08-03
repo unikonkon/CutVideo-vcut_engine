@@ -166,6 +166,29 @@ video{width:100%;border-radius:5px;background:#000;display:block}
   border-left:2px solid var(--line);padding-left:.6rem}
 #log{font:11.5px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;max-height:15em;
   overflow:auto;color:var(--dim);word-break:break-word}
+/* กำลังทำงานอยู่ไหม ทำถึงไหนแล้ว — อยู่เหนือบันทึก จะได้เห็นก่อนตัวหนังสือ */
+#jobst{margin-bottom:.55rem}
+#jobst:empty{display:none}
+#jobst .hd{display:flex;align-items:center;gap:.4rem;font-size:12.5px;font-weight:600}
+#jobst .hd .nth,#jobst .hd .sp{font-weight:400;color:var(--dim);
+  font-variant-numeric:tabular-nums;font-size:11.5px}
+#jobst .hd .sp{margin-left:auto}
+#jobst .sub{font-size:11.5px;color:var(--dim);margin-top:.15rem;
+  font-variant-numeric:tabular-nums}
+#jobst .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);
+  flex:0 0 auto;animation:pulse 1.1s ease-in-out infinite}
+#jobst .dot.ok{background:var(--ok);animation:none}
+#jobst .dot.bad{background:var(--warn);animation:none}
+#jobst .dot.off{background:var(--line);animation:none}
+@keyframes pulse{0%,100%{opacity:1} 50%{opacity:.25}}
+.pbar{height:6px;border-radius:3px;background:var(--off);overflow:hidden;margin-top:.4rem}
+.pbar i{display:block;height:100%;background:var(--accent);border-radius:3px;
+  transition:width .25s linear}
+.pbar.wait i{width:35%;animation:slide 1.4s ease-in-out infinite}
+@keyframes slide{0%{margin-left:-35%} 100%{margin-left:100%}}
+button.busy{position:relative}
+button.busy::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2px;
+  background:var(--accent);animation:pulse 1.1s ease-in-out infinite}
 /* คลังคลิปในขั้น 1 */
 .bar{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-bottom:.7rem}
 .seg{display:flex;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
@@ -331,6 +354,7 @@ dialog .df{padding:.7rem 1rem;border-top:1px solid var(--line);display:flex;gap:
     </div>
     <div class="card">
       <h3>บันทึกการทำงาน</h3>
+      <div id="jobst"></div>
       <div id="log">ยังไม่มีงานที่สั่ง</div>
     </div>
   </aside>
@@ -470,6 +494,7 @@ function stepSource(box){
   });
   const a = el('div', 'acts');
   const btn = el('button', 'primary runbtn', 'อ่านคลิปทั้งโฟลเดอร์');
+  btn.dataset.step = 'source';
   btn.onclick = () => runStep('source');
   a.append(btn);
   const sc = D.steps.find(s => s.id === 'scan');
@@ -783,6 +808,7 @@ function stepPrepare(box){
     const s = D.steps.find(x => x.id === id) || {};
     const b = el('button', 'runbtn' + (id === 'prepare' ? ' primary' : ''), lab);
     b.title = tip;
+    b.dataset.step = id;          // poll() เอาไปขีดเส้นกะพริบใต้ปุ่มที่กำลังรัน
     b.onclick = () => runStep(id);
     jobs.appendChild(b);
     if (s.exists) jobs.appendChild(el('span', 'note', s.summary));
@@ -1066,9 +1092,11 @@ function stepCompose(box){
 
   const a = el('div', 'acts');
   const go = el('button', 'primary runbtn', mode === 'ai' ? 'ให้ AI จัดให้' : 'จัดใหม่');
+  go.dataset.step = 'compose';
   go.onclick = () => doCompose(mode);
   a.append(go);
   const b2 = el('button', 'runbtn', 'สร้างไฟล์');
+  b2.dataset.step = 'render';
   b2.onclick = buildFile;
   a.append(b2);
   if (S && S.summary && S.summary.segments)
@@ -1414,6 +1442,48 @@ async function buildFile(){
   if (confirm(lines.join('\n'))) runStep('plan');
 }
 
+// ── กำลังทำงานอยู่ไหม · ทำถึงไหนแล้ว ────────────────────────────
+//
+// แถบความคืบหน้าของเอนจินขยับวินาทีละหลายครั้ง เซิร์ฟเวอร์จึงไม่ยัดมันลง log
+// แต่แปลงเป็นตัวเลขส่งมาใน j.progress แล้วให้ที่นี่วาดเป็นแถบจริง
+
+function renderJob(j){
+  const box = $('#jobst'); box.innerHTML = '';
+  if (!j.running && !j.at) return;              // ยังไม่เคยสั่งอะไรเลย
+
+  const hd = el('div', 'hd');
+  const cls = j.running ? '' : j.stopped ? ' off' : j.code === 0 ? ' ok' : ' bad';
+  hd.append(el('span', 'dot' + cls));
+  const what = j.cmd_label || j.step || '';
+  hd.append(el('span', null,
+    j.running ? `กำลัง${what}…` : j.stopped ? `หยุดแล้ว — ค้างที่${what}`
+    : j.code === 0 ? 'เสร็จแล้ว' : `ล้มเหลวที่${what}`));
+  if (j.of > 1) hd.append(el('span', 'nth', `คำสั่งที่ ${j.at}/${j.of}`));
+  hd.append(el('span', 'sp', hhmmss(j.elapsed || 0)));
+  box.append(hd);
+
+  const p = j.progress;
+  if (j.running){
+    const bar = el('div', 'pbar' + (p ? '' : ' wait'));
+    const fill = el('i');
+    if (p) fill.style.width = (p.total ? Math.min(100, p.n / p.total * 100) : 0) + '%';
+    bar.append(fill); box.append(bar);
+    box.append(el('div', 'sub', p
+      ? `${p.label} ${p.n}/${p.total} (${Math.round(p.n / p.total * 100)}%)`
+        + (p.eta ? ` · เหลือ ~${p.eta}` : '') + (p.note ? ' · ' + p.note : '')
+      // prepare/compose เร็วจนไม่มีแถบ — บอกตรง ๆ ดีกว่าปล่อยให้เดาว่าค้างไหม
+      : 'ยังไม่รายงานความคืบหน้า — ดูบรรทัดล่าสุดข้างล่าง'));
+  } else if (j.of > 1){
+    box.append(el('div', 'sub', `ทำไป ${j.at}/${j.of} คำสั่ง`));
+  }
+}
+
+const hhmmss = s => {
+  s = Math.max(0, Math.round(s));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+  return (h ? `${h}:${String(m).padStart(2,'0')}` : `${m}`) + ':' + String(x).padStart(2,'0');
+};
+
 async function poll(){
   clearTimeout(polling);
   let j;
@@ -1423,8 +1493,15 @@ async function poll(){
     const e = $('#log'); e.textContent += j.lines.join('\n') + '\n';
     e.scrollTop = e.scrollHeight;
   }
-  document.querySelectorAll('.runbtn, #run, #reset').forEach(b => b.disabled = j.running);
-  $('#run').textContent = j.running ? `กำลัง ${j.step}…` : 'ทำทุกขั้น';
+  renderJob(j);
+  document.querySelectorAll('.runbtn, #run, #reset').forEach(b => {
+    b.disabled = j.running;
+    // ปุ่มที่กำลังทำงานอยู่ขีดเส้นกะพริบไว้ จะได้รู้ว่ากดอันไหนไป
+    b.classList.toggle('busy', !!(j.running && b.dataset.step
+                                  && (b.dataset.step === j.cmd
+                                      || b.dataset.step === j.step)));
+  });
+  $('#run').textContent = j.running ? `กำลัง ${j.cmd_label || j.step}…` : 'ทำทุกขั้น';
   $('#stop').hidden = !j.running;
   $('#stop').disabled = false;
   if (j.running) polling = setTimeout(poll, 800);
