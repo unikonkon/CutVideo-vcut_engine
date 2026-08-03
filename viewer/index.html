@@ -587,10 +587,10 @@ function clipBrowser(){
     notes.push(`กรองอยู่ — แสดง ${shown.length} จาก ${s.total} คลิป`
       + ' (ลากตอนกรองก็ได้ ตำแหน่งอิงคลิปที่ปล่อยทับ)');
   if (custom && val('order.mode') !== 'filename')
-    notes.push(`ลำดับที่จัดเองจะยังไม่มีผลกับหนัง เพราะขั้น 2 ตั้ง "เรียงลำดับตาม"`
+    notes.push(`ลำดับที่จัดเองจะยังไม่มีผลกับหนัง เพราะขั้น 3 ตั้ง "เรียงลำดับตาม"`
       + ` เป็น "${orderLabel(val('order.mode'))}" อยู่`);
   else if (custom && val('order.reverse'))
-    notes.push('ขั้น 2 เปิด "กลับลำดับ" อยู่ — หนังจะเรียงจากท้ายรายการนี้ขึ้นมา');
+    notes.push('ขั้น 3 เปิด "กลับลำดับ" อยู่ — หนังจะเรียงจากท้ายรายการนี้ขึ้นมา');
   else if (custom)
     notes.push('หนังจะเรียงตามลำดับนี้ — กด "รวมเป็นหนัง" ในขั้น 3 ใหม่หลังบันทึก');
   notes.forEach(t => c.appendChild(el('p', 'note', t)));
@@ -1013,7 +1013,7 @@ function pieceStep(d){
 // ── ขั้น 3 · รวมเป็นหนัง ─────────────────────────────────────────
 
 const MODE_HELP = {
-  all: ['เอาทั้งหมด', 'ทุกชิ้นในคลัง เรียงตามลำดับไฟล์'],
+  all: ['เอาทั้งหมด', 'ทุกชิ้นในคลัง เรียงตามลำดับจากขั้น 1'],
   pattern: ['สลับตามรูปแบบ', 'พูด → วิว → วิว วนไป'],
   budget: ['กำหนดเวลารวม', 'พูดกี่นาที วิวกี่นาที'],
   numbers: ['ตามเลขคลิป', 'เช่น 7068-7200, 7305'],
@@ -1027,6 +1027,13 @@ const MODE_FIELDS = {
   numbers: ['compose.numbers'], timerange: ['compose.from', 'compose.to'],
   manual: [], ai: ['compose.context'],
 };
+// โหมดที่คืนลำดับมาเองแล้ว (compose.py: keeps_order = True) — [order] ไม่มีผล
+const OWN_ORDER = {
+  pattern: 'สลับพูด/วิว ตามรูปแบบข้างบน โดยแต่ละแบบยังเดินตามลำดับจากขั้น 1',
+  manual: 'เรียงตามที่ติ๊กเลือกเองในคลังข้างล่าง',
+  ai: 'AI จัดลำดับมาให้เองจากความหมายของคลิป',
+};
+const ORDER_KEYS = ['order.mode', 'order.reverse'];
 
 function stepCompose(box){
   const mode = val('compose.mode') || 'all';
@@ -1048,6 +1055,14 @@ function stepCompose(box){
   });
   if (mode === 'manual')
     c.appendChild(el('p', 'note', 'ติ๊กชิ้นที่ต้องการในคลังข้างล่าง แล้วกด "จัดใหม่"'));
+
+  // ลำดับการเล่า — สามโหมดล่างจัดลำดับมาเองแล้ว โชว์ช่องพวกนี้ไปก็หลอกตา
+  if (OWN_ORDER[mode])
+    c.appendChild(el('p', 'note', 'ลำดับ — ' + OWN_ORDER[mode]));
+  else
+    ORDER_KEYS.forEach(k => {
+      const f = D.fields.find(x => x.key === k); if (f) c.appendChild(field(f));
+    });
 
   const a = el('div', 'acts');
   const go = el('button', 'primary runbtn', mode === 'ai' ? 'ให้ AI จัดให้' : 'จัดใหม่');
@@ -1210,7 +1225,7 @@ function advanced(stages){
     && f.type !== 'clips'
     && !['project.source','project.name','project.out','ai.enabled','ai.goal',
          'ai.tasks','ai.model','compose.mode', 'jumpcut.enabled', 'jumpcut.noise_db',
-         'jumpcut.min_silence', 'jumpcut.pad', 'jumpcut.min_piece']
+         'jumpcut.min_silence', 'jumpcut.pad', 'jumpcut.min_piece', ...ORDER_KEYS]
         .includes(f.key)
     && !Object.values(MODE_FIELDS).flat().includes(f.key));
   if (!fs.length) d.appendChild(el('p', 'note', 'ไม่มีค่าเพิ่มเติมในขั้นนี้'));

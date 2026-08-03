@@ -188,11 +188,7 @@ FIELDS = [
     F("broll.drop_below_bright", "ทิ้งคลิปที่มืดกว่า", "float", "edl", "prepare",
       min=0, max=80, step=1, help="0 = เก็บหมด"),
 
-    # ── ตัดสินใจ: ลำดับ + ความยาว ──
-    F("order.mode", "เรียงลำดับตาม", "select", "edl", "prepare",
-      options=["filename", "mtime", "duration"],
-      labels={"filename": "เลขไฟล์", "mtime": "เวลาแก้ไขไฟล์", "duration": "ความยาว"}),
-    F("order.reverse", "กลับลำดับ", "bool", "edl", "prepare"),
+    # ── ตัดสินใจ: ความยาว ──
     F("select.enabled", "ตัดให้ถึงเป้าความยาว", "bool", "edl", "prepare"),
     F("select.target_minutes", "เป้าความยาว", "float", "edl", "prepare",
       min=0, max=120, step=0.5, unit="นาที",
@@ -241,6 +237,17 @@ FIELDS = [
     F("compose.to", "ถึง", "str", "edl", "compose", placeholder="2026-07-31 23:59"),
     F("compose.context", "โจทย์ที่จะบอก AI", "text", "edl", "compose",
       placeholder="เล่าตามลำดับการเดินทาง เน้นช่วงขึ้นเขา"),
+
+    # ── รวมเป็นหนัง: ลำดับการเล่า ──
+    # อยู่ในขั้น 3 คู่กับ "วิธีเลือกชิ้น" เพราะเป็นเรื่องเดียวกัน — จะเล่าอะไรก่อน
+    # ขั้น 2 มีหน้าที่แค่ตัดคลิปเป็นชิ้น ไม่ได้เรียงอะไรเลย
+    F("order.mode", "เรียงลำดับตาม", "select", "edl", "compose",
+      options=["filename", "mtime", "duration"],
+      labels={"filename": "ลำดับจากขั้น 1", "mtime": "เวลาแก้ไขไฟล์",
+              "duration": "ความยาว"},
+      help="'ลำดับจากขั้น 1' = ตามที่ลากจัดไว้ตอนเลือกฟุตเทจ "
+           "(ไม่ได้ลากอะไร = เรียงตามเลขไฟล์) · อีกสองแบบทับลำดับนั้นทิ้ง"),
+    F("order.reverse", "กลับลำดับ", "bool", "edl", "compose"),
 
     # ── ภาพ (แพง) ──
     F("video.vertical_mode", "คลิปแนวตั้งทำยังไง", "select", "render", "render",
