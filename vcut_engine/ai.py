@@ -33,6 +33,11 @@ TASK_LABEL = {
     "trim_suggest": "แนะนำช่วงที่ควรเก็บ",
 }
 
+# ตอบยาวเกินเท่านี้แล้วยังแกะ JSON ไม่ได้ = โควตา output หมดไปกับการคิด
+MAX_OUT_WARN = 16000
+# ส่งให้ AI เกินเท่านี้โดยไม่จำกัด = เสี่ยงชนเพดานจนไม่ได้คำตอบ
+ASK_BIG = 150
+
 
 # ─────────────────────────── รวบรวมสิ่งที่ AI จะได้เห็น ───────────────────────────
 
@@ -291,11 +296,31 @@ def _extract_json(text):
     return None
 
 
-def call_claude(ctx, prompt, out_path, section="ai"):
+def _blame(envelope, stdout):
+    """แกะ JSON ไม่ได้เพราะอะไร — เดาจากซองที่ CLI ส่งกลับมา
+
+    เคสที่เจอจริงและเจ็บที่สุด: โจทย์ใหญ่เกินจนโมเดลใช้โควตา output หมดไปกับ
+    การคิด (stop_reason = max_tokens) แล้วยังไม่ทันตอบ JSON — เสียทั้งเวลาและ
+    โควตาโดยได้ศูนย์ ต้องบอกให้ชัดว่าเกิดอะไร ไม่ใช่แค่ "แกะไม่ได้"
+    """
+    env = envelope if isinstance(envelope, dict) else {}
+    out = int((env.get("usage") or {}).get("output_tokens") or 0)
+    if env.get("subtype") and env.get("subtype") != "success":
+        return f"claude จบด้วย {env['subtype']}"
+    if "max_tokens" in (stdout or "") or out >= MAX_OUT_WARN:
+        return (f"โมเดลใช้โควตา output หมดไปกับการคิด (ออกไป {out:,} token) "
+                "จนยังไม่ทันตอบ JSON — stop_reason = max_tokens")
+    if not str(env.get("result") or "").strip():
+        return "claude ตอบกลับมาเป็นข้อความว่าง"
+    return ""
+
+
+def call_claude(ctx, prompt, out_path, section="ai", hint=""):
     """เรียก claude -p แบบไม่โต้ตอบ · คำตอบมาทางไฟล์ ถ้าไม่มีค่อยแกะจาก stdout
 
     section เลือกว่าอ่านค่าจาก [ai] หรือ [review] — สอง AI คนละบทบาท
     ตั้งโมเดล/เวลารอคนละค่าได้ ค่าไหนไม่ได้ตั้งใน [review] จะตกมาใช้ของ [ai]
+    hint = ทางแก้ที่จะบอกผู้ใช้ถ้าแกะคำตอบไม่ได้ (ผู้เรียกรู้บริบทดีกว่า)
     """
     def cfg(key, default=None):
         v = ctx.get(f"{section}.{key}")
@@ -335,6 +360,7 @@ def call_claude(ctx, prompt, out_path, section="ai"):
         meta["cost_usd"] = envelope.get("total_cost_usd")
         meta["turns"] = envelope.get("num_turns")
         meta["model"] = next(iter(envelope.get("modelUsage") or {}), None)
+        meta["out_tokens"] = (envelope.get("usage") or {}).get("output_tokens")
 
     if r.returncode != 0 and not out_path.exists():
         die(f"claude ตอบกลับด้วย exit {r.returncode}\n{(r.stderr or r.stdout)[-600:]}")
@@ -342,10 +368,18 @@ def call_claude(ctx, prompt, out_path, section="ai"):
     data = read_json(out_path)
     if data is None and isinstance(envelope, dict):
         data = _extract_json(envelope.get("result", ""))
-    if data is None:
+    elif data is None:
+        # แกะจาก stdout ได้เฉพาะตอนที่ซองพังจนอ่านไม่ออก — ถ้าซองอ่านได้แล้วมา
+        # แกะซ้ำตรงนี้ จะได้ "ซอง" กลับไปเป็นคำตอบ แล้วสาเหตุจริงจะถูกกลบ
         data = _extract_json(r.stdout)
     if data is None:
-        die(f"AI ตอบกลับมาแต่แกะ JSON ไม่ได้ — ดูคำตอบดิบที่ {raw_path}")
+        why = _blame(envelope, r.stdout)
+        if why:
+            warn(f"AI ตอบกลับมาแต่ใช้ไม่ได้ — {why}")
+        if hint:
+            warn(hint)
+        die("แกะ JSON จากคำตอบไม่ได้ — หยุดไว้ก่อน ไม่เขียนทับของเดิม\n"
+            f"   คำตอบดิบอยู่ที่ {raw_path}")
     return data, meta
 
 
@@ -584,6 +618,32 @@ _PICK_SCHEMA = """{
 }"""
 
 
+def shortlist(ok, cap, ctx):
+    """ตัดคลังให้เหลือ cap ชิ้นก่อนส่งให้ AI — เก็บตัวคะแนนดีของแต่ละประเภทไว้
+
+    ไม่ใช่แค่ประหยัดโควตา แต่เป็นเงื่อนไขที่ทำให้มันตอบได้เลย: คลัง 398 ชิ้น =
+    prompt 55 KB แล้วต้องตอบ id เป็นร้อยตัว โมเดลใช้ output หมดไปกับการคิดจน
+    ชนเพดาน 32k แล้วไม่ได้ตอบอะไรกลับมา (วัดมาแล้ว เสียไป 11 นาที)
+
+    คงสัดส่วนพูด:วิว ของคลังเดิมไว้ ไม่งั้นตัดแล้วเหลือแต่ช่วงพูดยาว ๆ ติดกัน
+    แล้วเรียงกลับตามลำดับเล่าเรื่อง เพื่อให้ AI เห็นเส้นเวลาจริงเหมือนเดิม
+    """
+    from . import compose as cm       # นำเข้าตรงนี้เพราะ compose นำเข้า ai อยู่แล้ว
+    keep, cut = ok, 0
+    if cap > 0 and len(ok) > cap:
+        cm.rank_of(ok, float(ctx.get("ai.apply.score_weight", 0.0) or 0.0))
+        talk = sorted((p for p in ok if p["kind"] == "TALK"), key=lambda p: -p["_rank"])
+        broll = sorted((p for p in ok if p["kind"] == "BROLL"), key=lambda p: -p["_rank"])
+        n_talk = max(1, min(len(talk), round(cap * len(talk) / len(ok))))
+        keep = talk[:n_talk] + broll[:max(0, cap - n_talk)]
+        cut = len(ok) - len(keep)
+    # เรียงตามลำดับเล่าเรื่องเสมอ ไม่ใช่แค่ตอนตัด — ถ้าขั้น 1 ลากสลับที่ไว้
+    # ลำดับใน pool.json จะไม่ใช่ลำดับจริง แล้ว AI จะยึดผิดตัว
+    cm.apply_order(keep, ctx)
+    keep.sort(key=cm._by_seq)
+    return keep, cut
+
+
 def pick_compose(ctx, context="", pool=None):
     """ให้ AI เลือกและเรียงชิ้นจากคลัง → .vcut/compose.json
 
@@ -598,6 +658,16 @@ def pick_compose(ctx, context="", pool=None):
         die("คลังว่างเปล่า — ผ่อนตัวกรองในขั้นที่ 2 ก่อน")
     context = context or str(ctx.get("compose.context", "") or "")
 
+    cap = int(ctx.get("compose.ask_max", 0) or 0)
+    full = len(ok)
+    ok, cut = shortlist(ok, cap, ctx)
+    if cut:
+        info(f"  ลดขนาดงานก่อนถาม  {full} → {len(ok)} ชิ้น "
+             f"(ตัดตัวคะแนนต่ำออก {cut} ชิ้น · [compose] ask_max = {cap})")
+    elif cap <= 0 and full > ASK_BIG:
+        warn(f"ส่งทั้งคลัง {full} ชิ้นให้ AI — ใหญ่พอที่โมเดลจะใช้ output หมดไปกับ"
+             f"การคิดจนตอบไม่ทัน ตั้ง [compose] ask_max = {ASK_BIG} กันไว้ดีกว่า")
+
     rows = ["id | ประเภท | วินาที | คลิป | ความหมาย / เนื้อหา"]
     for p in ok:
         body = p.get("meaning") or (
@@ -609,8 +679,13 @@ def pick_compose(ctx, context="", pool=None):
 
     s = pool["summary"]
     has_meaning = sum(1 for p in ok if p.get("meaning"))
+    n_talk = sum(1 for p in ok if p["kind"] == "TALK")
+    mins = sum(p["dur"] for p in ok) / 60
     head = [f"นี่คือคลังชิ้นวิดีโอที่ตัดเตรียมไว้แล้ว {len(ok)} ชิ้น "
-            f"({s['talk']} พูด + {s['broll']} วิว) รวม {s['duration_total'] / 60:.1f} นาที"]
+            f"({n_talk} พูด + {len(ok) - n_talk} วิว) รวม {mins:.1f} นาที"]
+    if cut:
+        head.append(f"(คัดมาจากคลังเต็ม {full} ชิ้น เอาเฉพาะที่คะแนนดีที่สุด "
+                    "— ที่ไม่อยู่ในตารางนี้คือชิ้นที่ถูกคัดออกแล้ว ไม่ต้องถามหา)")
     if not has_meaning:
         head.append("\n⚠ ยังไม่ได้ให้ AI อ่านความหมายรายคลิป (`vcut ai --task describe`) "
                     "— จะเลือกได้จากบทพูดกับตัวเลขเท่านั้น")
@@ -640,7 +715,10 @@ schema ที่ต้องตอบ
     info(f"AI เลือกชิ้นจากคลัง {len(ok)} ชิ้น ({len(prompt) // 1000} KB)"
          + (f"  ·  โจทย์: {context[:40]}" if context else "") + " …")
 
-    data, meta = call_claude(ctx, prompt, ai_dir / "compose.json", section="compose")
+    tip = (f"ทางแก้: ลด [compose] ask_max ลง (ตอนนี้ {cap or 'ไม่จำกัด'} · "
+           f"ส่งไปจริง {len(ok)} ชิ้น) แล้วสั่งใหม่ — คลังเล็กลง คำตอบก็สั้นลง")
+    data, meta = call_claude(ctx, prompt, ai_dir / "compose.json",
+                             section="compose", hint=tip)
     valid = {p["id"] for p in ok}
     order, seen, bad = [], set(), 0
     for i in (data.get("order") or []):

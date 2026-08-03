@@ -31,3 +31,7 @@ tasks = ["story_arc", "describe", "shot_scoring", "trim_suggest"]
 
 [jumpcut]
 enabled = true
+
+[compose]
+mode = "pattern"
+context = "เล่าเรื่องการเดินทางเดินป่าไปภูสอย ดาว 3 วัน 2 คืน แบบที่มีคนพูดสับกับวิวบรรยากาศ วิวบรรยากาศแสดงได้ติดกันสูงสุด 2 วิว ไม่จำกัดความยาววิดีโอ"
