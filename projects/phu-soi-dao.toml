@@ -5,33 +5,22 @@
 extends = "hiking-vlog"
 
 [project]
-name   = "phu-soi-dao"
-source = "/Users/macbook3lf1/web work/ตัดต่อ vido/vido"
 work   = "/Users/macbook3lf1/web work/CutVideo-vcut_engine/.vcut"
-out    = "/Users/macbook3lf1/web work/CutVideo-vcut_engine/final.mp4"
+source = "/Users/macbook3lf1/web work/ตัดต่อ vido/vido"
 
 [listen]
 # มี transcript จากรอบก่อนอยู่แล้ว — ดึงมาใช้ ไม่ต้องถอดเสียงใหม่ 12 นาที
-import_dir = "/Users/macbook3lf1/web work/ตัดต่อ vido/v2_transcripts"
 
 [render]
 min_free_gb = 4.0        # ดิสก์เหลือน้อย เตือนไว้ต่ำหน่อยแต่ยังกันพลาด
 
 [run]
 advise = true
-
-[ai]
-enabled = false
-
 [scan.rotation_overrides]
 IMG_7079 = "transpose=2"
 IMG_7170 = "transpose=2"
-
-[jumpcut]
-enabled = true
-
-[prepare]
-keep = ["IMG_7075", "IMG_7080", "IMG_7099", "IMG_7118", "IMG_7142", "IMG_7152", "IMG_7162", "IMG_7195", "IMG_7232", "IMG_7379", "IMG_7382", "IMG_7384", "IMG_7401", "IMG_7404", "IMG_7405", "IMG_7411", "IMG_7424", "IMG_7425", "IMG_7440", "IMG_7441", "IMG_7444", "IMG_7449", "IMG_7452", "IMG_7457", "IMG_7458", "IMG_7508", "IMG_7509", "IMG_7514", "IMG_7529", "IMG_7560", "IMG_7572", "IMG_7589", "IMG_7594", "IMG_7598", "IMG_7618", "IMG_7632", "IMG_7662", "IMG_7672", "IMG_7678", "IMG_7682", "IMG_7689", "IMG_7713", "IMG_7714", "IMG_7715", "IMG_7719", "IMG_7735"]
+IMG_7575 = "transpose=2"
 
 [scan]
-exclude = ["IMG_7761"]
+exclude = ["1oqBKKanJ6GqvDzi-KQNllbln6Yg-7gm19hN2C_99zI", "IMG_7262", "IMG_7306", "IMG_7313", "IMG_7468", "IMG_7497", "IMG_7498", "IMG_7502", "IMG_7548"]
+order = ["IMG_7068", "IMG_7070", "IMG_7074", "IMG_7075", "IMG_7076", "IMG_7077", "IMG_7079", "IMG_7080", "IMG_7082", "IMG_7084", "IMG_7085", "IMG_7094", "IMG_7097", "IMG_7099", "IMG_7100", "IMG_7102", "IMG_7103", "IMG_7104", "IMG_7105", "IMG_7106", "IMG_7118", "IMG_7128", "IMG_7142", "IMG_7151", "IMG_7152", "IMG_7155", "IMG_7156", "IMG_7157", "IMG_7158", "IMG_7159", "IMG_7162", "IMG_7164", "IMG_7165", "IMG_7168", "IMG_7170", "qOnC_GMcxOfAe424GVyqmIEqUKWci4x3b95bNv0yHrQ", "IMG_7173", "IMG_7175", "IMG_7176", "IMG_7177", "IMG_7178", "IMG_7179", "IMG_7188", "IMG_7189", "IMG_7190", "IMG_7194", "IMG_7195", "IMG_7201", "IMG_7202", "IMG_7204", "IMG_7207", "IMG_7208", "IMG_7210", "IMG_7213", "IMG_7214", "IMG_7225", "DUuKpWXWww3WuwUAE7spDq2Hd_83-xQFoaxdVMJjZEw", "IMG_7230", "i3gzwuWdwKRQWKuVLQiTpiS2AreuIFrY3NsmXQW1hM8", "WdzNNaobb9LN1-4Qfq5EC8kZJFQCjMP_J7pOVPRxYJw", "IMG_7232", "IMG_7233", "IMG_7234", "IMG_7236", "IMG_7238", "IMG_7247", "IMG_7248", "IMG_7249", "mKy-7EamtNxQc4WNawYVM7K1ZC6TJNuRz6fRXDkz9TM", "IMG_7262", "IMG_7306", "IMG_7307", "IMG_7309", "IMG_7310", "IMG_7311", "1oqBKKanJ6GqvDzi-KQNllbln6Yg-7gm19hN2C_99zI", "IMG_7312", "IMG_7313", "IMG_7360", "IMG_7501", "IMG_7363", "IMG_7364", "IMG_7365", "IMG_7366", "IMG_7367", "IMG_7369", "IMG_7371", "IMG_7372", "IMG_7373", "IMG_7374", "IMG_7375", "kOjs0ajSzAdyWaQdxGPpqtTbXssyHoP5ZMDMZK-Oxso", "F6-_Phf2XEkklBF0uorZfMCCRCpScXGQ1pEX0EWqHCI", "L1CmrzTvlOQ1i4jiBmaRrvh15gImu7S4ucG9XBoyTZs", "video_625551860438139056-8KiRsiGZ", "IMG_7388", "IMG_7378", "IMG_7379", "IMG_7382", "IMG_7384", "IMG_7393", "IMG_7394", "IMG_7396", "IMG_7398", "IMG_7399", "IMG_7401", "IMG_7404", "IMG_7405", "IMG_7407", "IMG_7408", "IMG_7411", "IMG_7414", "IMG_7424", "IMG_7425", "IMG_7429", "IMG_7439", "IMG_7440", "IMG_7441", "IMG_7442", "IMG_7444", "IMG_7445", "IMG_7448", "IMG_7449", "IMG_7451", "IMG_7452", "IMG_7453", "IMG_7454", "IMG_7455", "IMG_7456", "IMG_7457", "IMG_7458", "IMG_7459", "IMG_7460", "IMG_7463", "IMG_7468", "IMG_7469", "IMG_7497", "IMG_7498", "IMG_7499", "IMG_7502", "IMG_7506", "IMG_7507", "IMG_7508", "IMG_7509", "IMG_7510", "IMG_7511", "IMG_7512", "IMG_7514", "IMG_7515", "IMG_7517", "IMG_7519", "IMG_7529", "IMG_7530", "IMG_7532", "IMG_7535", "IMG_7536", "IMG_7537", "IMG_7538", "IMG_7541", "IMG_7542", "IMG_7545", "IMG_7548", "IMG_7549", "IMG_7550", "IMG_7551", "IMG_7556", "IMG_7557", "IMG_7559", "IMG_7560", "IMG_7563", "IMG_7566", "IMG_7569", "IMG_7571", "IMG_7572", "IMG_7575", "IMG_7576", "IMG_7583", "IMG_7584", "IMG_7585", "IMG_7586", "IMG_7589", "IMG_7594", "IMG_7595", "IMG_7598", "IMG_7599", "IMG_7600", "IMG_7601", "IMG_7605", "IMG_7606", "IMG_7607", "IMG_7608", "IMG_7609", "IMG_7610", "IMG_7611", "IMG_7612", "IMG_7613", "video_625551874564817310-VS4ilqs4", "IMG_7614", "IMG_7615", "IMG_7616", "IMG_7618", "IMG_7622", "IMG_7623", "IMG_7632", "IMG_7634", "IMG_7638", "IMG_7640", "IMG_7641", "IMG_7642", "IMG_7643", "IMG_7644", "IMG_7648", "IMG_7649", "IMG_7650", "IMG_7654", "IMG_7656", "IMG_7657", "IMG_7658", "IMG_7660", "IMG_7661", "IMG_7662", "IMG_7667", "IMG_7671", "IMG_7672", "IMG_7673", "IMG_7675", "IMG_7676", "IMG_7678", "IMG_7680", "IMG_7681", "IMG_7682", "IMG_7684", "IMG_7687", "IMG_7688", "IMG_7689", "IMG_7690", "IMG_7691", "IMG_7693", "IMG_7694", "IMG_7695", "IMG_7696", "IMG_7698", "IMG_7699", "IMG_7700", "IMG_7702", "IMG_7703", "IMG_7705", "IMG_7706", "IMG_7713", "IMG_7714", "IMG_7715", "IMG_7716", "IMG_7717", "IMG_7718", "IMG_7719", "IMG_7720", "IMG_7723", "IMG_7724", "IMG_7728", "IMG_7729", "IMG_7730", "IMG_7731", "IMG_7732", "IMG_7734", "IMG_7735", "IMG_7738", "IMG_7739", "IMG_7740", "IMG_7741", "IMG_7742", "IMG_7743", "IMG_7744", "IMG_7745", "IMG_7746", "IMG_7747", "IMG_7748", "IMG_7750", "IMG_7751", "IMG_7755", "IMG_7756", "IMG_7761", "IMG_7762", "IMG_7767", "IMG_7772"]
