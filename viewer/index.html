@@ -40,34 +40,50 @@ input[type=text],input[type=number],select,textarea{width:100%;padding:.38em .55
 input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
 textarea{resize:vertical}
 
+/* แถบหัว — แถวเดียว สูงราว 32px
+   เดิมเป็นสองแถบซ้อนกัน (ชื่อโปรเจกต์+ปุ่ม แล้วต่อด้วยแถบขั้นตอนแบบแท็บสองบรรทัด)
+   รวมเป็น 114px ที่ปักหมุดค้างอยู่ตลอดเวลา = เกือบ 1/8 ของจอค้างไว้ให้สิ่งที่แทบ
+   ไม่ได้แตะระหว่างทำงาน  ตอนนี้ยุบเหลือแถวเดียว: สถานะของแต่ละขั้นย้ายไปอยู่ที่
+   *สีของเลข* (เทา=ยังไม่ทำ · เขียว=ทำแล้ว · ส้ม=ค่าเปลี่ยนไปแล้ว) เหลือเป็น
+   ตัวหนังสือเฉพาะตอนที่ต้องเตือนจริง ๆ */
 header{position:sticky;top:0;z-index:30;background:var(--panel);
   border-bottom:1px solid var(--line)}
-.hrow{display:flex;gap:.7rem;align-items:center;flex-wrap:wrap;padding:.6rem 1rem}
-h1{font-size:15px;margin:0;font-weight:700}
+.hrow{display:flex;gap:.45rem;align-items:center;flex-wrap:wrap;padding:.25rem .7rem}
+h1{font-size:13px;margin:0;font-weight:700;white-space:nowrap}
 .spacer{flex:1}
-.chip{border:1px solid var(--line);border-radius:100px;padding:.15em .7em;
-  font-size:12px;color:var(--dim);white-space:nowrap}
+header button{padding:.2em .65em;font-size:12.5px}
+.chip{border:1px solid var(--line);border-radius:100px;padding:.1em .6em;
+  font-size:11.5px;color:var(--dim);white-space:nowrap}
 .chip b{color:var(--fg);font-weight:600}
 .chip.warn{border-color:var(--warn);color:var(--warn)} .chip.warn b{color:var(--warn)}
+#c-proj{max-width:15rem;overflow:hidden;text-overflow:ellipsis}
 
-/* แถบขั้นตอน */
-.steps{display:flex;gap:0;padding:0 1rem;overflow-x:auto}
-.steps button{border:0;border-bottom:2px solid transparent;border-radius:0;
-  background:none;padding:.5rem .9rem .6rem;display:flex;gap:.5rem;align-items:center;
-  color:var(--dim);white-space:nowrap}
-.steps button[aria-selected=true]{border-bottom-color:var(--accent);color:var(--fg)}
-.steps .n{background:var(--off);color:var(--dim);border-radius:100px;width:1.5em;
-  height:1.5em;display:grid;place-items:center;font-size:11px;font-weight:800}
+/* แถบขั้นตอน — อยู่ในแถวเดียวกับชื่อโปรเจกต์ */
+.steps{display:flex;gap:.15rem;overflow-x:auto;scrollbar-width:none}
+.steps::-webkit-scrollbar{display:none}
+.steps button{border:1px solid transparent;border-radius:100px;background:none;
+  padding:.15em .55em;display:flex;gap:.35rem;align-items:center;
+  color:var(--dim);white-space:nowrap;font-size:12.5px}
+/* เดิมขั้นที่เลือกอยู่บอกด้วยขีดใต้ยาว ๆ ซึ่งพอย่อเป็นเม็ดเล็กแล้วแทบไม่เห็น
+   — ใช้พื้นหลัง + ขอบสีเน้นแทน ไม่ขยับ layout เพราะขอบใสกว้างเท่ากันอยู่แล้ว */
+.steps button[aria-selected=true]{background:var(--off);color:var(--fg);
+  border-color:var(--accent)}
+.steps .n{background:var(--off);color:var(--dim);border-radius:100px;width:1.45em;
+  height:1.45em;display:grid;place-items:center;font-size:10.5px;font-weight:800}
 .steps button[aria-selected=true] .n{background:var(--accent);color:#fff}
 .steps .n.done{background:var(--ok);color:#fff}
-.steps .lab{font-weight:600;font-size:13.5px}
+.steps .n.hot{background:var(--warn);color:#fff}
+.steps .lab{font-weight:600}
 .steps .st{font-size:11.5px;color:var(--dim)}
 .steps .st.hot{color:var(--warn)}
 
 main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:1rem;
   padding:1rem;align-items:start;max-width:1560px;margin:0 auto}
 @media (max-width:1040px){ main{grid-template-columns:minmax(0,1fr)} aside{position:static!important} }
-aside{position:sticky;top:104px;display:flex;flex-direction:column;gap:.75rem}
+/* ปักหมุดใต้แถบหัวพอดี — วัดความสูงจริงเอา (headHeight) ไม่ใช่ตัวเลขตายตัว
+   เพราะแถบหัวขึ้นบรรทัดที่สองได้เองตอนจอแคบ */
+aside{position:sticky;top:calc(var(--headh, 33px) + .5rem);
+  display:flex;flex-direction:column;gap:.75rem}
 
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
   padding:.9rem;margin-bottom:.8rem}
@@ -336,15 +352,15 @@ dialog .df{padding:.7rem 1rem;border-top:1px solid var(--line);display:flex;gap:
 <header>
   <div class="hrow">
     <h1 id="title">vcut</h1>
-    <span class="chip" id="c-proj">—</span>
+    <nav class="steps" id="steps"></nav>
     <span class="spacer"></span>
+    <span class="chip" id="c-proj">—</span>
     <span class="chip" id="c-dirty" hidden></span>
-    <button id="reset" title="ล้างค่าทั้งหมดกลับเป็นค่าตั้งต้น — ของเดิมเก็บไว้กู้ได้">รีเซ็ตทั้งหมด</button>
+    <button id="reset" title="ล้างค่าทั้งหมดกลับเป็นค่าตั้งต้น — ของเดิมเก็บไว้กู้ได้">รีเซ็ต</button>
     <button id="stop" hidden>หยุด</button>
-    <button id="save" disabled>บันทึกค่า</button>
+    <button id="save" disabled>บันทึก</button>
     <button id="run" class="primary">ทำทุกขั้น</button>
   </div>
-  <div class="steps" id="steps"></div>
 </header>
 
 <dialog id="piece">
@@ -477,6 +493,7 @@ async function load(keepEdits){
   }
   $('#title').textContent = D.values['project.name'] || 'vcut';
   $('#c-proj').textContent = D.project.path || 'ยังไม่มีไฟล์โปรเจกต์';
+  $('#c-proj').title = D.project.path || '';   // ตัดท้ายด้วย … ตอนที่อยู่ยาว
   renderSteps(); render();
   loadReview();
 }
@@ -495,25 +512,35 @@ function renderSteps(){
     const {done, total, stale} = stepState(n);
     const b = el('button');
     b.setAttribute('aria-selected', step === n);
-    b.append(el('span', 'n' + (done === total ? ' done' : ''), String(n)));
-    const c = el('span'); c.style.textAlign = 'left';
-    c.append(el('span', 'lab', ph.label),
-             el('span', 'st' + (stale ? ' hot' : ''),
-                stale ? 'ค่าเปลี่ยนไปแล้ว' : done === total ? 'ทำแล้ว'
-                : done ? `ทำไป ${done}/${total}` : 'ยังไม่ได้ทำ'));
-    c.querySelector('.lab').style.display = 'block';
-    c.querySelector('.st').style.display = 'block';
-    b.append(c);
+    const word = stale ? 'ค่าเปลี่ยนไปแล้ว' : done === total ? 'ทำแล้ว'
+               : done ? `ทำไป ${done}/${total}` : 'ยังไม่ได้ทำ';
+    b.title = `${ph.label} — ${word}`;
+    // สถานะอยู่ที่สีของเลข: เทา=ยังไม่ทำ · เขียว=ทำแล้ว · ส้ม=ค่าเปลี่ยนไปแล้ว
+    b.append(el('span', 'n' + (stale ? ' hot' : done === total ? ' done' : ''), String(n)),
+             el('span', 'lab', ph.label));
+    // เหลือตัวหนังสือไว้เฉพาะสองกรณีที่สีอย่างเดียวบอกไม่พอ — ต้องรู้ว่า "ทำไปกี่
+    // ขั้นแล้ว" กับต้องเห็นคำเตือนว่าของที่ทำไว้ใช้ไม่ได้แล้ว ที่เหลือสีบอกครบ
+    if (stale) b.append(el('span', 'st hot', 'ค่าเปลี่ยน'));
+    else if (done && done < total) b.append(el('span', 'st', `${done}/${total}`));
     b.onclick = () => { step = n; renderSteps(); render(); };
     box.appendChild(b);
   });
   const n = Object.keys(edits).length;
   $('#save').disabled = !n;
-  $('#save').textContent = n ? `บันทึกค่า (${n})` : 'บันทึกค่า';
+  $('#save').textContent = n ? `บันทึก (${n})` : 'บันทึก';
   $('#c-dirty').hidden = !n;
   $('#c-dirty').className = 'chip warn';
   $('#c-dirty').innerHTML = `<b>${n}</b> ค่าที่ยังไม่บันทึก`;
+  headHeight();
 }
+
+// ความสูงจริงของแถบหัว → ตัวแปร CSS ที่กล่องข้างใช้ปักหมุด
+// (แถบหัวขึ้นบรรทัดที่สองเองได้ตอนจอแคบ ตัวเลขตายตัวจึงเชื่อไม่ได้)
+function headHeight(){
+  document.documentElement.style.setProperty(
+    '--headh', $('header').offsetHeight + 'px');
+}
+window.addEventListener('resize', headHeight);
 
 function render(){
   const b = $('#body'); b.innerHTML = '';
