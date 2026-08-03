@@ -633,7 +633,12 @@ def make_handler(ctx, job):
                 name = p[len("/seg/"):]
                 if not SAFE_NAME.match(name):
                     return self._send(400, b"bad name", "text/plain")
-                return self._range_file(ctx.seg_dir / name)
+                # segment เก็บเสียงเป็น PCM ซึ่งเบราว์เซอร์เล่นไม่ได้ — ส่งสำเนา
+                # เสียง AAC ที่ทำไว้ให้แทน (ทำครั้งแรกที่กดดูชิ้นนั้น)
+                web = render.web_copy(ctx, name)
+                if not web:
+                    return self._send(404, b"not found", "text/plain")
+                return self._range_file(web)
 
             return self._send(404, b"not found", "text/plain")
 

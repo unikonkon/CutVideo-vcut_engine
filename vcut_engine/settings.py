@@ -730,7 +730,7 @@ def estimate(ctx):
             continue
         I, TP = loud[k]
         gain, _ = render.compute_gain(I, TP, float(seg["target_lufs"]), a)
-        p = ctx.seg_dir / f"{render.seg_key(seg, ctx, gain)}.mp4"
+        p = ctx.seg_dir / f"{render.seg_key(seg, ctx, gain)}.mov"
         if p.exists() and p.stat().st_size > 1024:
             reuse += 1
         else:
@@ -738,7 +738,7 @@ def estimate(ctx):
 
     rman = read_json(ctx.work / "render.json", {}) or {}
     rate = rman.get("sec_per_segment") or DEFAULT_SEC_PER_SEGMENT
-    have = {f.name for f in ctx.seg_dir.glob("*.mp4")} if ctx.seg_dir.exists() else set()
+    have = {f.name for f in render.seg_files(ctx)}
     s = edl["summary"]
     return {
         "segments": s["segments"],

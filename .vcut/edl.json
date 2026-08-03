@@ -2,7 +2,7 @@
  "config": [
   "/Users/macbook3lf1/web work/CutVideo-vcut_engine/config/default.toml",
   "/Users/macbook3lf1/web work/CutVideo-vcut_engine/config/presets/hiking-vlog.toml",
-  "projects/phu-soi-dao.toml"
+  "/Users/macbook3lf1/web work/CutVideo-vcut_engine/projects/phu-soi-dao.toml"
  ],
  "compose": {
   "mode": "all",

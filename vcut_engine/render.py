@@ -5,6 +5,20 @@ mono→stereo · ปรับระดับเสียง · limiter · fade
 
 cache: ชื่อไฟล์ = sha1 ของทุกพารามิเตอร์ที่มีผลต่อภาพ/เสียงของชิ้นนั้น
 → เปลี่ยนลำดับใน EDL ไม่ต้อง render ใหม่ · เปลี่ยนความยาว B-roll render ใหม่เฉพาะวิว
+
+**ทำไม segment ถึงเป็น .mov เสียง PCM ไม่ใช่ .mp4 เสียง AAC**
+
+ขั้นต่อไฟล์ใช้ `concat -c copy` ซึ่งคัดลอก packet ดิบโดยไม่ถอดรหัส วิธีนั้นเร็ว
+มากแต่ต่อ AAC ข้ามชิ้นแบบไร้รอยต่อไม่ได้: ตัวเข้ารหัส AAC ใส่ sample ขยะไว้
+หัวไฟล์ทุกครั้ง (encoder priming ~1024 sample) ปกติ mp4 ตัดทิ้งด้วย edit list
+ของไฟล์นั้น แต่พอ copy มาต่อกัน edit list หายไป ขยะจึงถูกเล่นออกมาหมด
+
+วัดจริงกับฟุตเทจชุดนี้: 357 ชิ้น เสียงเกินภาพชิ้นละ 19.4 ms สะสมเป็น 6.9 วินาที
+ตอนจบเรื่อง — เสียงไม่ตรงปากและยิ่งดูยิ่งเพี้ยน
+
+PCM ไม่มี encoder delay ให้สะสม ต่อ -c copy ได้ตรงเป๊ะ แล้วค่อยเข้ารหัสเสียง
+เป็น AAC ครั้งเดียวตอน assemble (ภาพยัง copy จึงยังเร็วเหมือนเดิม) ราคาที่จ่าย
+คือ segment cache โตขึ้นราว 8% — ดู exact_dur() สำหรับอีกครึ่งของการแก้
 """
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -52,6 +66,49 @@ def build_vfilter(seg, ctx):
             f":flags={flags}{rng},pad={W}:{H}:(ow-iw)/2:(oh-ih)/2,{tail}[v]")
 
 
+# ─────────────────── ความยาวชิ้นที่ภาพกับเสียงเท่ากันเป๊ะ ───────────────────
+
+def fps_value(ctx):
+    n, _, d = str(ctx.get("video.fps", "60000/1001")).partition("/")
+    try:
+        return float(n) / float(d or 1)
+    except (ValueError, ZeroDivisionError):
+        return 60000 / 1001
+
+
+def exact_dur(dur, ctx):
+    """ปัดความยาวชิ้นให้ลงตัวกับกริดเฟรม — ภาพและเสียงจะยาวเท่านี้ทั้งคู่
+
+    นี่คืออีกครึ่งของการแก้เสียงเลื่อน (อีกครึ่งคือเสียง PCM ดู docstring บนสุด)
+    ภาพ CFR ยาวเป็นจำนวนเฟรมเต็มเสมอ ปัดขึ้นได้ถึง 17 ms ที่ 59.94 fps ส่วน
+    เสียงยาวตามที่สั่งเป๊ะ ๆ ความต่างชิ้นละ 13 ms สะสม 357 ชิ้นก็หลายวินาที
+
+    ปัดแบบใกล้ที่สุด ไม่ใช่ปัดขึ้น — ความยาวหนังรวมจึงไม่ขยับ (ค่าคลาดเฉลี่ย 0)
+    """
+    fps = fps_value(ctx)
+    return max(1, int(round(dur * fps))) / fps
+
+
+def segment_vfilter(seg, ctx):
+    """ฟิลเตอร์ภาพของชิ้นที่จะ render
+
+    tpad ต่อท้ายเพื่อโคลนเฟรมสุดท้ายเผื่อไว้ ทำให้ภาพยาวถึงเวลาเป้าหมายแน่ ๆ
+    ก่อนถูก -t ตัดทิ้ง — ถ้าไม่มี ชิ้นที่ต้นฉบับหมดพอดีจะได้ภาพขาดไป 1 เฟรม
+    แล้วเสียงกับภาพจะยาวไม่เท่ากันอีก (ส่วนเกินถูกตัดทิ้งเสมอ จึงไม่มีผลกับภาพ)
+    """
+    return build_vfilter(seg, ctx)[:-3] + ",tpad=stop_mode=clone:stop_duration=0.5[v]"
+
+
+def segment_afilter(seg, ctx, gain, dur):
+    """ฟิลเตอร์เสียงของชิ้นที่จะ render + บังคับความยาวให้เท่ากับภาพ
+
+    apad เติมความเงียบให้ยาวพอ · atrim ตัดที่วินาทีเดียวกับที่ภาพถูกตัด
+    ใช้ atrim แทน -t เพราะ -t ตัดเป็นก้อน packet ส่วน atrim ตัดตรง sample
+    """
+    return (build_afilter({**seg, "dur": dur}, gain, ctx)
+            + f",apad,atrim=end={dur:.6f}")
+
+
 # ─────────────────────────── ฟิลเตอร์เสียง ───────────────────────────
 
 def compute_gain(I, TP, target, a):
@@ -90,7 +147,7 @@ def build_afilter(seg, gain, ctx):
 
 # ─────────────────────────── encode args ───────────────────────────
 
-def encode_args(ctx):
+def encode_args(ctx, audio=True):
     e = ctx.get("encode", {})
     v = e.get("vcodec", "h264_videotoolbox")
     args = ["-c:v", v]
@@ -103,12 +160,21 @@ def encode_args(ctx):
     args += ["-profile:v", str(e.get("profile", "high")),
              "-g", str(int(e.get("gop", 60))),
              "-force_key_frames",
-             f"expr:gte(t,n_forced*{float(e.get('keyframe_sec', 1.0))})",
-             "-c:a", str(e.get("acodec", "aac")),
-             "-b:a", str(e.get("abitrate", "192k")),
-             "-ar", str(int(e.get("arate", 48000))),
-             "-ac", str(int(e.get("achannels", 2)))]
+             f"expr:gte(t,n_forced*{float(e.get('keyframe_sec', 1.0))})"]
+    if audio:
+        args += ["-c:a", str(e.get("acodec", "aac")),
+                 "-b:a", str(e.get("abitrate", "192k")),
+                 "-ar", str(int(e.get("arate", 48000))),
+                 "-ac", str(int(e.get("achannels", 2)))]
     return args
+
+
+def seg_audio_args(ctx):
+    """เสียงของ segment เก็บเป็น PCM — ไม่มี encoder delay ให้สะสมตอนต่อไฟล์"""
+    e = ctx.get("encode", {})
+    return ["-c:a", "pcm_s16le",
+            "-ar", str(int(e.get("arate", 48000))),
+            "-ac", str(int(e.get("achannels", 2)))]
 
 
 # ─────────────────────────── loudness cache ───────────────────────────
@@ -148,12 +214,13 @@ def seg_key(seg, ctx, gain):
         sig = [st.st_size, int(st.st_mtime)]
     except OSError:
         sig = [0, 0]
+    dur = exact_dur(seg["dur"], ctx)
     return key_of({
         "src": seg["src"], "sig": sig,
-        "start": round(seg["start"], 3), "dur": round(seg["dur"], 3),
-        "vf": build_vfilter(seg, ctx),
-        "af": build_afilter(seg, gain, ctx),
-        "enc": encode_args(ctx),
+        "start": round(seg["start"], 3), "dur": round(dur, 6),
+        "vf": segment_vfilter(seg, ctx),
+        "af": segment_afilter(seg, ctx, gain, dur),
+        "enc": encode_args(ctx, audio=False) + seg_audio_args(ctx),
         "fps": ctx.get("video.fps"),
         "silent": seg.get("achannels", 2) == 0,
     })
@@ -162,23 +229,27 @@ def seg_key(seg, ctx, gain):
 def render_one(seg, ctx, gain, dst):
     if dst.exists() and dst.stat().st_size > 1024:
         return True, "cache"
-    tmp = dst.with_suffix(".part.mp4")
+    tmp = dst.with_suffix(".part.mov")
     silent = seg.get("achannels", 2) == 0
     e = ctx.get("encode", {})
+    dur = exact_dur(seg["dur"], ctx)
+    # อ่านต้นฉบับเผื่อไว้ครึ่งวินาที ให้ tpad/apad มีของพอจะยืดถึงเวลาเป้าหมาย
+    read = dur + 0.5
 
     cmd = ["ffmpeg", "-nostdin", "-hide_banner", "-v", "error", "-y",
-           "-ss", f"{seg['start']:.3f}", "-t", f"{seg['dur']:.3f}", "-i", seg["src"]]
+           "-ss", f"{seg['start']:.3f}", "-t", f"{read:.3f}", "-i", seg["src"]]
     if silent:
-        cmd += ["-f", "lavfi", "-t", f"{seg['dur']:.3f}",
+        cmd += ["-f", "lavfi", "-t", f"{read:.3f}",
                 "-i", f"anullsrc=r={int(e.get('arate', 48000))}"
                       f":cl={'stereo' if int(e.get('achannels', 2)) == 2 else 'mono'}"]
-    cmd += ["-filter_complex", build_vfilter(seg, ctx), "-map", "[v]"]
+    cmd += ["-filter_complex", segment_vfilter(seg, ctx), "-map", "[v]"]
     cmd += ["-map", "1:a:0"] if silent else ["-map", "0:a:0"]
-    cmd += ["-af", build_afilter(seg, gain, ctx)]
+    cmd += ["-af", segment_afilter(seg, ctx, gain, dur)]
     cmd += ["-fps_mode", "cfr", "-r", str(ctx.get("video.fps", "60000/1001")),
+            "-t", f"{dur:.6f}",
             "-color_range", "tv", "-colorspace", "bt709",
             "-color_primaries", "bt709", "-color_trc", "bt709"]
-    cmd += encode_args(ctx)
+    cmd += encode_args(ctx, audio=False) + seg_audio_args(ctx)
     cmd += ["-movflags", "+faststart", str(tmp)]
 
     r = sh(cmd, check=False)
@@ -215,7 +286,7 @@ def run(ctx, force=False):
         k = seg_key(seg, ctx, gain)
         plan.append({"i": i, "seg": seg, "gain": gain, "limited": limited,
                      "src_lufs": I, "src_peak": TP,
-                     "key": k, "path": ctx.seg_dir / f"{k}.mp4"})
+                     "key": k, "path": ctx.seg_dir / f"{k}.mov"})
 
     todo = [p for p in plan if not (p["path"].exists() and p["path"].stat().st_size > 1024)]
     info(f"RENDER  {len(plan)} ชิ้น  ({c(f'cache {len(plan) - len(todo)}', 'd')}, "
@@ -250,8 +321,11 @@ def run(ctx, force=False):
     manifest = {
         # start อยู่ในนี้เพื่อให้ผูกชิ้น → ไฟล์ได้โดยไม่ต้องพึ่งลำดับ i
         # (viewer สลับลำดับแล้ว i เปลี่ยน แต่ (name, start, dur) ยังเหมือนเดิม)
+        # dur = ความยาวตาม EDL (หน้าเว็บใช้จับคู่ชิ้น) · exact_dur = ความยาวจริง
+        # ของไฟล์ที่ปัดลงกริดเฟรมแล้ว ซึ่ง assemble ใช้ตรวจว่าต่อไฟล์ครบไหม
         "segments": [{"i": p["i"], "name": p["seg"]["name"], "kind": p["seg"]["kind"],
                       "start": p["seg"]["start"], "dur": p["seg"]["dur"], "key": p["key"],
+                      "exact_dur": round(exact_dur(p["seg"]["dur"], ctx), 6),
                       "file": p["path"].name, "gain": p["gain"],
                       "src_lufs": p["src_lufs"], "src_peak": p["src_peak"],
                       "target_lufs": p["seg"]["target_lufs"],
@@ -266,9 +340,45 @@ def run(ctx, force=False):
     write_json(ctx.work / "render.json", manifest)
 
     used = sum(p["path"].stat().st_size for p in plan if p["path"].exists()) / 1e9
-    orphan = len([f for f in ctx.seg_dir.glob("*.mp4")
+    orphan = len([f for f in seg_files(ctx)
                   if f.name not in {p["path"].name for p in plan}])
     info(f"  segment cache {used:.2f} GB" +
          (f"  ·  {c(f'ไฟล์เก่าไม่ได้ใช้ {orphan} ชิ้น (ล้างด้วย vcut gc)', 'd')}"
           if orphan else ""))
     return manifest
+
+
+# ─────────────────────────── ไฟล์ segment ───────────────────────────
+
+def seg_files(ctx):
+    """ไฟล์ segment ทั้งหมดในแคช — รวม .mp4 รุ่นเก่าไว้ด้วยเพื่อให้ gc เก็บกวาดได้"""
+    if not ctx.seg_dir.exists():
+        return []
+    return [f for f in ctx.seg_dir.iterdir()
+            if f.suffix.lower() in (".mov", ".mp4") and ".part." not in f.name]
+
+
+def web_copy(ctx, name):
+    """สำเนาที่เบราว์เซอร์เล่นได้ — segment จริงเก็บเสียงเป็น PCM ซึ่งเบราว์เซอร์
+    ส่วนใหญ่เล่นไม่ได้ ทำสำเนาเสียง AAC ไว้ให้หน้าเว็บ ภาพ stream copy จึงเร็วมาก
+    และทำครั้งเดียวต่อชิ้น (ชิ้นที่ไม่เคยกดดูก็ไม่เสียเวลาทำ)
+    """
+    src = ctx.seg_dir / name
+    if not src.exists():
+        return None
+    if src.suffix.lower() == ".mp4":
+        return src
+    out = ctx.work / "segweb"
+    dst = out / f"{src.stem}.mp4"
+    if dst.exists() and dst.stat().st_size > 1024:
+        return dst
+    out.mkdir(parents=True, exist_ok=True)
+    tmp = dst.with_suffix(".part.mp4")
+    r = sh(["ffmpeg", "-nostdin", "-hide_banner", "-v", "error", "-y", "-i", str(src),
+            "-c:v", "copy", "-c:a", "aac", "-b:a", "128k",
+            "-movflags", "+faststart", str(tmp)], check=False)
+    if r.returncode != 0 or not tmp.exists():
+        tmp.unlink(missing_ok=True)
+        return None
+    tmp.replace(dst)
+    return dst

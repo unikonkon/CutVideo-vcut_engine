@@ -202,11 +202,40 @@ def cmd_info(ctx):
         if edl.get("chapters"):
             info(f"      แบ่งเป็น {len(edl['chapters'])} บท")
     if ctx.seg_dir.exists():
-        segs = list(ctx.seg_dir.glob("*.mp4"))
+        segs = render.seg_files(ctx)
         sz = sum(f.stat().st_size for f in segs) / 1e9
         info(f"      segment cache {len(segs)} ไฟล์ · {sz:.2f} GB")
     info("─" * 62)
     info(f"  ดิสก์ว่าง  {disk_free_gb(ctx.work):.1f} GB")
+
+
+def _wanted_segments(ctx):
+    """ชื่อไฟล์ segment ที่ EDL + config ปัจจุบันต้องใช้
+
+    คำนวณ hash ใหม่แทนที่จะเชื่อรายชื่อใน render.json เพราะไฟล์นั้นถูกเขียนไว้
+    ตอน render รอบก่อน ซึ่งอาจใช้สูตรคนละแบบกับตอนนี้ — ถ้าเชื่อมัน ไฟล์สูตร
+    เก่าจะถูกนับว่า "ยังใช้อยู่" ตลอดไป และ gc จะไม่ลบอะไรเลย
+
+    ชิ้นที่ยังไม่เคยวัดความดังคำนวณ hash ไม่ได้ ถ้ามีแบบนั้นปนอยู่ก็เก็บรายชื่อ
+    จาก render.json ไว้ด้วย ดีกว่าลบเกินจนต้อง render ใหม่ทั้งกองโดยไม่ตั้งใจ
+    """
+    rman = read_json(ctx.work / "render.json", {}) or {}
+    listed = {s["file"] for s in rman.get("segments", [])}
+    edl = read_json(ctx.edl)
+    if not edl:
+        return listed
+    loud = read_json(ctx.work / "loudness.json", {}) or {}
+    a = ctx.get("audio", {})
+    keep, unknown = set(), 0
+    for seg in edl.get("timeline", []):
+        k = f"{seg['name']}@{seg['start']:.3f}+{seg['dur']:.3f}"
+        if k not in loud:
+            unknown += 1
+            continue
+        I, TP = loud[k]
+        gain, _ = render.compute_gain(I, TP, float(seg["target_lufs"]), a)
+        keep.add(f"{render.seg_key(seg, ctx, gain)}.mov")
+    return keep | listed if unknown else keep
 
 
 def cmd_gc(ctx, args):
@@ -215,21 +244,32 @@ def cmd_gc(ctx, args):
             shutil.rmtree(ctx.work)
             info(f"  ลบ {ctx.work} ทั้งหมดแล้ว")
         return
-    rman = read_json(ctx.work / "render.json")
-    keep = {s["file"] for s in rman["segments"]} if rman else set()
     if not ctx.seg_dir.exists():
         info("  ไม่มี segment cache")
         return
+    keep = _wanted_segments(ctx)
     freed, n = 0, 0
-    for f in ctx.seg_dir.glob("*.mp4"):
+    for f in render.seg_files(ctx):
         if f.name not in keep:
             freed += f.stat().st_size
             f.unlink()
             n += 1
-    for f in ctx.seg_dir.glob("*.part.mp4"):
-        f.unlink(missing_ok=True)
+    for pat in ("*.part.mp4", "*.part.mov"):
+        for f in ctx.seg_dir.glob(pat):
+            f.unlink(missing_ok=True)
+    # สำเนาสำหรับหน้าเว็บของชิ้นที่ไม่ได้ใช้แล้ว
+    web = ctx.work / "segweb"
+    if web.exists():
+        stems = {Path(k).stem for k in keep}
+        for f in web.glob("*.mp4"):
+            if f.stem not in stems:
+                freed += f.stat().st_size
+                f.unlink()
+    have = len(render.seg_files(ctx))
     info(f"  ลบ segment ที่ไม่ได้ใช้ {n} ไฟล์  คืนพื้นที่ {freed / 1e9:.2f} GB")
-    info(f"  เหลือที่ EDL ปัจจุบันใช้อยู่ {len(keep)} ไฟล์")
+    info(f"  EDL ปัจจุบันต้องใช้ {len(keep)} ไฟล์ · มีอยู่แล้ว {have} ไฟล์"
+         + (c(f" · ต้อง render อีก {len(keep) - have} ชิ้น", "y")
+            if len(keep) > have else ""))
 
 
 def cmd_presets():

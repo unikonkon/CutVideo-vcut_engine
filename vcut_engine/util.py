@@ -128,10 +128,18 @@ def probe_video(path):
                 time.strptime(ct.split(".")[0].rstrip("Z"), "%Y-%m-%dT%H:%M:%S")))
         except (ValueError, TypeError):
             created = 0
+    def _sdur(s):
+        try:
+            return round(float((s or {}).get("duration") or 0), 6)
+        except (TypeError, ValueError):
+            return 0.0
+
     return {
         "created": created,
         "w": w, "h": h, "dw": dw, "dh": dh, "rot": rot,
         "duration": round(dur, 3),
+        # ความยาวของแต่ละ track แยกกัน — ต่างกันเมื่อไรคือเสียงเลื่อนจากภาพ
+        "vdur": _sdur(v) or round(dur, 6), "adur": _sdur(a),
         "codec": v.get("codec_name", "?"),
         "pix_fmt": v.get("pix_fmt", "?"),
         "color_range": v.get("color_range", ""),
