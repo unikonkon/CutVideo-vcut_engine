@@ -155,7 +155,9 @@ FIELDS = [
               "trim_suggest": "แนะนำช่วงที่ควรเก็บ"}),
     F("ai.batch_clips", "ซอยเป็นก้อนละกี่คลิป", "int", "ai", "ai", min=0, max=300, step=10,
       help="0 = ไม่ซอย · ก้อนเล็กเร็วกว่าและหลุดยากกว่า (แบ่งบทไม่ถูกซอยไม่ว่าตั้งเท่าไร)"),
-    F("ai.apply.order", "เรียงคลิปตามบทที่ AI แบ่ง", "bool", "edl", "ai"),
+    # อยู่ขั้น 3 เพราะเป็นเรื่อง "เรียงยังไง" ล้วน ๆ — มีผลเฉพาะตอน [order] mode = pick
+    F("ai.apply.order", "ให้บทที่ AI แบ่งเป็นตัวจัดลำดับ", "bool", "edl", "compose",
+      help='มีผลเฉพาะตอนเรียงลำดับแบบ "ตามที่วิธีเลือกจัดให้" — แบบอื่นคนเลือกไว้ยังไงชนะเสมอ'),
     F("ai.apply.drop", "ทิ้งคลิปที่ AI บอกว่าใช้ไม่ได้", "bool", "edl", "ai"),
     F("ai.apply.trim", "ใช้ช่วงที่ AI แนะนำ", "bool", "edl", "ai"),
     F("ai.apply.score_weight", "เชื่อคะแนน AI แค่ไหน", "float", "edl", "ai",
@@ -219,7 +221,11 @@ FIELDS = [
       labels={"all": "เอาทั้งหมด", "pattern": "สลับตามรูปแบบ",
               "budget": "กำหนดเวลารวมแต่ละแบบ", "numbers": "ตามเลขคลิป",
               "timerange": "ตามช่วงเวลาที่ถ่าย", "manual": "เลือกทีละชิ้นเอง",
-              "ai": "ให้ AI เลือกจากความหมาย"}),
+              "ai": "ให้ AI เลือกจากความหมาย"},
+      # โหมดที่เรียก AI จริงและเสียโควตา — หน้าเว็บแยกกลุ่มด้วยรายการนี้
+      ai_options=list(config.AI_MODES),
+      # โหมดที่จัดลำดับมาเป็นรายการตรง ๆ — เลือกแล้วควรตั้งลำดับเป็น pick
+      own_order=list(config.OWN_ORDER_MODES)),
     F("compose.pattern", "รูปแบบการสลับ", "multi_order", "edl", "compose",
       options=["TALK", "BROLL"], labels={"TALK": "พูด", "BROLL": "วิว"},
       help="ใช้เมื่อเลือก 'สลับตามรูปแบบ' — เช่น พูด → วิว → วิว แล้ววนซ้ำ"),
@@ -245,12 +251,17 @@ FIELDS = [
     # ── รวมเป็นหนัง: ลำดับการเล่า ──
     # อยู่ในขั้น 3 คู่กับ "วิธีเลือกชิ้น" เพราะเป็นเรื่องเดียวกัน — จะเล่าอะไรก่อน
     # ขั้น 2 มีหน้าที่แค่ตัดคลิปเป็นชิ้น ไม่ได้เรียงอะไรเลย
-    F("order.mode", "เรียงลำดับตาม", "select", "edl", "compose",
-      options=["filename", "mtime", "duration"],
-      labels={"filename": "ลำดับจากขั้น 1", "mtime": "เวลาแก้ไขไฟล์",
-              "duration": "ความยาว"},
-      help="'ลำดับจากขั้น 1' = ตามที่ลากจัดไว้ตอนเลือกฟุตเทจ "
-           "(ไม่ได้ลากอะไร = เรียงตามเลขไฟล์) · อีกสองแบบทับลำดับนั้นทิ้ง"),
+    F("order.mode", "เรียงลำดับยังไง", "select", "edl", "compose",
+      options=list(config.ORDER_MODES),
+      labels={"stage1": "ลำดับจากขั้น 1", "pick": "ตามที่วิธีเลือกจัดให้",
+              "date": "วันที่ถ่าย", "number": "เลขที่วิดีโอ",
+              "duration": "ความยาว", "manual": "ที่ลากไว้ในไทม์ไลน์"},
+      helps={"stage1": "ตามที่ลากจัดไว้ตอนเลือกฟุตเทจ (ไม่ได้ลาก = ตามเลขไฟล์)",
+             "pick": "ไม่เรียงซ้ำ — ปล่อยตามที่วิธีเลือกชิ้นจัดมาให้",
+             "date": "เวลาที่ถ่ายจริงจาก metadata ของไฟล์",
+             "number": "เลขบนชื่อไฟล์ เช่น IMG_7068 → 7068 (ไม่สนลำดับที่ลาก)",
+             "duration": "ชิ้นสั้นขึ้นก่อน — ใช้คู่กับ 'กลับลำดับ' ได้",
+             "manual": "ลำดับที่ลากไว้ในไทม์ไลน์รอบก่อน ชิ้นใหม่ต่อท้าย"}),
     F("order.reverse", "กลับลำดับ", "bool", "edl", "compose"),
 
     # ── ภาพ (แพง) ──
@@ -297,8 +308,11 @@ STEP_PARAMS = {
     "ai": ["ai.model", "ai.tasks", "ai.sheets", "ai.transcript_chars",
            "ai.batch_clips", "ai.goal"],
     "silence": ["jumpcut.noise_db", "jumpcut.min_silence"],
+    # ai.apply.order/score_weight ไม่อยู่ตรงนี้ — สองตัวนั้นมีผลตอนรวมเป็นหนัง
+    # (ขั้น 3) ไม่ใช่ตอนตัดคลิปเป็นชิ้น แก้แล้วไม่ต้องเตรียมคลังใหม่
     "prepare": ["talk", "broll", "classify.min_speech_total", "jumpcut",
-                "prepare.keep", "scan.exclude", "ai.enabled", "ai.apply",
+                "prepare.keep", "scan.exclude", "ai.enabled",
+                "ai.apply.drop", "ai.apply.trim",
                 "audio.target_lufs_talk", "audio.target_lufs_broll"],
 }
 
@@ -695,9 +709,14 @@ def estimate(ctx):
 
     ชิ้นที่ยังไม่เคยวัดความดังจะคำนวณ gain ไม่ได้ — แต่ไม่ต้องคำนวณ เพราะ
     "ไม่เคยวัด" แปลว่า (start, dur) ชุดนี้ไม่เคยมีมาก่อน = ต้อง render แน่นอน
+
+    เดินทางเดียวกับปุ่มจริง (prepare → compose) ไม่ใช่ผ่าน decide เพราะ decide
+    แปลง [select] มาทับ [compose] mode — ตัวเลขที่ได้จึงเป็นของหนังคนละเรื่อง
+    กับที่ปุ่ม "จัดใหม่" จะผลิตออกมา
     """
-    from . import decide, render
-    edl = decide.run(ctx, write=False)
+    from . import compose, prepare, render
+    pool = prepare.run(ctx, write=False)
+    edl = compose.run_with_pool(ctx, pool, write=False)
     tl = edl["timeline"]
     loud = read_json(ctx.work / "loudness.json", {}) or {}
     a = ctx.get("audio", {})
@@ -734,5 +753,4 @@ def estimate(ctx):
         "render_seconds": int(new * rate),
         "measure_seconds": int(unmeasured * 1.2),
         "orphans": max(0, len(have) - reuse),
-        "select": s.get("select", {}),
     }

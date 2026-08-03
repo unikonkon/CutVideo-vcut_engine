@@ -13,6 +13,18 @@ PKG_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = PKG_ROOT / "config" / "default.toml"
 PRESET_DIR = PKG_ROOT / "config" / "presets"
 
+# [order] mode — "เรียงยังไง" ซึ่งเป็นคนละแกนกับ [compose] mode ที่ตอบว่า "เอาชิ้นไหน"
+# ตัวแรกคือค่าตั้งต้น · อยู่ที่นี่เพราะ validate ต้องใช้ และ compose/settings อ่านต่อได้
+# (config เป็นโมดูลล่างสุด ใครนำเข้าก็ไม่วน)
+ORDER_MODES = ("stage1", "pick", "date", "number", "duration", "manual")
+ORDER_ALIAS = {"filename": "stage1", "mtime": "date"}    # ชื่อเดิมก่อนแยกสองแกน
+
+# [compose] mode ที่จัดลำดับมาเป็น "รายการตรง ๆ" — เรียงใหม่ทับได้ถ้าคนสั่ง
+# (pattern ไม่อยู่ในนี้ เพราะลำดับของมันคือการสลับประเภท เรียงทับ = พังทั้งโหมด)
+OWN_ORDER_MODES = ("manual", "ai")
+# โหมดที่เรียก AI จริงและเสียโควตา
+AI_MODES = ("ai",)
+
 
 def _deep_merge(base, over):
     out = deepcopy(base)
@@ -146,9 +158,9 @@ def validate(cfg):
     if a.get("tp_ceiling", -4.0) > 0:
         die("[audio] tp_ceiling ต้องเป็นค่าติดลบ (dBFS)")
 
-    o = cfg.get("order", {}).get("mode", "filename")
-    if o not in ("filename", "mtime", "duration"):
-        die(f"[order] mode รองรับ filename | mtime | duration (ได้รับ '{o}')")
+    o = cfg.get("order", {}).get("mode", ORDER_MODES[0])
+    if o not in ORDER_MODES and o not in ORDER_ALIAS:
+        die(f"[order] mode รองรับ {' | '.join(ORDER_MODES)} (ได้รับ '{o}')")
 
     v = cfg.get("video", {}).get("vertical_mode", "blur_pad")
     if v not in ("blur_pad", "pillarbox", "crop"):

@@ -16,18 +16,32 @@
 ทุกโหมดหยิบได้เฉพาะชิ้นที่ ok — ยกเว้น manual ที่หยิบชิ้นซึ่งตัวกรองคัดออก
 กลับมาได้ เพราะคนเลือกเองย่อมรู้ดีกว่าตัวกรอง
 
-**ลำดับตัดสินที่นี่ที่เดียว** ขั้น 2 ไม่ได้เรียงอะไรเลย มันแค่ตัดคลิปเป็นชิ้น
-เก็บใส่คลัง ที่นี่รับสองอย่างมาผสมกัน: ลำดับที่คนลากจัดไว้ในขั้น 1 (`[scan] order`
-→ `_seq`) กับเกณฑ์การเรียงของขั้น 3 (`[order] mode`) โดย mode = "filename"
-แปลว่า "ใช้ลำดับจากขั้น 1" ส่วน pattern/manual/ai คืนลำดับมาเองแล้ว (keeps_order)
-[order] จึงไม่มีผลกับสามโหมดนั้น
+**สองแกนที่แยกกัน** — [compose] mode ตอบว่า *เอาชิ้นไหน* · [order] mode ตอบว่า
+*เรียงยังไง* ใช้ข้ามกันได้ทุกคู่:
+
+    stage1     ลำดับที่คนลากจัดไว้ในขั้น 1 ([scan] order → _seq)  ← ค่าตั้งต้น
+    pick       ไม่เรียงซ้ำ — ตามที่วิธีเลือกชิ้นจัดมาให้ (หรือบทที่ AI แบ่ง)
+    date       วันที่ถ่ายจริงจาก metadata
+    number     เลขบนชื่อไฟล์ (IMG_7068 → 7068)
+    duration   ความยาวชิ้น
+    manual     ลำดับที่คนลากไว้ในไทม์ไลน์รอบก่อน (อ่านจาก edl.json)
+
+ยกเว้นสองจุดที่ต้องรู้: **pattern** ใช้ลำดับนี้ *ข้างในคิวพูดกับคิววิว* แล้วสลับ
+ประเภทตามรูปแบบ (เรียงทับผลลัพธ์รวม = การสลับหายทั้งดุ้น) ส่วน **manual/ai** ให้
+ลำดับมาเป็นรายการตรง ๆ ตั้ง pick ถึงจะเก็บลำดับนั้นไว้ ไม่งั้นถูกเรียงทับ
+
+บทที่ AI แบ่ง ([ai.apply] order) นับเป็นอีกวิธีเรียงที่ซ่อนอยู่ใต้ pick — มันจัด
+ลำดับให้ก็ต่อเมื่อคนเลือก pick เท่านั้น ไม่ทับตัวเลือกอื่น และทั้งก้อนนี้อ่าน
+ai.json ก็ต่อเมื่อ [ai] enabled เปิดอยู่ (หน้าเว็บปิดให้เองเมื่อเลือกโหมดกฎล้วน)
 """
 import re
 import time
 
 from . import ai as ai_mod
 from . import clips as clips_mod
+from . import config
 from .util import c, die, info, read_json, warn, write_json
+
 
 MODES = ("all", "pattern", "budget", "numbers", "timerange", "manual", "ai")
 
@@ -194,11 +208,14 @@ def mode_pattern(pool_ok, cfg, ctx):
         die("[compose] pattern ต้องมีอย่างน้อยหนึ่งค่าเป็น TALK หรือ BROLL")
     target = float(cfg.get("target_minutes", 0) or 0) * 60.0
 
+    # [order] mode มีผลกับโหมดนี้ "ข้างในคิว" ไม่ใช่กับผลลัพธ์รวม — เรียงทับทีหลัง
+    # เมื่อไร การสลับพูด/วิวที่เป็นหัวใจของโหมดนี้ก็หายไปทั้งดุ้น
+    keyf = sort_key(ctx) or _by_seq
     queues = {}
     for k in ("TALK", "BROLL"):
         qs = [p for p in pool_ok if p["kind"] == k]
-        # เรียงตามลำดับไฟล์ แต่ถ้ามีเป้าความยาว ให้เอาชิ้นดีก่อน
-        queues[k] = sorted(qs, key=(lambda p: -p.get("_rank", 0)) if target else _by_seq)
+        # เรียงตามลำดับที่เลือกไว้ แต่ถ้ามีเป้าความยาว ให้เอาชิ้นดีก่อน
+        queues[k] = sorted(qs, key=(lambda p: -p.get("_rank", 0)) if target else keyf)
 
     out, used, i, stall = [], 0.0, 0, 0
     while stall < len(pat):
@@ -214,7 +231,7 @@ def mode_pattern(pool_ok, cfg, ctx):
         out.append(p)
         used += p["dur"]
     if target:
-        out.sort(key=_by_seq)          # คุมสัดส่วนแล้ว แต่ยังเล่าตามลำดับเวลาจริง
+        out.sort(key=keyf)             # คุมสัดส่วนแล้ว แต่ยังเล่าตามลำดับที่เลือกไว้
         out, _ = _reflow(out, pat)
     return out, True, {"รูปแบบ": " → ".join(pat), "ได้": len(out)}
 
@@ -290,20 +307,77 @@ PICKERS = {"all": mode_all, "pattern": mode_pattern, "budget": mode_budget,
 
 # ─────────────────────────── ลำดับ ───────────────────────────
 
-def order_pieces(pieces, ctx, adv):
-    apply = ctx.get("ai.apply", {})
-    if adv and apply.get("order", False) and adv.get("chapters"):
-        rank = {}
-        for ch in adv["chapters"]:
-            for n in ch["clips"]:
-                rank.setdefault(n, len(rank))
+def order_mode(ctx):
+    """[order] mode ที่แปลชื่อเก่าให้แล้ว — filename → stage1 · mtime → date"""
+    m = str(ctx.get("order.mode", config.ORDER_MODES[0]) or config.ORDER_MODES[0])
+    return config.ORDER_ALIAS.get(m, m)
+
+
+def _timeline_rank(ctx):
+    """ลำดับที่คนลากไว้ในไทม์ไลน์รอบก่อน — อ่านจาก edl.json ที่มีอยู่
+
+    ไทม์ไลน์เขียนทับ edl.json ตรง ๆ (ดู serve.apply_edit) พอกด "จัดใหม่" ทีเดียว
+    งานที่ลากไว้ก็หายหมด โหมดนี้ทำให้เก็บไว้ได้ — ชิ้นที่เพิ่งโผล่มาใหม่ต่อท้าย
+    ชิ้นที่หายไปแล้วก็แค่ข้าม
+    """
+    edl = read_json(ctx.edl, {}) or {}
+    return {s["id"]: i for i, s in enumerate(edl.get("timeline", [])) if s.get("id")}
+
+
+def sort_key(ctx):
+    """ฟังก์ชันคีย์สำหรับเรียงชิ้น — None = ไม่ต้องเรียงซ้ำ (โหมด pick)
+
+    ทุกแบบมี _by_seq ต่อท้ายเป็นตัวตัดสินเสมอ ชิ้นที่ค่าเท่ากัน (ถ่ายวันเดียวกัน ·
+    ยาวเท่ากัน) จึงยังเรียงตามลำดับเล่าเรื่อง ไม่ใช่ตามลำดับที่บังเอิญอยู่ใน list
+    """
+    m = order_mode(ctx)
+    if m == "pick":
+        return None
+    if m == "manual":
+        rank = _timeline_rank(ctx)
         tail = len(rank)
-        return sorted(pieces, key=lambda p: (rank.get(p["name"], tail + p["_seq"]),
-                                             _by_seq(p)))
-    mode = ctx.get("order.mode", "filename")
-    keyf = {"filename": _by_seq,
-            "mtime": lambda p: p.get("mtime", 0),
-            "duration": lambda p: p["dur"]}[mode]
+        return lambda p: (rank.get(p["id"], tail), _by_seq(p))
+    return {
+        "stage1": _by_seq,
+        "date": lambda p: (p.get("mtime", 0), _by_seq(p)),
+        "number": lambda p: (p["num"], _by_seq(p)),
+        "duration": lambda p: (p["dur"], _by_seq(p)),
+    }[m]
+
+
+def _chapter_rank(adv):
+    """ลำดับคลิปตามบทที่ AI แบ่ง — บทที่ 1 ก่อน แล้วไล่ไปตามลำดับใน chapters"""
+    rank = {}
+    for ch in adv.get("chapters", []):
+        for n in ch.get("clips", []):
+            rank.setdefault(n, len(rank))
+    return rank
+
+
+def order_pieces(pieces, ctx, adv):
+    """เรียงชิ้นตาม [order] mode — สิ่งที่คนเลือกไว้ชนะเสมอ
+
+    บทที่ AI แบ่งเป็น *วิธีเรียงอีกแบบหนึ่ง* ไม่ใช่ค่าที่มาทับตัวเลือกของคน เดิม
+    [ai.apply] order = true (ค่าตั้งต้น) ชิงเรียงตามบทก่อนทุกครั้งที่เปิด AI ไว้
+    ซึ่งเขียนไว้ตั้งแต่ขั้น 3 ยังไม่มีตัวเลือกลำดับ พอมีแล้วคนเลือก "ลำดับจากขั้น 1"
+    ไว้ก็ไม่มีผลและไม่มีคำเตือนสักคำ — ตอนนี้บทของ AI จัดให้เฉพาะตอนเลือก
+    "ตามที่วิธีเลือกจัดให้" (pick) เท่านั้น นอกนั้นเตือนแล้วเรียงตามที่เลือก
+    """
+    m = order_mode(ctx)
+    use_ai = bool(adv and ctx.get("ai.apply", {}).get("order", False)
+                  and adv.get("chapters"))
+    if use_ai:
+        if m == "pick":
+            rank = _chapter_rank(adv)
+            tail = len(rank)
+            return sorted(pieces, key=lambda p: (rank.get(p["name"], tail + p["_seq"]),
+                                                 _by_seq(p)))
+        warn(f"[ai.apply] order = true แต่ [order] mode = {m} — ใช้ลำดับที่เลือกไว้ "
+             f"บทที่ AI แบ่ง ({len(adv['chapters'])} บท) ไม่ได้ถูกใช้จัดลำดับ\n"
+             "   อยากให้ AI จัดลำดับให้ ตั้ง [order] mode = pick (ตามที่วิธีเลือกจัดให้)")
+    keyf = sort_key(ctx)
+    if keyf is None:
+        return pieces
     return sorted(pieces, key=keyf, reverse=bool(ctx.get("order.reverse", False)))
 
 
@@ -347,6 +421,10 @@ def run_with_pool(ctx, pool, write=True):
     if mode not in MODES:
         die(f"[compose] mode รองรับ {' | '.join(MODES)} (ได้รับ '{mode}')")
 
+    # [ai] enabled คือสวิตช์เดียวที่ตัดสินว่าขั้นนี้อ่าน ai.json ไหม — หน้าเว็บปิดให้
+    # อัตโนมัติเมื่อคนเลือกโหมดในกลุ่ม "ไม่ใช้ AI" จะได้กฎล้วนจริงตามชื่อกลุ่ม
+    # (จงใจไม่ผูกกับ mode ตรงนี้ เพราะ `vcut decide` ตั้ง mode = all/budget แต่ยัง
+    # ตั้งใจใช้คะแนน AI อยู่ — ผูกแล้วเส้นทาง CLI นั้นจะเงียบหายไปทั้งเส้น)
     adv = ai_mod.load(ctx) if ctx.get("ai.enabled", False) else None
     ai_w = float(ctx.get("ai.apply.score_weight", 0.0)) if adv else 0.0
     all_pieces = [dict(p) for p in pool["pieces"]]
@@ -356,7 +434,16 @@ def run_with_pool(ctx, pool, write=True):
 
     picked, keeps_order, stats = PICKERS[mode](
         all_pieces if mode == "manual" else ok, cfg, ctx)
-    if not keeps_order:
+
+    # สองแกนมาเจอกันตรงนี้ — "เอาชิ้นไหน" เสร็จแล้ว เหลือ "เรียงยังไง"
+    #   pattern    จัดลำดับด้วยการสลับประเภท ใช้คีย์ไปแล้วข้างในคิว → ห้ามเรียงทับ
+    #   manual/ai  ลำดับเป็นรายการตรง ๆ → เรียงทับได้ถ้าคนเลือกอย่างอื่นที่ไม่ใช่ pick
+    #   ที่เหลือ    เรียงตามที่เลือกเสมอ
+    omode = order_mode(ctx)
+    if not keeps_order or (mode in config.OWN_ORDER_MODES and omode != "pick"):
+        if mode in config.OWN_ORDER_MODES:
+            warn(f"[order] mode = {omode} เรียงทับลำดับที่โหมด {mode} จัดมาให้ "
+                 "— อยากเก็บลำดับเดิมไว้ให้ตั้งเป็น pick (ตามที่วิธีเลือกจัดให้)")
         picked = order_pieces(picked, ctx, adv)
     # manual กับ ai เลือกชิ้นและลำดับมาเองแล้ว — ไม่เอา run_max ไปทับเจตนาคน
     run_dropped = []

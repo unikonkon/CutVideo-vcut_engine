@@ -140,6 +140,14 @@ li.row.drag{opacity:.35} li.row.over{border-top:2px solid var(--accent)}
 
 /* โหมดของขั้น 3 */
 .modes{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.4rem}
+.grouphd{display:flex;align-items:baseline;gap:.45rem;margin:.9rem 0 .35rem;
+  font-size:12px}
+.grouphd:first-child{margin-top:0}
+.grouphd b{font-size:12.5px}
+.grouphd span{color:var(--dim)}
+.grouphd.ai b{color:var(--warn)}
+.seg.wrap{flex-wrap:wrap;border:0;gap:.3rem}
+.seg.wrap button{border:1px solid var(--line);border-radius:var(--radius)}
 .modes button{text-align:left;padding:.5rem .7rem;line-height:1.35}
 .modes button[aria-pressed=true]{border-color:var(--accent);
   background:color-mix(in srgb,var(--accent) 10%,transparent)}
@@ -1054,13 +1062,66 @@ const MODE_FIELDS = {
   numbers: ['compose.numbers'], timerange: ['compose.from', 'compose.to'],
   manual: [], ai: ['compose.context', 'compose.ask_max'],
 };
-// โหมดที่คืนลำดับมาเองแล้ว (compose.py: keeps_order = True) — [order] ไม่มีผล
-const OWN_ORDER = {
-  pattern: 'สลับพูด/วิว ตามรูปแบบข้างบน โดยแต่ละแบบยังเดินตามลำดับจากขั้น 1',
-  manual: 'เรียงตามที่ติ๊กเลือกเองในคลังข้างล่าง',
-  ai: 'AI จัดลำดับมาให้เองจากความหมายของคลิป',
-};
-const ORDER_KEYS = ['order.mode', 'order.reverse'];
+// ── แกนที่ 2 · เรียงยังไง ─────────────────────────────────────────
+//
+// ตัวเลือกกับคำอธิบายมาจาก settings.FIELDS ที่เดียว ที่นี่มีแค่คำเตือนเฉพาะคู่
+// ที่วิธีเลือกชิ้นกับวิธีเรียงมันตีกันเอง
+
+function orderNote(omode, cmode, f){
+  if (cmode === 'pattern')
+    return omode === 'pick'
+      ? 'โหมดสลับตามรูปแบบจัดลำดับด้วยการสลับประเภทอยู่แล้ว — "pick" กับแบบอื่นให้ผลเท่ากัน'
+      : `สลับ พูด/วิว ตามรูปแบบข้างบน โดยข้างในคิวของแต่ละประเภทเดินตาม`
+        + ` "${f.labels[omode]}" — การสลับไม่หาย`;
+  if ((f.own_order_modes || []).includes(cmode) && omode !== 'pick')
+    return `⚠ โหมดนี้จัดลำดับมาให้เองแล้ว แต่ตั้งไว้ "${f.labels[omode]}"`
+      + ' จะเรียงทับลำดับนั้น — อยากเก็บไว้ให้เลือก "ตามที่วิธีเลือกจัดให้"';
+  return (f.helps || {})[omode] || '';
+}
+
+// บทที่ AI แบ่งเป็น "วิธีเรียง" อีกแบบที่ซ่อนอยู่ใต้ pick — ไม่ทับตัวเลือกของคน
+// อีกแล้ว (ดู compose.order_pieces) ตรงนี้แค่บอกว่าตอนนี้มันได้จัดหรือไม่ได้จัด
+function aiOrderNote(omode, cmode, f){
+  const aiModes = (D.fields.find(x => x.key === 'compose.mode') || {}).ai_options || [];
+  if (aiModes.includes(cmode))
+    return omode === 'pick'
+      ? 'เก็บลำดับที่ AI เลือกมาไว้ตามเดิม'
+      : `AI เลือกช่วงให้ แล้วเรียงใหม่ตาม "${f.labels[omode]}" `
+        + '— อยากเก็บลำดับที่ AI จัดมา เลือก "ตามที่วิธีเลือกจัดให้"';
+  const ch = (S && S.ai && S.ai.chapters) || 0;
+  if (!ch || !val('ai.enabled') || !val('ai.apply.order')) return '';
+  if (cmode === 'pattern' || (f.own_order_modes || []).includes(cmode))
+    return `มี ${ch} บทจาก AI แต่โหมด "${(MODE_HELP[cmode] || ['นี้'])[0]}" จัดลำดับมาเองแล้ว`
+      + ' — บทไม่ได้ถูกใช้จัดลำดับ';
+  return omode === 'pick'
+    ? `บทที่ AI แบ่งไว้ ${ch} บท เป็นตัวจัดลำดับให้ตอนนี้`
+      + ' — ปิดได้ที่ "ให้บทที่ AI แบ่งเป็นตัวจัดลำดับ" ข้างบน'
+    : `มี ${ch} บทจาก AI ที่จัดลำดับได้ แต่เลือก "${f.labels[omode]}" ไว้ `
+      + 'ซึ่งชนะเสมอ — อยากให้ AI จัดให้ เลือก "ตามที่วิธีเลือกจัดให้"';
+}
+
+function orderPicker(cmode){
+  const f = D.fields.find(x => x.key === 'order.mode');
+  if (!f) return el('div');
+  f.own_order_modes = (D.fields.find(x => x.key === 'compose.mode') || {}).own_order || [];
+  const cur = val('order.mode');
+  const box = el('div', 'sect');
+  box.append(el('h4', null, 'แล้วเรียงยังไง'));
+  const seg = el('div', 'seg wrap');
+  f.options.forEach(o => {
+    const b = el('button', null, f.labels[o]);
+    b.title = (f.helps || {})[o] || '';
+    b.setAttribute('aria-pressed', cur === o);
+    b.onclick = () => { setKey('order.mode', D.values['order.mode'], o); render(); };
+    seg.append(b);
+  });
+  box.append(seg, el('p', 'note', orderNote(cur, cmode, f)));
+  const ai = aiOrderNote(cur, cmode, f);
+  if (ai) box.append(el('p', 'note', ai));
+  const rv = D.fields.find(x => x.key === 'order.reverse');
+  if (rv) box.append(field(rv));
+  return box;
+}
 
 // บอกก่อนกดว่าจะส่งไปกี่ชิ้น — คลังใหญ่เกินแล้วโมเดลใช้โควตาตอบหมดไปกับการคิด
 // จนไม่ได้คำตอบ (เคยเจอจริง: 398 ชิ้น รอ 11 นาทีแล้วได้ศูนย์)
@@ -1082,20 +1143,75 @@ function askSize(){
   return p;
 }
 
+// ── ความเห็นที่ AI เคยให้ไว้ ────────────────────────────────────────
+//
+// คนละเรื่องกับปุ่ม "ให้ AI จัดให้" — ปุ่มนั้นคือ *เรียกโมเดลใหม่* อันนี้คือ *อ่าน
+// ai.json ที่ขั้น 2 ทำไว้แล้ว* (บท · คะแนนช็อต) ซึ่งไม่เสียโควตาสักนิด แต่ก็ยัง
+// ตัดสินผลลัพธ์อยู่ดี กดโหมดกฎล้วนแล้วสวิตช์นี้ถูกปิดให้เอง — เปิดกลับได้ที่นี่
+function aiOpinion(usesAI){
+  const en = D.fields.find(f => f.key === 'ai.enabled');
+  if (!en) return null;
+  const on = val('ai.enabled'), ch = (S && S.ai && S.ai.chapters) || 0;
+  const box = el('div', 'sect');
+  box.append(el('h4', null, 'ความเห็นที่ AI เคยให้ไว้'), field(en));
+  box.append(el('p', 'note', on
+    ? 'อ่านจาก ai.json ที่ทำไว้แล้ว — ไม่เรียกโมเดลใหม่ ไม่เสียโควตา'
+      + (ch ? ` · มี ${ch} บท` : ' · ยังไม่มีบท')
+    : 'กฎล้วน — ตอนรวมเป็นหนังไม่อ่าน ai.json เลย ทั้งบทและคะแนน'
+      + (usesAI ? ' (ตัว "ให้ AI เลือก" ยังทำงาน มันอ่าน compose.json คนละไฟล์)' : '')));
+  if (on && ch){
+    const o = D.fields.find(f => f.key === 'ai.apply.order');
+    if (o) box.append(field(o));
+  }
+  // เปิดค้างไว้จากรอบก่อนแล้วมากดโหมดกฎล้วน — auto-off ทำงานตอนคลิกเท่านั้น
+  // ค่าที่บันทึกไว้แล้วจึงต้องมีคนบอกว่ามันยังมีผลอยู่ ไม่ใช่ปล่อยให้เข้าใจผิด
+  if (on && !usesAI)
+    box.append(el('p', 'note warnnote', 'โหมดที่เลือกอยู่ในกลุ่ม "ไม่ใช้ AI" '
+      + 'แต่สวิตช์นี้ยังเปิดค้างอยู่ — บทกับคะแนนของ AI ยังมีผลตอนรวมเป็นหนัง '
+      + 'ปิดเพื่อให้เป็นกฎล้วนจริง'));
+  if (!on && 'ai.enabled' in edits)
+    box.append(el('p', 'note warnnote', 'คลังที่มีอยู่ตอนนี้ถูก AI ตัด/คัดมาแล้ว '
+      + '— อยากได้กฎล้วนทั้งเส้นต้องกลับไปกด "ตัดทีละคลิป" ที่ขั้น 2 อีกครั้ง'));
+  return box;
+}
+
 function stepCompose(box){
   const mode = val('compose.mode') || 'all';
   const c = el('div', 'card');
   c.appendChild(head(3));
 
-  const modes = el('div', 'modes');
-  Object.entries(MODE_HELP).forEach(([m, [t, d]]) => {
-    const b = el('button');
-    b.setAttribute('aria-pressed', m === mode);
-    b.append(el('span', 'mt', t), el('span', 'md', d));
-    b.onclick = () => { setKey('compose.mode', D.values['compose.mode'], m); render(); };
-    modes.appendChild(b);
+  // แยกให้เห็นชัดว่าอันไหนเสียโควตา AI อันไหนเป็นกฎล้วน — กดผิดทีเสียเงินจริง
+  const f = D.fields.find(x => x.key === 'compose.mode') || {};
+  const aiModes = f.ai_options || [];
+  const own = f.own_order || [];
+  [[false, 'ไม่ใช้ AI', 'ตัดสินด้วยกฎล้วน กดกี่รอบก็ได้ ไม่เสียโควตา'],
+   [true, 'ใช้ AI', 'เรียกโมเดลจริงทุกครั้งที่กด — เสียโควตา']].forEach(([isAI, ttl, sub]) => {
+    const list = Object.keys(MODE_HELP).filter(m => aiModes.includes(m) === isAI);
+    if (!list.length) return;
+    const h = el('div', 'grouphd' + (isAI ? ' ai' : ''));
+    h.append(el('b', null, ttl), el('span', null, sub));
+    c.appendChild(h);
+    const modes = el('div', 'modes');
+    list.forEach(m => {
+      const [t, d] = MODE_HELP[m];
+      const b = el('button');
+      b.setAttribute('aria-pressed', m === mode);
+      b.append(el('span', 'mt', t), el('span', 'md', d));
+      b.onclick = () => {
+        setKey('compose.mode', D.values['compose.mode'], m);
+        // โหมดที่ให้ลำดับมาเป็นรายการตรง ๆ — ตั้งลำดับเป็น pick ให้เลย
+        // ไม่งั้นค่าตั้งต้น (ลำดับจากขั้น 1) จะไปเรียงทับสิ่งที่มันเพิ่งจัดมา
+        if (own.includes(m) && val('order.mode') !== 'pick')
+          setKey('order.mode', D.values['order.mode'], 'pick');
+        // "ไม่ใช้ AI · ตัดสินด้วยกฎล้วน" ต้องแปลว่ากฎล้วนจริง — ปิดสวิตช์อ่าน
+        // ai.json ให้เลย ไม่งั้นบทกับคะแนนของ AI ยังตัดสินอยู่เงียบ ๆ
+        if (!isAI && val('ai.enabled')) setKey('ai.enabled', D.values['ai.enabled'], false);
+        render();
+      };
+      modes.appendChild(b);
+    });
+    c.appendChild(modes);
   });
-  c.appendChild(modes);
 
   (MODE_FIELDS[mode] || []).forEach(k => {
     const f = D.fields.find(x => x.key === k); if (f) c.appendChild(field(f));
@@ -1104,27 +1220,30 @@ function stepCompose(box){
     c.appendChild(el('p', 'note', 'ติ๊กชิ้นที่ต้องการในคลังข้างล่าง แล้วกด "จัดใหม่"'));
   if (mode === 'ai') c.appendChild(askSize());
 
-  // ลำดับการเล่า — สามโหมดล่างจัดลำดับมาเองแล้ว โชว์ช่องพวกนี้ไปก็หลอกตา
-  if (OWN_ORDER[mode])
-    c.appendChild(el('p', 'note', 'ลำดับ — ' + OWN_ORDER[mode]));
-  else
-    ORDER_KEYS.forEach(k => {
-      const f = D.fields.find(x => x.key === k); if (f) c.appendChild(field(f));
-    });
+  const usesAI = aiModes.includes(mode);
+  const ao = aiOpinion(usesAI);
+  if (ao) c.appendChild(ao);
+  c.appendChild(orderPicker(mode));
 
   const a = el('div', 'acts');
-  const go = el('button', 'primary runbtn', mode === 'ai' ? 'ให้ AI จัดให้' : 'จัดใหม่');
+  const go = el('button', 'primary runbtn', usesAI ? 'ให้ AI จัดให้' : 'จัดใหม่');
   go.dataset.step = 'compose';
   go.onclick = () => doCompose(mode);
   a.append(go);
   const b2 = el('button', 'runbtn', 'สร้างไฟล์');
-  b2.dataset.step = 'render';
+  b2.dataset.step = 'build';
   b2.onclick = buildFile;
   a.append(b2);
   if (S && S.summary && S.summary.segments)
     a.append(el('span', 'note',
       `ตอนนี้ ${S.summary.segments} ชิ้น · ${mmss(S.summary.duration_total)}`));
   c.appendChild(a);
+  // สองปุ่มนี้เคยถูกเข้าใจผิดบ่อย — เขียนให้ชัดว่าอันไหนตัดสินใจ อันไหนผลิตไฟล์
+  c.appendChild(el('p', 'note',
+    (usesAI ? '"ให้ AI จัดให้" = ส่งคลังไปให้โมเดลเลือกช่วง แล้วเรียงตามที่ตั้งไว้ '
+            : '"จัดใหม่" = เลือกชิ้น + เรียง ตามที่ตั้งไว้ข้างบน ')
+    + '→ เขียนไทม์ไลน์ · "สร้างไฟล์" = ตัดชิ้นที่ยังไม่มี แล้วต่อเป็นไฟล์เดียว '
+    + 'จากไทม์ไลน์ที่เห็นอยู่ ไม่เลือกใหม่ ไม่เรียก AI'));
   c.appendChild(advanced(['compose', 'render', 'assemble']));
   box.appendChild(c);
 
@@ -1274,8 +1393,10 @@ function advanced(stages){
     // type "clips" = เลือกด้วยการกดที่ตัวคลิปในขั้น 1 ไม่ใช่ช่องกรอก
     && f.type !== 'clips'
     && !['project.source','project.name','project.out','ai.enabled','ai.goal',
-         'ai.tasks','ai.model','compose.mode', 'jumpcut.enabled', 'jumpcut.noise_db',
-         'jumpcut.min_silence', 'jumpcut.pad', 'jumpcut.min_piece', ...ORDER_KEYS]
+         'ai.tasks','ai.model','ai.apply.order',
+         'compose.mode', 'jumpcut.enabled', 'jumpcut.noise_db',
+         'jumpcut.min_silence', 'jumpcut.pad', 'jumpcut.min_piece',
+         'order.mode', 'order.reverse']
         .includes(f.key)
     && !Object.values(MODE_FIELDS).flat().includes(f.key));
   if (!fs.length) d.appendChild(el('p', 'note', 'ไม่มีค่าเพิ่มเติมในขั้นนี้'));
@@ -1450,18 +1571,26 @@ async function saveTimeline(){
   } catch(e){ toast(e.message, true); }
 }
 
+// "สร้างไฟล์" = ผลิตไฟล์จากไทม์ไลน์ที่เห็นอยู่ ไม่ตัดสินใจอะไรใหม่อีก
+//
+// เดิมปุ่มนี้สั่ง runStep('plan') = `vcut run` ทั้งไปป์ไลน์ ซึ่งลากขั้นถาม AI ไป
+// รันด้วยทุกครั้ง แม้เลือกโหมดกฎล้วนไว้ — คนกดคำเดียวได้ claude รันครึ่งชั่วโมง
 async function buildFile(){
   if (tlDirty()) return toast('ยังไม่ได้บันทึกไทม์ไลน์ — กดบันทึกก่อน', true);
+  if (Object.keys(edits).length)
+    return toast('ยังมีค่าที่แก้ไว้แต่ยังไม่ได้ใช้ — กด "จัดใหม่" ก่อน', true);
   let p;
   try { p = await api('/api/plan'); } catch(e){ return toast(e.message, true); }
-  const run = p.steps.filter(s => s.run);
-  const lines = ['จะรันตามลำดับนี้:', '', ...run.map((s,i) => `  ${i+1}. ${s.label}`), ''];
-  if (p.estimate && p.estimate.new)
-    lines.push(`render ใหม่ ${p.estimate.new} ชิ้น (ใช้ของเดิมได้ ${p.estimate.reuse})`);
-  else if (p.estimate) lines.push('ไม่ต้อง render ใหม่');
-  if (p.seconds) lines.push(`ประมาณ ${hhmm(p.seconds)}`);
-  if (p.unknown.length) lines.push(`ยังไม่รวมเวลาของ: ${p.unknown.join(' · ')}`);
-  if (confirm(lines.join('\n'))) runStep('plan');
+  const e = p.estimate || {};
+  const lines = ['สร้างไฟล์จากไทม์ไลน์ที่เห็นอยู่ตอนนี้:', '',
+                 '  1. ตัดเป็นชิ้น (render)', '  2. ต่อเป็นไฟล์ (assemble)', ''];
+  if (e.segments) lines.push(`ไทม์ไลน์ ${e.segments} ชิ้น · ${mmss(e.duration)}`);
+  lines.push(e.new ? `render ใหม่ ${e.new} ชิ้น (ใช้ของเดิมได้ ${e.reuse})`
+                   : 'ไม่ต้อง render ใหม่');
+  if (e.render_seconds != null)
+    lines.push(`ประมาณ ${hhmm(e.render_seconds + e.measure_seconds + 60)}`);
+  lines.push('', 'ไม่เลือกชิ้นใหม่ ไม่เรียงใหม่ ไม่เรียก AI');
+  if (confirm(lines.join('\n'))) runStep('build');
 }
 
 // ── กำลังทำงานอยู่ไหม · ทำถึงไหนแล้ว ────────────────────────────
