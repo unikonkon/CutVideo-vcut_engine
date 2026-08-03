@@ -220,36 +220,84 @@ class Job:
 
 # ─────────────────────────── ตรวจ EDL ที่ส่งกลับมา ───────────────────────────
 
+MIN_PIECE = 0.30       # ชิ้นสั้นกว่านี้ดูเป็นความผิดพลาด ไม่ใช่การตัดสินใจ
+
+
 def apply_edit(ctx, payload):
     """รับไทม์ไลน์ชุดใหม่จากหน้าเว็บ แล้วเขียน edl.json
 
-    ยอมให้ทำได้แค่ "เอาออก" กับ "สลับลำดับ" เท่านั้น — ทุกชิ้นที่ส่งกลับมา
-    ต้องตรงกับชิ้นที่มีอยู่แล้วใน EDL ทั้ง name/start/dur ถ้าไม่ตรงคือปฏิเสธ
-    (กันทั้งบั๊กฝั่งหน้าเว็บ และกันไม่ให้เกิดชิ้นที่ยังไม่ได้ render)
+    เดิมยอมให้ทำได้แค่ "เอาออก" กับ "สลับลำดับ" — ทุกชิ้นต้องตรงกับที่มีอยู่แล้ว
+    เป๊ะ ๆ ตอนนี้เปิดให้ขยับขอบ (trim) และซอยชิ้น (cut ชนเพิ่ม) ได้ด้วย เหตุผล
+    เดิมของด่านตรวจยังอยู่ครบ แค่เปลี่ยนวิธีตรวจ: แทนที่จะถามว่า "ชิ้นนี้มีอยู่
+    แล้วไหม" เปลี่ยนเป็นถามว่า "ชิ้นนี้ตัดจากคลิปจริงได้ไหม"
+
+        ชื่อคลิปต้องอยู่ใน manifest จริง · 0 ≤ start < end ≤ ความยาวคลิป
+        ยาวอย่างน้อย MIN_PIECE · เหลืออย่างน้อย 1 ชิ้น
+
+    คุณสมบัติที่เหลือ (orient · rot_override · full_range · achannels · src ·
+    target_lufs) ลอกจากชิ้นเดิมของคลิปนั้นใน EDL — ค่าพวกนี้เป็นของ *คลิป* ไม่ใช่
+    ของ *ช่วง* ขยับขอบแล้วจึงไม่เปลี่ยน ถ้าคลิปนั้นไม่เคยอยู่ใน EDL มาก่อนก็
+    ประกอบขึ้นใหม่จาก manifest ได้
+
+    ชิ้นที่ขอบเปลี่ยนจะไม่มีไฟล์ segment รองรับ — ตั้งใจให้เป็นแบบนั้น หน้าเว็บ
+    รู้อยู่แล้วว่าต้องบอกผู้ใช้ว่า "กดสร้างไฟล์แล้วต้องตัดใหม่กี่ชิ้น"
     """
     edl = read_json(ctx.edl)
     if not edl:
         return None, "ยังไม่มี edl.json"
-    old = {}
+    man = read_json(ctx.manifest, {}) or {}
+    clips = {c["name"]: c for c in man.get("clips", [])}
+    tr = (read_json(ctx.transcript, {}) or {}).get("clips", {})
+
+    # ชิ้นตัวอย่างของแต่ละคลิป — ใช้ลอกคุณสมบัติที่ไม่ขึ้นกับช่วงเวลา
+    tmpl = {}
     for s in edl["timeline"]:
-        old.setdefault((s["name"], round(s["start"], 3), round(s["dur"], 3)), s)
+        tmpl.setdefault(s["name"], s)
 
     order = payload.get("keep")
     if not isinstance(order, list):
         return None, "payload ต้องมีคีย์ keep เป็น list"
 
-    timeline, seen = [], set()
+    timeline, used = [], {}
     for it in order:
         try:
-            k = (it["name"], round(float(it["start"]), 3), round(float(it["dur"]), 3))
+            name = str(it["name"])
+            a = round(float(it["start"]), 3)
+            b = round(float(it.get("end", float(it["start"]) + float(it.get("dur", 0)))), 3)
         except (KeyError, TypeError, ValueError):
             return None, f"ชิ้นที่ส่งมาไม่ครบคีย์: {it}"
-        if k not in old:
-            return None, f"ไม่พบชิ้นนี้ใน EDL ปัจจุบัน: {k[0]} @{k[1]}"
-        if k in seen:
-            return None, f"ส่งชิ้นซ้ำ: {k[0]} @{k[1]}"
-        seen.add(k)
-        timeline.append(old[k])
+        cl = clips.get(name)
+        if not cl:
+            return None, f"ไม่รู้จักคลิป '{name}' — ไม่มีใน manifest"
+        if a < 0 or b > round(cl["duration"], 3) + 0.001:
+            return None, (f"{name}: ช่วง {a:.2f}–{b:.2f} วิ อยู่นอกคลิป "
+                          f"(คลิปยาว {cl['duration']:.2f} วิ)")
+        if b - a < MIN_PIECE:
+            return None, (f"{name}: ชิ้นสั้นเกินไป {b - a:.2f} วิ "
+                          f"(อย่างน้อย {MIN_PIECE:g} วิ)")
+
+        base = tmpl.get(name)
+        if base:
+            piece = {k: v for k, v in base.items() if k not in ("start", "end", "dur", "id", "text")}
+        else:
+            piece = {"name": name, "src": cl["src"], "orient": cl["orient"],
+                     "rot_override": cl.get("rot_override", ""),
+                     "full_range": cl.get("full_range", False),
+                     "achannels": cl.get("achannels", 2),
+                     "kind": it.get("kind", "BROLL"),
+                     "target_lufs": float(ctx.get("audio.target_lufs_broll", -26.0))}
+        n = used.get(name, 0)
+        used[name] = n + 1
+        piece.update({"start": a, "end": b, "dur": round(b - a, 3),
+                      "id": f"{name}#{n}"})
+        # คำพูดในช่วงใหม่ — ขยับขอบแล้วข้อความเดิมไม่ตรงอีกต่อไป
+        if piece.get("kind") == "TALK":
+            txt = " ".join(t for s0, e0, t in tr.get(name, []) if e0 > a and s0 < b).strip()
+            if txt:
+                piece["text"] = txt[:400]
+            else:
+                piece.pop("text", None)
+        timeline.append(piece)
 
     if not timeline:
         return None, "เหลือ 0 ชิ้น — ต้องเก็บไว้อย่างน้อย 1 ชิ้น"
@@ -293,6 +341,8 @@ def build_state(ctx):
     by_key = {}
     for s in rman.get("segments", []):
         by_key[(s["name"], round(s.get("start", -1), 3), round(s["dur"], 3))] = s
+    # ความยาวคลิปต้นฉบับ — เพดานของการลากขอบในไทม์ไลน์แบบแถบ
+    clip_dur = {c["name"]: c["duration"] for c in man.get("clips", [])}
     tl = []
     for i, s in enumerate(edl.get("timeline", [])):
         r = by_key.get((s["name"], round(s["start"], 3), round(s["dur"], 3))) or {}
@@ -300,6 +350,7 @@ def build_state(ctx):
         tl.append({
             "i": i, "name": s["name"], "kind": s["kind"],
             "start": s["start"], "end": s["end"], "dur": s["dur"],
+            "clip_dur": clip_dur.get(s["name"], s["end"]),
             "orient": s.get("orient", "H"),
             "text": s.get("text", ""),
             "motion": s.get("motion"), "bright": s.get("bright"),
@@ -529,14 +580,18 @@ def make_handler(ctx, job):
             ctype = ctype or mimetypes.guess_type(path.name)[0] or "application/octet-stream"
             self._send(200, path.read_bytes(), ctype)
 
-        # ตอบทีละไม่เกินเท่านี้ต่อหนึ่งคำขอ — เบราว์เซอร์ขอ "bytes=0-" มาเฉย ๆ
-        # ถ้าตอบทั้งก้อนตามที่ขอ ไฟล์หนัง 3 GB จะถูกอ่านเข้าหน่วยความจำทั้งหมด
-        # แล้วส่งไม่ทันจนสายหลุด (ERR_CONTENT_LENGTH_MISMATCH) การตอบสั้นกว่าที่ขอ
-        # เป็นเรื่องปกติของ HTTP 206 เบราว์เซอร์จะขอก้อนถัดไปเอง
-        RANGE_CHUNK = 8 << 20
-
         def _range_file(self, path):
-            """วิดีโอต้องรองรับ Range ไม่งั้นเบราว์เซอร์เลื่อนดูไม่ได้"""
+            """วิดีโอต้องรองรับ Range ไม่งั้นเบราว์เซอร์เลื่อนดูไม่ได้
+
+            ตอบให้ครบตามช่วงที่ขอเสมอ **ห้ามตอบสั้นกว่าที่ขอ** — เคยลองจำกัดไว้
+            ก้อนละ 8 MB เพื่อกันหน่วยความจำบวม ผลคือหนัง 3 GB เล่นได้ 3.9 วินาที
+            (= ปริมาณวิดีโอใน 8 MB พอดี) แล้วหยุดนิ่ง เพราะเบราว์เซอร์ถือว่า
+            ตอบเท่าที่ให้มาคือจบทรัพยากร ไม่ขอก้อนถัดไปให้
+
+            หน่วยความจำไม่บวมอยู่แล้วเพราะ _stream ส่งทีละ 64 KB ไม่ได้อ่านทั้ง
+            ก้อนขึ้นมาก่อน ส่วนตอนคนกดเลื่อนดู เบราว์เซอร์จะตัดสายทิ้งเองแล้วขอ
+            ช่วงใหม่ — ฝั่งนี้เจอ BrokenPipe ซึ่งจับไว้แล้วใน _stream
+            """
             if not path.exists():
                 return self._send(404, b"not found", "text/plain")
             size = path.stat().st_size
@@ -544,10 +599,8 @@ def make_handler(ctx, job):
             m = re.match(r"bytes=(\d*)-(\d*)", rng)
             if not m:
                 return self._stream(path, 0, size - 1, size, 200)
-            a = int(m.group(1)) if m.group(1) else 0
-            b = int(m.group(2)) if m.group(2) else size - 1
-            a = max(0, a)
-            b = min(size - 1, b, a + self.RANGE_CHUNK - 1)
+            a = max(0, int(m.group(1)) if m.group(1) else 0)
+            b = min(size - 1, int(m.group(2)) if m.group(2) else size - 1)
             if a > b:
                 return self._send(416, b"", "video/mp4")
             return self._stream(path, a, b, size, 206)
@@ -890,8 +943,20 @@ def run(ctx, port=8765, open_browser=True, config_args=None,
     if not list(ctx.thumb_dir.glob("*.jpg")):
         warn("ยังไม่มีภาพตัวอย่าง — สั่ง 'ภาพตัวอย่าง' ในขั้น 1 ก่อนจะได้มีรูปให้ดู")
 
+    class Server(ThreadingHTTPServer):
+        daemon_threads = True
+
+        def handle_error(self, request, client_address):
+            """เบราว์เซอร์ตัดสายกลางคันทุกครั้งที่คนกดเลื่อนวิดีโอ — เป็นเรื่องปกติ
+            ไม่ใช่ความผิดพลาด ของเดิมพ่น traceback ยาวเหยียดใส่เทอร์มินัลทุกครั้ง
+            จนบันทึกการทำงานจริงจมหาย (วัดจริง 20 ครั้งในการทดสอบไม่กี่นาที)"""
+            if issubclass(sys.exc_info()[0] or Exception,
+                          (ConnectionResetError, BrokenPipeError, ConnectionAbortedError)):
+                return
+            super().handle_error(request, client_address)
+
     job = Job()
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), make_handler(ctx, job))
+    httpd = Server(("127.0.0.1", port), make_handler(ctx, job))
     url = f"http://127.0.0.1:{port}/"
     st = build_state(ctx)
     info(f"VIEW  {st['summary'].get('segments', 0)} ชิ้น · "

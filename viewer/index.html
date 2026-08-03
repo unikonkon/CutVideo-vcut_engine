@@ -263,6 +263,33 @@ dialog .dh .m{font:11.5px ui-monospace,Menlo,monospace;color:var(--dim)}
 dialog .db{padding:.9rem 1rem;max-height:min(62vh,620px);overflow:auto}
 dialog .df{padding:.7rem 1rem;border-top:1px solid var(--line);display:flex;gap:.45rem;
   align-items:center}
+/* ไทม์ไลน์แบบแถบแนวนอน */
+.tlwrap{overflow-x:auto;overflow-y:hidden;border:1px solid var(--off);border-radius:6px;
+  background:var(--bg2);padding:0 0 .4rem}
+.tlinner{position:relative;min-width:100%}
+.tlruler{position:relative;height:20px;border-bottom:1px solid var(--off);cursor:pointer}
+.tlruler i{position:absolute;top:0;bottom:0;width:1px;background:var(--off)}
+.tlruler i span{position:absolute;left:3px;top:2px;font-size:10px;color:var(--dim);
+  white-space:nowrap;font-variant-numeric:tabular-nums}
+.tltrack{position:relative;height:56px;margin-top:6px}
+.tlblk{position:absolute;top:0;height:56px;border-radius:4px;box-sizing:border-box;
+  border:1px solid rgba(0,0,0,.35);cursor:grab;overflow:hidden;touch-action:none;
+  background:#2f6f4f}
+.tlblk.BROLL{background:#3a5a7a}
+.tlblk.sel{outline:2px solid var(--accent);outline-offset:-2px;z-index:3}
+.tlblk.cut::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:var(--warn)}
+.tlname{position:absolute;left:6px;top:4px;font-size:10.5px;color:#fff;opacity:.9;
+  pointer-events:none;white-space:nowrap}
+.tlh{position:absolute;top:0;bottom:0;width:7px;cursor:ew-resize;z-index:2}
+.tlh:hover{background:rgba(255,255,255,.35)}
+.tlh-l{left:0} .tlh-r{right:0}
+.tlhead{position:absolute;top:-26px;bottom:0;width:2px;background:var(--warn);z-index:4;
+  pointer-events:none}
+.tlclip{position:relative;height:14px;border-radius:3px;background:var(--off);
+  overflow:hidden;margin:.2rem 0 .35rem}
+.tlclip-use{position:absolute;top:0;bottom:0;background:var(--accent);opacity:.75}
+.tlclip-o{position:absolute;top:0;bottom:0;width:2px;background:#fff;opacity:.85}
 /* ตัวเล่นวิดีโอขั้น 3 */
 .pv{background:#000;border-radius:6px;overflow:hidden;position:relative;line-height:0}
 .pv video{display:block;width:100%;max-height:52vh;background:#000;object-fit:contain}
@@ -398,7 +425,10 @@ const mmss = s => `${Math.floor(s/60)}:${String(Math.round(s%60)).padStart(2,'0'
 const hhmm = s => s < 60 ? `${Math.round(s)} วิ`
   : s < 3600 ? `${Math.round(s/60)} นาที` : `${(s/3600).toFixed(1)} ชม.`;
 const val = k => k in edits ? edits[k] : (D && D.values[k]);
-const tlDirty = () => items.some(x => x.off) || items.some((x,i) => x.i !== i);
+// ชิ้นนี้ถูกขยับขอบหรือเพิ่งเกิดจากการซอยไหม — ถ้าใช่ ไฟล์ที่ตัดไว้เดิมใช้ไม่ได้
+const tlCut = x => !x.o || x.start !== x.o.start || x.end !== x.o.end;
+const tlDirty = () => items.some(x => x.off) || items.some((x, i) => x.i !== i)
+  || items.some(tlCut) || items.length !== ((S && S.timeline) || []).length;
 const size = b => b >= 1e9 ? (b/1e9).toFixed(2) + ' GB' : b >= 1e6 ? (b/1e6).toFixed(1)
   + ' MB' : b >= 1e3 ? Math.round(b/1e3) + ' KB' : b + ' B';
 // path ยาว ๆ ต้องตัดหัวไม่ใช่ตัดท้าย — ส่วนที่ต่างกันอยู่ท้ายเสมอ ตัดท้ายแล้ว
@@ -440,7 +470,11 @@ async function load(keepEdits){
   if (!keepEdits){
     edits = {}; poolKeep = null; clEdits = {pick: {}, rot: {}, vmode: {}, order: null};
   }
-  if (S && S.timeline){ items = S.timeline.map(x => ({...x, off:false})); sel = -1; }
+  // o = ขอบเดิมตอนโหลดมา ใช้เทียบว่าถูกแก้แล้วหรือยัง และวาดเส้นขอบเดิมในแถบ
+  if (S && S.timeline){
+    items = S.timeline.map(x => ({...x, off: false, o: {start: x.start, end: x.end}}));
+    sel = -1;
+  }
   $('#title').textContent = D.values['project.name'] || 'vcut';
   $('#c-proj').textContent = D.project.path || 'ยังไม่มีไฟล์โปรเจกต์';
   renderSteps(); render();
@@ -1405,24 +1439,29 @@ function pvJoins(){
   const ps = pvPieces();
   const ok = (PV_JOIN_FILTERS[PV.joinFilter] || PV_JOIN_FILTERS.talk)[1];
   const out = [];
-  for (let i = 0; i + 1 < ps.length; i++){
-    if (!ps[i].seg || !ps[i + 1].seg) continue;
+  for (let i = 0; i + 1 < ps.length; i++)
     if (ok(ps[i], ps[i + 1])) out.push([ps[i], ps[i + 1]]);
-  }
   return out;
 }
+
+// ชิ้นที่ยังไม่มีไฟล์ตัดไว้ (เพิ่งลากขอบ/เพิ่งซอย) เล่นจาก **ไฟล์ต้นฉบับ** แทน
+// ตำแหน่งถูกต้องทันทีโดยไม่ต้องรอตัดใหม่ แลกกับภาพที่ยังไม่ผ่านฟิลเตอร์
+// (ยังไม่หมุน ยังไม่เบลอข้างสำหรับคลิปแนวตั้ง) และเสียงที่ยังไม่ปรับระดับ
+const pvRaw = p => !p.seg || tlCut(p);
+const pvSrc = p => pvRaw(p) ? `/clip/${p.name}` : `/seg/${p.seg}`;
+const pvOff = p => pvRaw(p) ? p.start : 0;   // จุดเริ่มของชิ้นในไฟล์ที่กำลังเล่น
 
 function pvChunks(){
   const ps = pvPieces();
   if (PV.mode === 'joins'){
     const out = [];
     pvJoins().forEach(([a, b], j) => {
-      out.push({p: a, from: Math.max(0, a.dur - PV_PRE), to: a.dur, join: j},
-               {p: b, from: 0, to: Math.min(PV_POST, b.dur), join: j});
+      out.push({p: a, from: pvOff(a) + Math.max(0, a.dur - PV_PRE), to: pvOff(a) + a.dur, join: j},
+               {p: b, from: pvOff(b), to: pvOff(b) + Math.min(PV_POST, b.dur), join: j});
     });
     return out;
   }
-  return ps.filter(x => x.seg).map(x => ({p: x, from: 0, to: x.dur}));
+  return ps.map(x => ({p: x, from: pvOff(x), to: pvOff(x) + x.dur}));
 }
 
 const pvLen = ch => Math.max(0.05, ch.to - ch.from);
@@ -1461,6 +1500,7 @@ function pvBuild(){
 
   const bar = el('div', 'pvbar');
   const play = el('button', 'sm', '▶');
+  play.title = 'เล่น/หยุด (เคาะ Space ก็ได้)';
   play.onclick = pvToggle;
   const prev = el('button', 'sm', '⏮'), next = el('button', 'sm', '⏭');
   prev.title = 'ชิ้นก่อนหน้า'; next.title = 'ชิ้นถัดไป';
@@ -1499,6 +1539,23 @@ function pvBuild(){
     v.addEventListener('ended', () => { if (v === pvActive()) pvAdvance(); });
   });
   vf.addEventListener('timeupdate', pvTick);
+
+  // PV.playing ต้องตรงกับความจริงเสมอ ไม่ใช่แค่ตรงกับปุ่มที่เรากดเอง — โหมด
+  // "ไฟล์ที่ต่อแล้ว" มีแถบควบคุมของเบราว์เซอร์อยู่ด้วย คนสั่งเล่น/หยุดจากตรงนั้น
+  // ได้โดยที่เราไม่รู้ แล้ว Space ครั้งถัดไปจะสั่งซ้ำทางเดิม กดแล้วเหมือนไม่มีอะไร
+  // เกิดขึ้น  ฟังจากตัววิดีโอโดยตรงจึงชัวร์กว่า และปุ่ม ▶/⏸ ก็ถูกต้องตามไปด้วย
+  [va, vb, vf].forEach(v => {
+    const seen = on => () => {
+      // สนใจเฉพาะตัวที่กำลังฉายอยู่ อีกตัวเป็นแค่ที่พักท่อนถัดไป
+      if (v !== (PV.mode === 'file' ? PV.el.vf : pvActive())) return;
+      if (!on && v.ended && PV.mode !== 'file') return;   // จบท่อน — pvAdvance ต่อให้แล้ว
+      if (PV.playing === on) return;
+      PV.playing = on;
+      pvSync();
+    };
+    v.addEventListener('play', seen(true));
+    v.addEventListener('pause', seen(false));
+  });
 }
 
 const pvActive = () => (PV.flip ? PV.el.vb : PV.el.va);
@@ -1511,8 +1568,6 @@ function pvSetMode(m){
   ['va', 'vb', 'vf'].forEach(k => { PV.el[k].removeAttribute('src'); PV.el[k].load(); });
   render();
 }
-
-function pvSrc(p){ return `/seg/${p.seg}`; }
 
 function pvLoadChunk(ci, off, autoplay){
   const cs = pvChunks();
@@ -1577,6 +1632,12 @@ function pvTick(){
 function pvProgress(frac, cur, tot){
   PV.el.fill.style.width = (Math.max(0, Math.min(1, frac)) * 100).toFixed(2) + '%';
   PV.el.time.textContent = `${mmss(cur || 0)} / ${mmss(tot || 0)}`;
+  // หัวอ่านของไทม์ไลน์แบบแถบเดินตามตัวเล่น — ขยับ DOM ตรง ๆ ไม่วาดหน้าใหม่
+  // (วาดใหม่ทุก timeupdate = 4 ครั้งต่อวินาที จะกระตุกทั้งหน้า)
+  PV.gt = cur || 0;
+  const h = document.getElementById('tl-head');
+  if (h) h.style.left = (PV.gt * tlZoom) + 'px';
+  tlFollow();
 }
 
 function pvSeek(t){
@@ -1655,7 +1716,7 @@ function pvSync(){
 
 function pvFoot(cs, ps){
   const w = el('div');
-  const notRendered = ps.filter(x => !x.seg).length;
+  const notRendered = ps.filter(pvRaw).length;
 
   if (PV.mode === 'file'){
     if (!S || !S.out_exists){
@@ -1726,20 +1787,76 @@ function pvFoot(cs, ps){
     + 'คลิกชิ้นในไทม์ไลน์ข้างล่างเพื่อกระโดดไปเล่นตรงนั้น'));
   if (notRendered)
     w.appendChild(el('p', 'note warnnote',
-      `ยังไม่ได้ตัดเป็นชิ้น ${notRendered} ชิ้น — ถูกข้ามในโหมดนี้ `
-      + 'กด "สร้างไฟล์" เพื่อตัดให้ครบ'));
+      `${notRendered} ชิ้นยังไม่มีไฟล์ที่ตัดไว้ (เพิ่งแก้ขอบหรือเพิ่งซอย) — `
+      + 'เล่นจากไฟล์ต้นฉบับให้ก่อน ตำแหน่งถูกต้องแต่ภาพยังไม่ผ่านฟิลเตอร์ '
+      + 'และเสียงยังไม่ปรับระดับ · กด "สร้างไฟล์" เพื่อให้เป็นของจริง'));
   return w;
 }
 
 // คลิกชิ้นในไทม์ไลน์ → กระโดดไปเล่นตรงนั้น (เฉพาะโหมดที่ต่อชิ้นเอง)
-function pvGotoPiece(x){
-  if (!PV || !PV.node || PV.mode === 'file') return false;
+// ให้ตัวเล่นกระโดดไปที่ชิ้นนี้ · play=true คือให้เริ่มเล่นเลยไม่ว่าก่อนหน้าจะหยุดอยู่
+//
+// โหมด "ไฟล์ที่ต่อแล้ว" ไม่มีแนวคิดเรื่องชิ้น จึงแปลงเป็นเวลาบนไทม์ไลน์รวมแทน —
+// ตำแหน่งจะเพี้ยนถ้าไทม์ไลน์ถูกแก้หลังต่อไฟล์ ซึ่งการ์ดตัวเล่นเตือนไว้อยู่แล้ว
+function pvGotoPiece(x, play){
+  if (!PV || !PV.node) return false;
+  if (PV.mode === 'file'){
+    if (!S || !S.out_exists) return false;
+    const on = tlOn(), base = tlBase(), j = on.indexOf(x);
+    if (j < 0) return false;
+    if (!PV.el.vf.src) PV.el.vf.src = '/out';
+    const go = () => { PV.el.vf.currentTime = base[j];
+                       if (play) pvPlay(); };
+    if (PV.el.vf.readyState >= 1) go();
+    else PV.el.vf.addEventListener('loadedmetadata', go, {once: true});
+    return true;
+  }
   const cs = pvChunks();
   const i = cs.findIndex(ch => ch.p === x);
   if (i < 0) return false;
-  pvLoadChunk(i, 0, PV.playing);
+  if (play) PV.playing = true;
+  pvLoadChunk(i, 0, play || PV.playing);
   return true;
 }
+
+// แถบเลื่อนตามหัวอ่านตอนกำลังเล่น — เลื่อนก็ต่อเมื่อหัวอ่านจะหลุดขอบจอแล้ว
+// จะได้ไม่แย่งการเลื่อนมือของคนดูตลอดเวลา
+function tlFollow(){
+  const w = document.querySelector('.tlwrap');
+  if (!w || !PV || !PV.playing) return;
+  const x = (PV.gt || 0) * tlZoom;
+  if (x < w.scrollLeft + 40 || x > w.scrollLeft + w.clientWidth - 40){
+    w.scrollLeft = Math.max(0, x - w.clientWidth / 2);
+    tlScroll = w.scrollLeft;
+  }
+}
+
+// เคาะ Space = เล่น/หยุด — แป้นเดียวที่โปรแกรมตัดต่อทุกตัวใช้ตรงกัน
+//
+// ดักที่ document เพราะหลังคลิกบล็อกในไทม์ไลน์ โฟกัสยังอยู่ที่ body (บล็อกเป็น
+// <div> ไม่ใช่ปุ่ม) ถ้าผูกไว้กับตัวเล่นอย่างเดียวจะไม่ได้ยินอะไรเลย
+//
+// เว้นไว้ให้ของเดิมทำงานเมื่ออยู่ในช่องกรอก — <input> รวมถึง checkbox ที่ Space
+// คือวิธีติ๊กทางเดียว · <textarea> · <select> · ช่องแก้ข้อความ — และเมื่อมีกล่อง
+// โต้ตอบเปิดอยู่  ส่วนตอนโฟกัสค้างอยู่บนปุ่มเราแย่งมาเลย เพราะคนเคาะ Space หลัง
+// กดปุ่มไปหมาด ๆ ต้องการให้หนังหยุด ไม่ใช่ให้ปุ่มนั้นทำงานซ้ำ — Enter ยังกดปุ่ม
+// ได้ตามปกติ คนที่ใช้แป้นพิมพ์อย่างเดียวจึงไม่เสียทางเข้าถึง
+//
+// preventDefault จำเป็น: ค่าเริ่มต้นของ Space คือเลื่อนหน้าลงหนึ่งจอ และในโหมด
+// "ไฟล์ที่ต่อแล้ว" ที่ <video> มี controls จริง เบราว์เซอร์จะสั่งเล่น/หยุดเองอีกที
+// กลายเป็นสองครั้งซ้อนแล้วกลับมาเหมือนไม่ได้กด
+function pvKey(e){
+  if (e.code !== 'Space' && e.key !== ' ') return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const t = e.target;
+  if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+  if (document.querySelector('dialog[open]')) return;
+  if (!PV || !PV.node || !PV.node.isConnected) return;   // ไม่ได้อยู่หน้าที่มีตัวเล่น
+  if (PV.el.play.disabled) return;                       // ยังไม่มีอะไรให้เล่น
+  e.preventDefault();
+  pvToggle();
+}
+document.addEventListener('keydown', pvKey);
 
 function playerCard(){
   pvInit();
@@ -1753,19 +1870,275 @@ const clockOf = ts => { if (!ts) return '—';
   const d = new Date(ts * 1000);
   return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`; };
 
-function timeline(){
+// ── ไทม์ไลน์แบบแถบแนวนอน — แก้ไขได้จริง ────────────────────────────
+//
+// สิ่งที่ทำได้: ย้ายตำแหน่ง · ลากขอบย่อ/ขยาย · ซอยเป็นสองท่อน (cut ชนเพิ่ม)
+//
+// ราคาไม่เท่ากัน และหน้าจอต้องบอกให้รู้: **ย้ายที่ไม่ต้องตัดใหม่เลย** เพราะ
+// seg_key ไม่มีคำว่าลำดับอยู่ในนั้น · ส่วนขยับขอบกับซอยชิ้นทำให้แฮชเปลี่ยน
+// ต้องตัดชิ้นนั้นใหม่ (~1.1 วิ/ชิ้น) แถบจึงติดธง ▌ ให้ชิ้นที่ยังไม่มีไฟล์รองรับ
+//
+// ทุกอย่างเป็น "ร่าง" จนกว่าจะกดบันทึก — items[] ในเบราว์เซอร์เท่านั้นที่เปลี่ยน
+// edl.json ยังเป็นของเดิมจนกด "บันทึกไทม์ไลน์"
+
+let tlView = 'list';
+let tlZoom = 14;                      // พิกเซลต่อวินาที
+const TL_MIN = 0.30;                  // ชิ้นสั้นสุด — ตรงกับ MIN_PIECE ฝั่งเซิร์ฟเวอร์
+let tlDrag = null;
+// ตำแหน่งที่เลื่อนแถบไว้ — render() ล้าง #body ทั้งก้อนทุกครั้ง .tlwrap จึงเกิดใหม่
+// เสมอและกลับไปอยู่ที่ 0 ถ้าไม่จำไว้เอง คนเลื่อนไปดูนาทีที่ 12 แล้วคลิกชิ้นเดียว
+// แถบจะเด้งกลับไปต้นเรื่องทันที
+let tlScroll = 0;
+
+const tlOn = () => items.filter(x => !x.off);
+function tlBase(){ let t = 0; return tlOn().map(x => { const b = t; t += x.dur; return b; }); }
+
+function tlSplit(x){
+  const i = items.indexOf(x);
+  if (i < 0 || x.dur < TL_MIN * 2) return toast(`ชิ้นสั้นเกินกว่าจะซอย (ต้องยาวกว่า ${TL_MIN * 2} วิ)`, true);
+  // ซอยตรงหัวอ่านถ้าหัวอ่านอยู่ในชิ้นนี้ ไม่งั้นซอยกลางชิ้น
+  let at = x.start + x.dur / 2;
+  const b = tlBase(), j = tlOn().indexOf(x);
+  if (j >= 0 && PV && PV.gt != null && PV.gt > b[j] && PV.gt < b[j] + x.dur)
+    at = x.start + (PV.gt - b[j]);
+  at = Math.min(x.end - TL_MIN, Math.max(x.start + TL_MIN, +at.toFixed(3)));
+  const right = {...x, o: {...x.o}, start: at, dur: +(x.end - at).toFixed(3)};
+  x.end = at; x.dur = +(at - x.start).toFixed(3);
+  items.splice(i + 1, 0, right);
+  sel = i;
+  render();
+}
+
+function tlTrim(x, side, dt){
+  if (side === 'l'){
+    const lo = 0, hi = x.end - TL_MIN;
+    x.start = Math.min(hi, Math.max(lo, +(x.start + dt).toFixed(3)));
+  } else {
+    const lo = x.start + TL_MIN, hi = x.clip_dur != null ? x.clip_dur : x.end;
+    x.end = Math.min(hi, Math.max(lo, +(x.end + dt).toFixed(3)));
+  }
+  x.dur = +(x.end - x.start).toFixed(3);
+}
+
+function tlReset(x){ if (!x.o) return; x.start = x.o.start; x.end = x.o.end;
+                     x.dur = +(x.end - x.start).toFixed(3); render(); }
+
+function stripView(){
   const c = el('div', 'card');
-  const st = items.filter(x => !x.off);
-  c.append(el('h3', null, `ไทม์ไลน์ — ${st.length} ชิ้น · `
-    + mmss(st.reduce((a,b) => a + b.dur, 0))));
-  const bar = el('div', 'acts'); bar.style.marginTop = '0';
+  const on = tlOn(), base = tlBase();
+  const total = on.reduce((a, b) => a + b.dur, 0);
+  const cut = items.filter(x => !x.off && tlCut(x)).length;
+
+  c.append(tlHead(on, total));
+
+  // ── ไม้บรรทัด + ราง ──
+  const scroll = el('div', 'tlwrap');
+  const inner = el('div', 'tlinner');
+  inner.style.width = Math.max(320, total * tlZoom) + 'px';
+
+  const ruler = el('div', 'tlruler');
+  const stepSec = tlZoom >= 60 ? 1 : tlZoom >= 25 ? 5 : tlZoom >= 10 ? 15
+                : tlZoom >= 4 ? 60 : 300;
+  for (let t = 0; t <= total; t += stepSec){
+    const m = el('i'); m.style.left = (t * tlZoom) + 'px';
+    m.append(el('span', null, mmss(t)));
+    ruler.appendChild(m);
+  }
+  ruler.onclick = e => {
+    const r = ruler.getBoundingClientRect();
+    tlSeek(Math.max(0, (e.clientX - r.left) / tlZoom));
+  };
+  inner.appendChild(ruler);
+
+  const track = el('div', 'tltrack');
+  on.forEach((x, j) => track.appendChild(tlBlock(x, j, base[j])));
+  const head = el('div', 'tlhead'); head.id = 'tl-head';
+  head.style.left = ((PV && PV.gt ? PV.gt : 0) * tlZoom) + 'px';
+  track.appendChild(head);
+  inner.appendChild(track);
+  scroll.appendChild(inner);
+  scroll.addEventListener('scroll', () => { tlScroll = scroll.scrollLeft; });
+  // คืนตำแหน่งที่เลื่อนไว้หลังก้อนนี้ถูกใส่ลง DOM แล้ว (ตั้งตอนยังลอยอยู่ไม่ติด)
+  requestAnimationFrame(() => { scroll.scrollLeft = tlScroll; });
+  c.appendChild(scroll);
+
+  c.append(el('p', 'note', 'คลิกบล็อก = เล่นชิ้นนั้นใน "ดูผลงาน" ทันที · '
+    + 'ลากตัวบล็อก = ย้ายตำแหน่ง · ลากขอบซ้าย/ขวา = ย่อ-ขยาย · '
+    + 'คลิกไม้บรรทัด = ย้ายหัวอ่าน · เคาะ Space = เล่น/หยุด'));
+  if (cut)
+    c.append(el('p', 'note warnnote',
+      `▌ แก้ขอบไปแล้ว ${cut} ชิ้น — กด "สร้างไฟล์" จะตัดใหม่ ${cut} ชิ้น `
+      + `(~${mmss(Math.round(cut * 2.3))})`));
+
+  const x = items[sel];
+  if (x && !x.off) c.appendChild(tlDetail(x));
+  return c;
+}
+
+function tlHead(on, total){
+  const w = el('div');
+  const r1 = el('div', 'hd');
+  r1.append(el('h3', null, `ไทม์ไลน์ — ${on.length} ชิ้น · ${mmss(total)}`),
+            el('span', 'spacer'));
+  const seg = el('div', 'seg');
+  [['list', 'รายการ'], ['strip', 'แถบ']].forEach(([v, lab]) => {
+    const b = el('button', null, lab);
+    b.setAttribute('aria-pressed', tlView === v);
+    b.onclick = () => { tlView = v; render(); };
+    seg.appendChild(b);
+  });
+  r1.append(seg);
+  w.appendChild(r1);
+
+  const bar = el('div', 'acts'); bar.style.marginTop = '.4rem';
   const sv = el('button', 'sm', 'บันทึกไทม์ไลน์');
   sv.disabled = !tlDirty(); sv.onclick = saveTimeline;
   const ud = el('button', 'sm', 'ย้อนกลับ');
   ud.onclick = async () => { try { await post('/api/undo'); await load(true);
     toast('ย้อนกลับแล้ว'); } catch(e){ toast(e.message, true); } };
   bar.append(sv, ud);
-  c.appendChild(bar);
+
+  if (tlView === 'strip'){
+    const cutb = el('button', 'sm', '✂ ตัดตรงหัวอ่าน');
+    cutb.title = 'ซอยชิ้นที่หัวอ่านอยู่เป็นสองท่อน (cut ชนเพิ่ม)';
+    cutb.onclick = () => {
+      const b = tlBase(), on2 = tlOn();
+      const gt = (PV && PV.gt) || 0;
+      let j = 0; while (j + 1 < on2.length && b[j + 1] <= gt) j++;
+      if (on2[j]) tlSplit(on2[j]);
+    };
+    bar.append(cutb, el('span', 'spacer'));
+    const zo = el('button', 'ghost', '−'), zi = el('button', 'ghost', '+');
+    zo.title = 'ซูมออก'; zi.title = 'ซูมเข้า';
+    zo.onclick = () => { tlZoom = Math.max(1.5, tlZoom / 1.6); render(); };
+    zi.onclick = () => { tlZoom = Math.min(240, tlZoom * 1.6); render(); };
+    bar.append(el('span', 'note', 'ซูม'), zo, zi);
+  }
+  w.appendChild(bar);
+  return w;
+}
+
+function tlBlock(x, j, at){
+  const b = el('div', 'tlblk ' + x.kind + (items.indexOf(x) === sel ? ' sel' : '')
+                     + (tlCut(x) ? ' cut' : ''));
+  b.style.left = (at * tlZoom) + 'px';
+  b.style.width = Math.max(2, x.dur * tlZoom) + 'px';
+  b.title = `${x.name} · ${x.dur.toFixed(2)} วิ (${x.start.toFixed(2)}–${x.end.toFixed(2)} ของคลิป)`;
+  if (x.dur * tlZoom > 34)
+    b.append(el('span', 'tlname', x.name.replace(/^IMG_/, '')));
+  ['l', 'r'].forEach(side => {
+    const h = el('div', 'tlh tlh-' + side);
+    h.onpointerdown = e => tlStart(e, x, 'trim', side);
+    b.appendChild(h);
+  });
+  b.onpointerdown = e => { if (!e.target.classList.contains('tlh')) tlStart(e, x, 'move'); };
+  return b;
+}
+
+function tlStart(e, x, kind, side){
+  e.preventDefault();
+  sel = items.indexOf(x);
+  const blk = e.target.closest ? e.target.closest('.tlblk') : null;
+  tlDrag = {x, kind, side, x0: e.clientX, s0: x.start, e0: x.end, moved: false, blk};
+  // setPointerCapture โยน NotFoundError ได้ถ้า pointer ถูกปล่อยไปแล้ว — ไม่ใช่
+  // เรื่องคอขาดบาดตาย ตัวจับเหตุการณ์อยู่ที่ window อยู่แล้วจึงทำงานได้โดยไม่ต้องมี
+  try { e.target.setPointerCapture(e.pointerId); } catch (_){}
+  const move = ev => {
+    const dpx = ev.clientX - tlDrag.x0;
+    if (Math.abs(dpx) > 2) tlDrag.moved = true;
+    if (kind === 'trim'){
+      tlDrag.x.start = tlDrag.s0; tlDrag.x.end = tlDrag.e0;
+      tlTrim(tlDrag.x, side, dpx / tlZoom);
+      // ระหว่างลากขยับแค่บล็อกที่ลากอยู่ — วาดใหม่ทั้งราง 397 บล็อกทุกครั้งที่
+      // เมาส์ขยับจะหน่วงจนลากไม่ติดมือ ค่อยวาดเต็มทีเดียวตอนปล่อย
+      if (tlDrag.blk){
+        const on = tlOn(), base = tlBase(), j = on.indexOf(tlDrag.x);
+        if (j >= 0){
+          tlDrag.blk.style.left = (base[j] * tlZoom) + 'px';
+          tlDrag.blk.style.width = Math.max(2, tlDrag.x.dur * tlZoom) + 'px';
+        }
+      } else render();
+    } else {
+      // ย้าย: หาว่าตอนนี้ตัวชี้อยู่เหนือช่องที่เท่าไร แล้วสลับไปตรงนั้น
+      const on = tlOn(), base = tlBase();
+      const me = on.indexOf(tlDrag.x);
+      if (me < 0) return;
+      const t = base[me] + dpx / tlZoom + tlDrag.x.dur / 2;
+      let j = 0; while (j + 1 < on.length && base[j + 1] <= t) j++;
+      if (j !== me){
+        const from = items.indexOf(on[me]), to = items.indexOf(on[j]);
+        const [m] = items.splice(from, 1);
+        items.splice(to, 0, m);
+        sel = items.indexOf(m);
+        tlDrag.x0 = ev.clientX;
+        render();
+      }
+    }
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    const tapped = !tlDrag.moved;
+    const piece = tlDrag.x;
+    tlDrag = null;
+    render();                      // วาดเต็มทีเดียวตอนปล่อย
+    // คลิกเฉย ๆ (ไม่ได้ลาก) = สั่งให้ "ดูผลงาน" ไปเล่นชิ้นนั้นทันที
+    if (tapped) pvGotoPiece(piece, true);
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
+
+function tlDetail(x){
+  const w = el('div', 'sect'); w.style.marginTop = '.7rem';
+  w.append(el('h4', null, `เลือกอยู่ · ${x.name} · ${x.kind === 'TALK' ? 'พูด' : 'วิว'}`));
+
+  const cd = x.clip_dur || x.end;
+  const bar = el('div', 'tlclip');
+  const use = el('div', 'tlclip-use');
+  use.style.left = (x.start / cd * 100) + '%';
+  use.style.width = ((x.end - x.start) / cd * 100) + '%';
+  bar.appendChild(use);
+  if (x.o){
+    [['tlclip-o', x.o.start], ['tlclip-o', x.o.end]].forEach(([cls, t]) => {
+      const m = el('i', cls); m.style.left = (t / cd * 100) + '%'; bar.appendChild(m);
+    });
+  }
+  w.appendChild(bar);
+  w.append(el('p', 'note',
+    `ใช้ ${x.start.toFixed(2)}–${x.end.toFixed(2)} วิ (ยาว ${x.dur.toFixed(2)}) `
+    + `จากคลิปต้นฉบับ ${cd.toFixed(2)} วิ`
+    + (x.o && tlCut(x) ? ` · เดิม ${x.o.start.toFixed(2)}–${x.o.end.toFixed(2)}` : '')));
+  if (x.text) w.append(el('p', 'note', x.text));
+
+  const acts = el('div', 'acts');
+  const sp = el('button', 'sm', '✂ ซอยชิ้นนี้');
+  sp.onclick = () => tlSplit(x);
+  const rm = el('button', 'sm', x.off ? '↺ ใส่กลับ' : '✕ เอาออก');
+  rm.onclick = () => { x.off = !x.off; render(); };
+  acts.append(sp, rm);
+  if (tlCut(x)){
+    const rs = el('button', 'sm', '↺ คืนขอบเดิม');
+    rs.onclick = () => tlReset(x);
+    acts.append(rs);
+  }
+  w.appendChild(acts);
+  return w;
+}
+
+// ย้ายหัวอ่านไปที่วินาทีที่ระบุ แล้วสั่งตัวเล่นตามไปด้วย
+function tlSeek(t){
+  if (PV) PV.gt = t;
+  const h = document.getElementById('tl-head');
+  if (h) h.style.left = (t * tlZoom) + 'px';
+  if (PV && PV.node && PV.mode !== 'joins') pvSeek(t);
+}
+
+function timeline(){
+  if (tlView === 'strip') return stripView();
+  const c = el('div', 'card');
+  const st = items.filter(x => !x.off);
+  c.append(tlHead(st, st.reduce((a,b) => a + b.dur, 0)));
 
   const wrap = el('div', 'scroll'); wrap.style.maxHeight = '40em';
   let chap = ' ', ul = null;
@@ -1808,7 +2181,7 @@ function tlRow(x, i){
   li.onclick = e => {
     if (e.target.tagName === 'BUTTON') return;
     sel = i; render();
-    if (!pvGotoPiece(x)) previewPiece(x);
+    if (!pvGotoPiece(x, true)) previewPiece(x);
   };
   img.addEventListener('dragstart', e => { dragFrom = i; li.classList.add('drag');
     e.dataTransfer.effectAllowed = 'move'; });
@@ -2038,7 +2411,9 @@ async function doCompose(mode){
 }
 
 async function saveTimeline(){
-  const keep = items.filter(x => !x.off).map(({name, start, dur}) => ({name, start, dur}));
+  // ส่ง end ไปด้วย — เซิร์ฟเวอร์ตรวจจากช่วงจริง ไม่ได้เทียบกับชิ้นเดิมอีกแล้ว
+  const keep = items.filter(x => !x.off)
+    .map(({name, start, end, dur, kind}) => ({name, start, end, dur, kind}));
   if (!keep.length) return toast('ต้องเหลืออย่างน้อย 1 ชิ้น', true);
   try {
     const r = await post('/api/edl', {keep});
