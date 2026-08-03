@@ -33,3 +33,6 @@ mode = "stage1"
 
 [jumpcut]
 enabled = true
+pad         = 0.5
+min_piece   = 0.7
+min_silence = 1

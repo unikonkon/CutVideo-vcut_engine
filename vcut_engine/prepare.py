@@ -148,7 +148,13 @@ def run(ctx, write=True):
         die("ยังไม่มี manifest — ทำขั้นที่ 1 (อ่านคลิป) ก่อน")
     tr = (read_json(ctx.transcript, {}) or {}).get("clips", {})
 
-    adv = ai_mod.load(ctx) if ctx.get("ai.enabled", False) else None
+    # สวิตช์ของขั้นนี้คือ [ai.apply] enabled — ไม่ใช่ [ai] enabled ซึ่งเป็นของขั้น 3
+    # (กดโหมดกฎล้วนที่ขั้น 3 จึงไม่เปลี่ยนคลังที่ขั้นนี้ทำไว้อีกต่อไป)
+    use_ai = bool(ctx.get("ai.apply.enabled", False))
+    adv = ai_mod.load(ctx) if use_ai else None
+    if use_ai and adv is None and write:
+        warn("เปิด 'ใช้ความเห็นจาก AI ตอนตัดทีละคลิป' ไว้แต่ยังไม่มี ai.json — "
+             "สั่ง 'ดึงความหมาย' ก่อน รอบนี้ยังไม่ได้ใช้ความเห็นของ AI")
     ai_clips = (adv or {}).get("clips", {})
     apply = ctx.get("ai.apply", {})
     ai_trim = bool(adv and apply.get("trim", False))

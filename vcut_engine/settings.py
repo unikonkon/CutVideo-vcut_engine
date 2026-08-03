@@ -143,8 +143,11 @@ FIELDS = [
       help="คอลัมน์ × แถว = ภาพต่อแผ่น ยิ่งเยอะยิ่งประหยัดตอนส่งให้ AI แต่ภาพเล็กลง"),
 
     # ── AI ──
-    F("ai.enabled", "ใช้ความเห็นจาก AI", "bool", "edl", "ai",
-      help="ปิดแล้วผลกลับไปเป็นกฎล้วนทันที ไม่ต้องลบ ai.json"),
+    # สองสวิตช์นี้คุมคนละขั้น — ดู [ai.apply] ใน default.toml ว่าทำไมต้องแยก
+    F("ai.apply.enabled", "ใช้ความเห็นจาก AI ตอนตัดทีละคลิป", "bool", "edl", "ai",
+      help="ขั้น 2 เท่านั้น — เอา ai.json มาตัดช่วง/คัดคลิปตามค่าด้านล่าง"),
+    F("ai.enabled", "ใช้บทกับคะแนนจาก AI ตอนรวมเป็นหนัง", "bool", "edl", "ai",
+      help="ขั้น 3 เท่านั้น — ปิดแล้วการรวมเป็นหนังกลับไปเป็นกฎล้วน ไม่ต้องลบ ai.json"),
     F("ai.goal", "โจทย์ที่จะบอก AI", "text", "ai", "ai",
       placeholder="ตัดเหลือ 10 นาที เล่าตามลำดับการเดินทาง"),
     F("ai.model", "โมเดล", "select", "ai", "ai", options=["sonnet", "opus", "haiku"]),
@@ -372,8 +375,10 @@ def plan(cfg, start=None, no_thumbs=False):
             skip = f"ปิด Phase {ph['no']} ไว้"
         elif sid == "thumbs" and no_thumbs:
             skip = "สั่ง --no-thumbs"
-        elif sid == "ai" and not get_at(cfg, "ai.enabled", False):
-            skip = "ปิด [ai] enabled ไว้"
+        elif sid == "ai" and not (get_at(cfg, "ai.enabled", False)
+                                  or get_at(cfg, "ai.apply.enabled", False)):
+            # ถามใหม่ก็ต่อเมื่อจะมีคนเอาคำตอบไปใช้ — ขั้นไหนก็ได้
+            skip = "ปิดสวิตช์ AI ไว้ทั้งขั้น 2 และขั้น 3"
         elif sid == "silence" and not get_at(cfg, "jumpcut.enabled", False):
             skip = "ปิด [jumpcut] enabled ไว้"
         elif sid == "listen" and not get_at(cfg, "listen.enabled", True):
@@ -629,8 +634,14 @@ def save_project(rel_path, changes, extends=None, raw=None, drop=()):
 # ─────────────────────────── สถานะของแต่ละขั้น ───────────────────────────
 
 def step_status(ctx, cfg):
-    """ขั้นไหนทำไปแล้ว · ทำเมื่อไร · ค่าที่ใช้ตอนนั้นต่างจากตอนนี้ตรงไหน"""
+    """ขั้นไหนทำไปแล้ว · ทำเมื่อไร · ค่าที่ใช้ตอนนั้นต่างจากตอนนี้ตรงไหน
+
+    ผนวก run/skip จาก plan() มาให้ด้วย เพื่อให้หน้าเว็บไม่ต้องมีตรรกะ "ขั้นนี้
+    ปิดอยู่ไหม" เป็นของตัวเองอีกชุด — เดิมการ์ดขั้น 2 เดาเองว่าจะซ่อนปุ่มไหน
+    แล้วเดาไม่ตรงกับที่เอนจินทำจริง (ซ่อน silence แต่ไม่ซ่อน ai/listen)
+    """
     work = ctx.work
+    pl = {p["id"]: p for p in plan(cfg)}
     out = []
     for st in STEPS:
         sid = st["id"]
@@ -648,7 +659,9 @@ def step_status(ctx, cfg):
         exists = path.exists() and (not path.is_dir() or any(path.iterdir()))
         rec = {**st, "exists": exists,
                "mtime": int(path.stat().st_mtime) if exists else 0,
-               "changed": [], "summary": ""}
+               "changed": [], "summary": "",
+               "run": pl.get(sid, {}).get("run", True),
+               "skip": pl.get(sid, {}).get("skip") or ""}
 
         if exists and sid in STEP_PARAMS:
             src = {"scan": work / "manifest.json",

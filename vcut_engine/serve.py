@@ -45,6 +45,16 @@ JOB_STEPS = {
 # ปุ่ม "รัน Phase นี้" — รันทุกขั้นใน Phase เดียว โดยไม่แตะ Phase อื่น
 PHASE_JOBS = {p["id"]: p["steps"] for p in settings.PHASES}
 
+# ปุ่มหลักของขั้น 2 — เติมของที่ขาดให้ก่อนแล้วค่อยตัดทีละคลิป
+#
+# สองแบบเพราะราคาไม่เท่ากัน: "ดึงความหมาย" เรียกโมเดลจริงและเสียโควตา ส่วน
+# "ดึงบทพูด" กับ "หาช่วงเงียบ" ทำในเครื่องล้วน ปุ่มที่เลี่ยงโควตาได้จึงต้องมี
+# ให้เลือก ไม่ใช่บังคับให้จ่ายทุกครั้งที่อยากได้คลังใหม่
+PREPARE_JOBS = {
+    "prepare_all":  ["listen", "ai", "silence", "prepare"],
+    "prepare_free": ["listen", "silence", "prepare"],
+}
+
 # ปุ่ม "สร้างไฟล์" ในขั้น 3 — ผลิตไฟล์จากไทม์ไลน์ที่ตัดสินใจไว้แล้วเท่านั้น
 #
 # เดิมปุ่มนี้สั่ง "plan" ซึ่งคือ `vcut run` ทั้งไปป์ไลน์ — กดคำเดียวแล้วมันไป
@@ -796,7 +806,8 @@ def make_handler(ctx, job):
 
             if p == "/api/job":
                 step = payload.get("step")
-                if step not in JOB_STEPS and step not in PHASE_JOBS:
+                if step not in JOB_STEPS and step not in PHASE_JOBS \
+                        and step not in PREPARE_JOBS:
                     return self._json({"error": f"ไม่รู้จักงาน '{step}'"}, 400)
                 if job.running:
                     return self._json({"error": "มีงานกำลังรันอยู่"}, 409)
@@ -810,6 +821,14 @@ def make_handler(ctx, job):
                     argvs = [head + JOB_STEPS[step] + ctx.argv_tail
                              + (force if step in ("scan", "listen", "ai", "silence",
                                                   "render", "plan") else [])]
+                elif step in PREPARE_JOBS:
+                    # เติมเฉพาะขั้นที่ "แผนบอกให้รัน" และ "ยังไม่มีของ/ของเก่าแล้ว"
+                    # — ขั้นที่ทำไว้แล้วและค่ายังไม่เปลี่ยนจะถูกข้าม ไม่ทำซ้ำฟรี ๆ
+                    st = {s["id"]: s for s in settings.step_status(ctx, ctx.cfg)}
+                    todo = [i for i in PREPARE_JOBS[step]
+                            if i == "prepare"
+                            or (st[i]["run"] and (not st[i]["exists"] or st[i]["changed"]))]
+                    argvs = [head + [s] + ctx.argv_tail for s in todo]
                 else:
                     # รันเฉพาะขั้นใน Phase นี้ที่แผนบอกว่าให้รัน
                     ok = {s["id"] for s in settings.plan(ctx.cfg) if s["run"]}

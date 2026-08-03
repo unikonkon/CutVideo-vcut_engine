@@ -804,53 +804,123 @@ async function saveClips(){
 
 // ── ขั้น 2 · เตรียมวิดีโอ ────────────────────────────────────────
 
+// ขั้น 2 แบ่งเป็นสองกล่องตามราคาที่ต้องจ่าย: กล่องแรกทำในเครื่องล้วน กล่องสอง
+// เรียกโมเดลจริง แต่ละกล่องมีสวิตช์ของตัวเองคุมปุ่มในกล่องนั้น — สวิตช์ปิดแล้ว
+// ปุ่มยังอยู่ให้เห็นแต่กดไม่ได้ พร้อมบอกเหตุผล ดีกว่าซ่อนจนไม่มีใครรู้ว่ามี
+
+const stepOf = id => (D.steps || []).find(x => x.id === id) || {};
+const fieldOf = k => (D.fields || []).find(x => x.key === k);
+const putField = (parent, k) => { const f = fieldOf(k); if (f) parent.appendChild(field(f)); };
+
+// ขั้นนี้ต้องทำใหม่ไหม — ยังไม่เคยทำ หรือทำไว้แล้วแต่ค่าที่ใช้ตอนนั้นเปลี่ยนไปแล้ว
+// (ตรรกะเดียวกับที่ serve.py ใช้เลือกขั้นให้ปุ่มหลัก จะได้ไม่บอกคนละอย่างกัน)
+const stepPending = id => {
+  const s = stepOf(id);
+  return s.run && (!s.exists || (s.changed || []).length > 0);
+};
+
+function stepRow(id, no, label, tip){
+  const s = stepOf(id);
+  const row = el('div', 'acts');
+  const b = el('button', 'runbtn', `${no} ${label}`);
+  b.title = tip;
+  b.dataset.step = id;            // poll() เอาไปขีดเส้นกะพริบใต้ปุ่มที่กำลังรัน
+  if (!s.run){ b.classList.add('locked'); b.disabled = true; }
+  b.onclick = () => runStep(id);
+  row.appendChild(b);
+  row.appendChild(el('span', !s.run ? 'note warnnote' : 'note',
+    !s.run ? s.skip
+      : s.exists ? ((s.changed || []).length
+                     ? `ทำไว้แล้วแต่ค่าเปลี่ยนไปแล้ว — ${s.summary}`
+                     : `✓ ${s.summary}`)
+      : 'ยังไม่เคยทำ'));
+  return row;
+}
+
 function stepPrepare(box){
   const c = el('div', 'card');
   c.appendChild(head(2));
 
-  const jobs = el('div', 'acts');
-  [['listen', 'ดึงบทพูด', 'ถอดเสียงทุกคลิปด้วย whisper'],
-   ['ai', 'ดึงความหมาย (AI)', 'ให้ AI อ่านว่าคลิปไหนเล่าอะไร'],
-   ['silence', 'หาช่วงเงียบ', 'ฟังคลื่นเสียงจริงหาช่วงที่ไม่มีคนพูด — ไม่กี่วินาที'],
-   ['prepare', 'ตัดทีละคลิป', 'สร้างคลังชิ้นจากค่าที่ตั้งไว้']].forEach(([id, lab, tip]) => {
-    if (id === 'silence' && !val('jumpcut.enabled')) return;
-    const s = D.steps.find(x => x.id === id) || {};
-    const b = el('button', 'runbtn' + (id === 'prepare' ? ' primary' : ''), lab);
-    b.title = tip;
-    b.dataset.step = id;          // poll() เอาไปขีดเส้นกะพริบใต้ปุ่มที่กำลังรัน
-    b.onclick = () => runStep(id);
-    jobs.appendChild(b);
-    if (s.exists) jobs.appendChild(el('span', 'note', s.summary));
-  });
-  c.appendChild(jobs);
+  // ── กล่อง 1 · ไม่ใช้ AI ──
+  const basic = el('div', 'sect');
+  basic.appendChild(el('h4', null, 'พื้นฐาน · ทำในเครื่อง ไม่เสียโควตา'));
+  basic.appendChild(stepRow('listen', '①', 'ดึงบทพูด',
+                            'ถอดเสียงทุกคลิปด้วย whisper.cpp ในเครื่อง'));
+  putField(basic, 'jumpcut.enabled');
+  if (val('jumpcut.enabled')){
+    basic.appendChild(stepRow('silence', '②', 'หาช่วงเงียบ',
+                              'ฟังคลื่นเสียงจริงหาช่วงที่ไม่มีคนพูด — ไม่กี่วินาที'));
+    ['jumpcut.noise_db', 'jumpcut.min_silence', 'jumpcut.pad', 'jumpcut.min_piece']
+      .forEach(k => putField(basic, k));
+    basic.appendChild(el('p', 'note',
+      'ป้ายข้างชื่อค่าบอกอยู่แล้วว่าแก้แล้วต้องทำอะไรใหม่'));
+  }
+  c.appendChild(basic);
 
-  const aiF = D.fields.find(f => f.key === 'ai.enabled');
-  if (aiF){
-    const w = el('div'); w.style.marginTop = '.8rem';
-    w.appendChild(field(aiF));
-    if (val('ai.enabled')){
-      ['ai.goal', 'ai.tasks', 'ai.model'].forEach(k => {
-        const f = D.fields.find(x => x.key === k); if (f) w.appendChild(field(f));
-      });
-    }
-    c.appendChild(w);
+  // ── กล่อง 2 · ปุ่มหลัก ──
+  const run = el('div', 'sect');
+  run.appendChild(el('h4', null, 'ทำคลังชิ้น'));
+  const pend = ['listen', 'ai', 'silence'].filter(stepPending);
+  const acts = el('div', 'acts');
+
+  const bAll = el('button', 'runbtn primary', '③ ตัดทีละคลิป');
+  bAll.title = 'เติมขั้นที่ยังขาดให้ก่อนอัตโนมัติ แล้วตัดทีละคลิป';
+  bAll.dataset.step = 'prepare_all';
+  bAll.onclick = () => runStep('prepare_all');
+  acts.appendChild(bAll);
+
+  // ปุ่มที่สองโผล่เฉพาะตอนที่รอบนี้จะมีการเรียกโมเดลจริงเท่านั้น
+  if (pend.includes('ai')){
+    const bFree = el('button', 'runbtn', 'ตัดโดยไม่เรียก AI');
+    bFree.title = 'ข้าม "ดึงความหมาย" — ใช้ ai.json เดิมถ้ามี ไม่เสียโควตาเพิ่ม';
+    bFree.dataset.step = 'prepare_free';
+    bFree.onclick = () => runStep('prepare_free');
+    acts.appendChild(bFree);
   }
-  // ตัดช่วงเงียบให้ประโยคชนกัน — ค่าละเอียดโผล่เมื่อเปิดเท่านั้น
-  const jc = D.fields.find(f => f.key === 'jumpcut.enabled');
-  if (jc){
-    const w = el('div'); w.style.marginTop = '.8rem';
-    w.appendChild(field(jc));
-    if (val('jumpcut.enabled')){
-      ['jumpcut.noise_db', 'jumpcut.min_silence', 'jumpcut.pad', 'jumpcut.min_piece']
-        .forEach(k => { const f = D.fields.find(x => x.key === k);
-                        if (f) w.appendChild(field(f)); });
-      const sil = D.steps.find(x => x.id === 'silence') || {};
-      w.appendChild(el('p', 'note', sil.exists
-        ? 'แก้ค่าสองตัวบนแล้วต้องกด "หาช่วงเงียบ" ใหม่ · สองตัวล่างแค่กด "ตัดทีละคลิป" พอ'
-        : 'ยังไม่เคยหาช่วงเงียบ — กดปุ่ม "หาช่วงเงียบ" ก่อน แล้วค่อย "ตัดทีละคลิป"'));
-    }
-    c.appendChild(w);
+  run.appendChild(acts);
+
+  run.appendChild(el('p', 'note', pend.length
+    ? `รอบนี้จะรัน: ${pend.map(i => stepOf(i).label).concat('ตัดทีละคลิป').join(' → ')}`
+    : 'ของที่ต้องใช้ครบแล้ว — กดแล้วตัดทีละคลิปอย่างเดียว'));
+  const uses = ['บทพูด'];
+  if (val('jumpcut.enabled')) uses.push('ช่วงเงียบ (cut ชน)');
+  if (val('ai.apply.enabled')) uses.push('ความเห็นจาก AI');
+  run.appendChild(el('p', 'note', `คลังที่ได้จะตัดตาม: ${uses.join(' + ')}`));
+  c.appendChild(run);
+
+  // ── กล่อง 3 · ใช้ AI — วางไว้หลังปุ่มหลักเพราะเป็นของ "เพิ่มเข้าไป" ไม่ใช่
+  // ของที่ต้องมี ขั้นนี้ทำงานได้ครบด้วยกฎล้วน ใครไม่ใช้ AI ก็จบที่ปุ่ม ③ ได้เลย
+  // ไม่ต้องอ่านผ่านกล่องที่ไม่เกี่ยวกับตัวเอง
+  //
+  // ข้อแลก: ของที่อยู่ล่างกว่าปุ่ม แต่ทำงาน *ก่อน* ปุ่ม — จึงต้องบอกให้ชัดว่า
+  // แก้แล้วต้องย้อนกลับไปกด ③ ใหม่ และมีปุ่มลัดให้กดจากตรงนี้ได้เลย
+  const ai = el('div', 'sect');
+  ai.appendChild(el('h4', null, 'เพิ่มเติม · ใช้ AI (ไม่บังคับ · เสียโควตา)'));
+  putField(ai, 'ai.apply.enabled');
+  if (val('ai.apply.enabled')){
+    ai.appendChild(stepRow('ai', '④', 'ดึงความหมาย',
+                           'ให้ AI อ่านว่าคลิปไหนเล่าอะไร แล้วเก็บไว้ใน ai.json'));
+    ['ai.tasks', 'ai.goal', 'ai.model'].forEach(k => putField(ai, k));
+    ai.appendChild(el('h4', null, 'เอาคำตอบของ AI ไปใช้ยังไง'));
+    ['ai.apply.trim', 'ai.apply.drop'].forEach(k => putField(ai, k));
+    if (!stepOf('ai').exists)
+      ai.appendChild(el('p', 'note warnnote',
+        'เปิดสวิตช์ไว้แต่ยังไม่เคยดึงความหมาย — กด ④ ก่อน ไม่งั้นรอบนี้ยังตัดด้วยกฎล้วน'));
+    const again = el('div', 'acts');
+    const bp = el('button', 'runbtn', 'ตัดทีละคลิปใหม่ ให้ความเห็น AI มีผล');
+    bp.dataset.step = 'prepare';
+    bp.title = 'เหมือนกด ③ แต่ไม่ต้องเลื่อนขึ้นไป — ตัดใหม่จาก ai.json ที่มีอยู่';
+    bp.onclick = () => runStep('prepare');
+    again.appendChild(bp);
+    again.appendChild(el('span', 'note',
+      'ความเห็นของ AI ถูกใช้ตอน "ตัดทีละคลิป" — แก้ค่าตรงนี้แล้วต้องตัดใหม่ทุกครั้ง'));
+    ai.appendChild(again);
+  } else {
+    ai.appendChild(el('p', 'note',
+      'ปิดอยู่ — ขั้นนี้ตัดด้วยกฎล้วน (บทพูด + ช่วงเงียบ) · '
+      + 'สวิตช์ AI ของขั้น 3 เป็นคนละตัว ปิดตรงนี้ไม่กระทบขั้นนั้น'));
   }
+  c.appendChild(ai);
 
   c.appendChild(advanced(['listen', 'prepare', 'ai']));
   box.appendChild(c);
@@ -1169,9 +1239,12 @@ function aiOpinion(usesAI){
     box.append(el('p', 'note warnnote', 'โหมดที่เลือกอยู่ในกลุ่ม "ไม่ใช้ AI" '
       + 'แต่สวิตช์นี้ยังเปิดค้างอยู่ — บทกับคะแนนของ AI ยังมีผลตอนรวมเป็นหนัง '
       + 'ปิดเพื่อให้เป็นกฎล้วนจริง'));
-  if (!on && 'ai.enabled' in edits)
-    box.append(el('p', 'note warnnote', 'คลังที่มีอยู่ตอนนี้ถูก AI ตัด/คัดมาแล้ว '
-      + '— อยากได้กฎล้วนทั้งเส้นต้องกลับไปกด "ตัดทีละคลิป" ที่ขั้น 2 อีกครั้ง'));
+  // สวิตช์นี้เป็นของขั้น 3 ล้วน ๆ ปิดแล้วคลังจากขั้น 2 ไม่เปลี่ยนตาม — ถ้าขั้น 2
+  // ยังเปิด AI อยู่ ก็ต้องบอกว่า "กฎล้วน" นี้ครอบแค่ครึ่งเส้น
+  if (!on && val('ai.apply.enabled'))
+    box.append(el('p', 'note warnnote', 'กฎล้วนเฉพาะตอนรวมเป็นหนัง — '
+      + 'คลังจากขั้น 2 ยังถูก AI ตัด/คัดมาแล้ว อยากได้กฎล้วนทั้งเส้นต้องปิดสวิตช์ '
+      + 'AI ที่ขั้น 2 แล้วกด "ตัดทีละคลิป" ใหม่'));
   return box;
 }
 
@@ -1394,6 +1467,7 @@ function advanced(stages){
     && f.type !== 'clips'
     && !['project.source','project.name','project.out','ai.enabled','ai.goal',
          'ai.tasks','ai.model','ai.apply.order',
+         'ai.apply.enabled','ai.apply.trim','ai.apply.drop',
          'compose.mode', 'jumpcut.enabled', 'jumpcut.noise_db',
          'jumpcut.min_silence', 'jumpcut.pad', 'jumpcut.min_piece',
          'order.mode', 'order.reverse']
@@ -1646,7 +1720,8 @@ async function poll(){
   }
   renderJob(j);
   document.querySelectorAll('.runbtn, #run, #reset').forEach(b => {
-    b.disabled = j.running;
+    // locked = ปุ่มที่สวิตช์ของมันปิดอยู่ — งานจบแล้วก็ยังต้องกดไม่ได้เหมือนเดิม
+    b.disabled = j.running || b.classList.contains('locked');
     // ปุ่มที่กำลังทำงานอยู่ขีดเส้นกะพริบไว้ จะได้รู้ว่ากดอันไหนไป
     b.classList.toggle('busy', !!(j.running && b.dataset.step
                                   && (b.dataset.step === j.cmd

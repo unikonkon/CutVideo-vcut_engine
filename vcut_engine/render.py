@@ -76,27 +76,37 @@ def fps_value(ctx):
         return 60000 / 1001
 
 
+def exact_frames(dur, ctx):
+    """ความยาวชิ้นคิดเป็นจำนวนเฟรมเต็ม — ปัดแบบใกล้ที่สุด ไม่ใช่ปัดขึ้น
+    ความยาวหนังรวมจึงไม่ขยับ (ค่าคลาดเฉลี่ยเป็นศูนย์)"""
+    return max(1, int(round(dur * fps_value(ctx))))
+
+
 def exact_dur(dur, ctx):
-    """ปัดความยาวชิ้นให้ลงตัวกับกริดเฟรม — ภาพและเสียงจะยาวเท่านี้ทั้งคู่
+    """ความยาวที่ลงตัวกับกริดเฟรม — ภาพและเสียงจะยาวเท่านี้ทั้งคู่
 
     นี่คืออีกครึ่งของการแก้เสียงเลื่อน (อีกครึ่งคือเสียง PCM ดู docstring บนสุด)
-    ภาพ CFR ยาวเป็นจำนวนเฟรมเต็มเสมอ ปัดขึ้นได้ถึง 17 ms ที่ 59.94 fps ส่วน
-    เสียงยาวตามที่สั่งเป๊ะ ๆ ความต่างชิ้นละ 13 ms สะสม 357 ชิ้นก็หลายวินาที
-
-    ปัดแบบใกล้ที่สุด ไม่ใช่ปัดขึ้น — ความยาวหนังรวมจึงไม่ขยับ (ค่าคลาดเฉลี่ย 0)
+    ภาพ CFR ยาวเป็นจำนวนเฟรมเต็มเสมอ ปัดได้ถึง 17 ms ที่ 59.94 fps ส่วนเสียง
+    ยาวตามที่สั่งเป๊ะ ๆ ความต่างชิ้นละ 13 ms สะสม 357 ชิ้นก็หลายวินาที
     """
-    fps = fps_value(ctx)
-    return max(1, int(round(dur * fps))) / fps
+    return exact_frames(dur, ctx) / fps_value(ctx)
 
 
-def segment_vfilter(seg, ctx):
-    """ฟิลเตอร์ภาพของชิ้นที่จะ render
+def segment_vfilter(seg, ctx, frames):
+    """ฟิลเตอร์ภาพของชิ้นที่จะ render — ออกมาเป็น `frames` เฟรมพอดีเสมอ
 
-    tpad ต่อท้ายเพื่อโคลนเฟรมสุดท้ายเผื่อไว้ ทำให้ภาพยาวถึงเวลาเป้าหมายแน่ ๆ
-    ก่อนถูก -t ตัดทิ้ง — ถ้าไม่มี ชิ้นที่ต้นฉบับหมดพอดีจะได้ภาพขาดไป 1 เฟรม
-    แล้วเสียงกับภาพจะยาวไม่เท่ากันอีก (ส่วนเกินถูกตัดทิ้งเสมอ จึงไม่มีผลกับภาพ)
+    tpad โคลนเฟรมสุดท้ายเผื่อไว้ ทำให้ภาพยาวถึงเป้าแน่ ๆ แม้ต้นฉบับหมดพอดี
+    แล้ว trim=end_frame ตัดให้เหลือจำนวนที่ต้องการ
+
+    ตัดด้วย **จำนวนเฟรม** ไม่ใช่ `-t` ตามเวลา เพราะเวลาสิ้นสุดของชิ้นคือ
+    N/59.94 พอดี ซึ่งตรงกับ pts ของเฟรมที่ N พอดีเป๊ะ แล้ว -t เก็บเฟรมนั้น
+    เข้ามาด้วย ได้ภาพยาวเกินเสียงไป 1 เฟรม (16.7 ms) — วัดจริงเจอ 6 ใน 40 ชิ้น
+    จำนวนเฟรมเป็นจำนวนเต็ม จึงไม่มีปัญหาเส้นแบ่งแบบนี้
     """
-    return build_vfilter(seg, ctx)[:-3] + ",tpad=stop_mode=clone:stop_duration=0.5[v]"
+    return (build_vfilter(seg, ctx)[:-3]
+            + f",tpad=stop_mode=clone:stop_duration=0.5"
+            + f",fps={ctx.get('video.fps', '60000/1001')}"
+            + f",trim=end_frame={int(frames)},setpts=PTS-STARTPTS[v]")
 
 
 def segment_afilter(seg, ctx, gain, dur):
@@ -214,11 +224,12 @@ def seg_key(seg, ctx, gain):
         sig = [st.st_size, int(st.st_mtime)]
     except OSError:
         sig = [0, 0]
-    dur = exact_dur(seg["dur"], ctx)
+    n = exact_frames(seg["dur"], ctx)
+    dur = n / fps_value(ctx)
     return key_of({
         "src": seg["src"], "sig": sig,
         "start": round(seg["start"], 3), "dur": round(dur, 6),
-        "vf": segment_vfilter(seg, ctx),
+        "vf": segment_vfilter(seg, ctx, n),
         "af": segment_afilter(seg, ctx, gain, dur),
         "enc": encode_args(ctx, audio=False) + seg_audio_args(ctx),
         "fps": ctx.get("video.fps"),
@@ -232,7 +243,8 @@ def render_one(seg, ctx, gain, dst):
     tmp = dst.with_suffix(".part.mov")
     silent = seg.get("achannels", 2) == 0
     e = ctx.get("encode", {})
-    dur = exact_dur(seg["dur"], ctx)
+    n = exact_frames(seg["dur"], ctx)
+    dur = n / fps_value(ctx)
     # อ่านต้นฉบับเผื่อไว้ครึ่งวินาที ให้ tpad/apad มีของพอจะยืดถึงเวลาเป้าหมาย
     read = dur + 0.5
 
@@ -242,7 +254,7 @@ def render_one(seg, ctx, gain, dst):
         cmd += ["-f", "lavfi", "-t", f"{read:.3f}",
                 "-i", f"anullsrc=r={int(e.get('arate', 48000))}"
                       f":cl={'stereo' if int(e.get('achannels', 2)) == 2 else 'mono'}"]
-    cmd += ["-filter_complex", segment_vfilter(seg, ctx), "-map", "[v]"]
+    cmd += ["-filter_complex", segment_vfilter(seg, ctx, n), "-map", "[v]"]
     cmd += ["-map", "1:a:0"] if silent else ["-map", "0:a:0"]
     cmd += ["-af", segment_afilter(seg, ctx, gain, dur)]
     cmd += ["-fps_mode", "cfr", "-r", str(ctx.get("video.fps", "60000/1001")),

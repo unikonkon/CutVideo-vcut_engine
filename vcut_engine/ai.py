@@ -523,6 +523,10 @@ def _merge_into(store, task, part):
 
 def run(ctx, tasks=None, goal="", force=False):
     goal = goal or str(ctx.get("ai.goal", "") or "")
+    # ถามได้ แต่ต้องบอกให้รู้ว่าคำตอบจะไม่ถูกใช้ — ไม่งั้นจ่ายโควตาแล้วไม่ได้อะไร
+    if not (ctx.get("ai.enabled", False) or ctx.get("ai.apply.enabled", False)):
+        warn("สวิตช์ AI ปิดอยู่ทั้งขั้น 2 และขั้น 3 — คำตอบจะถูกเก็บใน ai.json "
+             "แต่ยังไม่มีขั้นไหนเอาไปใช้จนกว่าจะเปิดสวิตช์สักตัว")
     man = read_json(ctx.manifest)
     if not man:
         die("ยังไม่มี manifest — รัน `vcut scan` ก่อน")
