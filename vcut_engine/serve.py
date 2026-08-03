@@ -28,7 +28,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from . import clips, config, reset, settings
+from . import clips, config, render, reset, settings
 from .util import c, info, read_json, warn, write_json
 
 VIEWER = Path(__file__).resolve().parent.parent / "viewer" / "index.html"
@@ -310,11 +310,17 @@ def build_state(ctx):
         })
 
     sheets = sorted((ctx.thumb_dir / "sheets").glob("sheet_*.jpg"))
+    # ไฟล์ที่ต่อไว้เก่ากว่าไทม์ไลน์ไหม — ตัวเล่นโหมด "ไฟล์ที่ต่อแล้ว" ต้องบอกได้ว่า
+    # สิ่งที่กำลังดูอยู่ไม่ใช่ลำดับล่าสุด ไม่งั้นคนดูของเก่าแล้วนึกว่าแก้ไม่ติด
+    out_m = int(ctx.out.stat().st_mtime) if ctx.out.exists() else 0
+    edl_m = int(ctx.edl.stat().st_mtime) if ctx.edl.exists() else 0
     return {
         "project": ctx.get("project.name", "untitled"),
         "out": str(ctx.out),
         "out_exists": ctx.out.exists(),
         "out_size": round(ctx.out.stat().st_size / 1e9, 2) if ctx.out.exists() else 0,
+        "out_mtime": out_m,
+        "out_stale": bool(out_m and edl_m and out_m < edl_m),
         "config": [Path(p).name for p in ctx.get("_meta.config_files", [])],
         "clips_total": len(man.get("clips", [])),
         "footage_minutes": round(sum(x["duration"] for x in man.get("clips", [])) / 60, 1),
@@ -523,6 +529,12 @@ def make_handler(ctx, job):
             ctype = ctype or mimetypes.guess_type(path.name)[0] or "application/octet-stream"
             self._send(200, path.read_bytes(), ctype)
 
+        # ตอบทีละไม่เกินเท่านี้ต่อหนึ่งคำขอ — เบราว์เซอร์ขอ "bytes=0-" มาเฉย ๆ
+        # ถ้าตอบทั้งก้อนตามที่ขอ ไฟล์หนัง 3 GB จะถูกอ่านเข้าหน่วยความจำทั้งหมด
+        # แล้วส่งไม่ทันจนสายหลุด (ERR_CONTENT_LENGTH_MISMATCH) การตอบสั้นกว่าที่ขอ
+        # เป็นเรื่องปกติของ HTTP 206 เบราว์เซอร์จะขอก้อนถัดไปเอง
+        RANGE_CHUNK = 8 << 20
+
         def _range_file(self, path):
             """วิดีโอต้องรองรับ Range ไม่งั้นเบราว์เซอร์เลื่อนดูไม่ได้"""
             if not path.exists():
@@ -531,22 +543,38 @@ def make_handler(ctx, job):
             rng = self.headers.get("Range", "")
             m = re.match(r"bytes=(\d*)-(\d*)", rng)
             if not m:
-                return self._file(path, "video/mp4")
+                return self._stream(path, 0, size - 1, size, 200)
             a = int(m.group(1)) if m.group(1) else 0
             b = int(m.group(2)) if m.group(2) else size - 1
-            a, b = max(0, a), min(size - 1, b)
+            a = max(0, a)
+            b = min(size - 1, b, a + self.RANGE_CHUNK - 1)
             if a > b:
                 return self._send(416, b"", "video/mp4")
-            with path.open("rb") as f:
-                f.seek(a)
-                chunk = f.read(b - a + 1)
-            self.send_response(206)
+            return self._stream(path, a, b, size, 206)
+
+        def _stream(self, path, a, b, size, code):
+            """ส่งไฟล์เป็นก้อน ๆ ไม่อ่านเข้าหน่วยความจำทั้งไฟล์"""
+            self.send_response(code)
             self.send_header("Content-Type", "video/mp4")
-            self.send_header("Content-Range", f"bytes {a}-{b}/{size}")
             self.send_header("Accept-Ranges", "bytes")
-            self.send_header("Content-Length", str(len(chunk)))
+            self.send_header("Content-Length", str(b - a + 1))
+            if code == 206:
+                self.send_header("Content-Range", f"bytes {a}-{b}/{size}")
             self.end_headers()
-            self.wfile.write(chunk)
+            if self.command == "HEAD":
+                return
+            left = b - a + 1
+            try:
+                with path.open("rb") as f:
+                    f.seek(a)
+                    while left > 0:
+                        buf = f.read(min(1 << 16, left))
+                        if not buf:
+                            break
+                        self.wfile.write(buf)
+                        left -= len(buf)
+            except (BrokenPipeError, ConnectionResetError):
+                pass          # คนดูกดข้ามหรือปิดหน้าไป — ไม่ใช่ความผิดพลาด
 
         # ── เส้นทาง ──
         def do_GET(self):
@@ -638,6 +666,10 @@ def make_handler(ctx, job):
                 if not SAFE_NAME.match(name):
                     return self._send(400, b"bad name", "text/plain")
                 return self._file(ctx.thumb_dir / "sheets" / name)
+
+            if p == "/out":
+                # ไฟล์หนังที่ต่อเสร็จแล้ว — ตัวเล่นโหมด "ไฟล์ที่ต่อแล้ว" ใช้เส้นนี้
+                return self._range_file(ctx.out)
 
             if p.startswith("/seg/"):
                 name = p[len("/seg/"):]

@@ -263,6 +263,19 @@ dialog .dh .m{font:11.5px ui-monospace,Menlo,monospace;color:var(--dim)}
 dialog .db{padding:.9rem 1rem;max-height:min(62vh,620px);overflow:auto}
 dialog .df{padding:.7rem 1rem;border-top:1px solid var(--line);display:flex;gap:.45rem;
   align-items:center}
+/* ตัวเล่นวิดีโอขั้น 3 */
+.pv{background:#000;border-radius:6px;overflow:hidden;position:relative;line-height:0}
+.pv video{display:block;width:100%;max-height:52vh;background:#000;object-fit:contain}
+.pv video.hide{display:none}
+.pvbadge{position:absolute;left:.5rem;top:.5rem;background:rgba(0,0,0,.62);color:#fff;
+  font-size:11.5px;line-height:1.5;padding:.1rem .45rem;border-radius:4px;pointer-events:none}
+.pvbar{display:flex;align-items:center;gap:.45rem;margin-top:.55rem}
+.pvscrub{flex:1;height:9px;background:var(--off);border-radius:5px;position:relative;
+  cursor:pointer;overflow:hidden}
+.pvfill{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--accent)}
+.pvticks{position:absolute;inset:0}
+.pvticks i{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.28)}
+.pvtime{font-variant-numeric:tabular-nums;font-size:12px;color:var(--dim);white-space:nowrap}
 .sect{margin:0 0 1.1rem} .sect:last-child{margin-bottom:0}
 .sect>h4{font-size:11.5px;margin:0 0 .45rem;color:var(--dim);font-weight:700;
   letter-spacing:.05em;text-transform:uppercase}
@@ -1321,6 +1334,7 @@ function stepCompose(box){
   box.appendChild(c);
 
   if (mode === 'manual') box.appendChild(pickList());
+  if (items.length) box.appendChild(playerCard());
   if (items.length) box.appendChild(timeline());
   box.appendChild(reviewCard());
 }
@@ -1355,6 +1369,389 @@ function pickList(){
   c.appendChild(el('p', 'note', `เลือกไว้ ${chosen.size} ชิ้น`));
   return c;
 }
+
+// ── ตัวเล่นวิดีโอของขั้น 3 ────────────────────────────────────────
+//
+// สามโหมด แต่มีเครื่องยนต์เดียว: **รายการท่อน** [{p, from, to}] โดย p คือชิ้นใน
+// ไทม์ไลน์  ไทม์ไลน์สด = ท่อนละหนึ่งชิ้นเต็ม · ตรวจรอยต่อ = สองท่อนสั้นคร่อม
+// จุดตัด  ส่วนโหมดไฟล์ที่ต่อแล้วเล่นไฟล์เดียวจึงไม่ผ่านเครื่องยนต์นี้
+//
+// ทำไมต้องมีสองโหมดแรก: ไฟล์ที่ต่อแล้วคือของจริง เสียงต่อเนื่องสนิทและเลื่อนดู
+// ได้ทันที แต่กว่าจะมีต้องรอ render + ต่อไฟล์ · ส่วนการต่อชิ้นในเบราว์เซอร์ดูได้
+// ทันทีที่จัดไทม์ไลน์เสร็จ และสะท้อนลำดับที่ลากอยู่ตอนนี้แม้ยังไม่บันทึก
+// แลกกับรอยต่อที่สะดุดจาง ๆ เพราะสลับไฟล์ทีนึงมีช่องว่างเสมอ
+//
+// DOM ของตัวเล่นถูกสร้างครั้งเดียวแล้วเก็บไว้ใน PV.node — render() วาดหน้าใหม่
+// บ่อยมาก (คลิกชิ้น สลับลำดับ ติ๊กปิด) ถ้าสร้าง <video> ใหม่ทุกรอบ วิดีโอจะหยุด
+// เล่นทุกครั้งที่คนแตะอะไรสักอย่าง
+
+const PV_PRE = 1.2, PV_POST = 1.2;    // โหมดตรวจรอยต่อ: กี่วินาทีก่อน/หลังจุดตัด
+let PV = null;
+
+const pvPieces = () => items.filter(x => !x.off);
+
+// รอยต่อไหนควรตรวจ — ค่าตั้งต้นคือเฉพาะรอยต่อที่มีเสียงพูดทั้งสองฝั่ง
+//
+// เพราะชิ้นในหนังแบบนี้สั้นมาก (เฉลี่ย 3.6 วิ) การตรวจทุกรอยต่อ ±1.2 วิ กินเวลา
+// เกือบเท่าดูทั้งเรื่อง ซึ่งไม่ได้ช่วยอะไร  ส่วนรอยต่อที่ *ได้ยิน* ว่าพลาดคือ
+// ประโยคต่อประโยค (พูด→พูด) — รอยต่อวิว→วิว สะดุดนิดหน่อยแทบไม่มีใครจับได้
+const PV_JOIN_FILTERS = {
+  talk: ['เฉพาะรอยต่อคำพูด', (a, b) => a.kind === 'TALK' && b.kind === 'TALK'],
+  any:  ['ที่มีคำพูดฝั่งใดฝั่งหนึ่ง', (a, b) => a.kind === 'TALK' || b.kind === 'TALK'],
+  all:  ['ทุกรอยต่อ', () => true],
+};
+
+function pvJoins(){
+  const ps = pvPieces();
+  const ok = (PV_JOIN_FILTERS[PV.joinFilter] || PV_JOIN_FILTERS.talk)[1];
+  const out = [];
+  for (let i = 0; i + 1 < ps.length; i++){
+    if (!ps[i].seg || !ps[i + 1].seg) continue;
+    if (ok(ps[i], ps[i + 1])) out.push([ps[i], ps[i + 1]]);
+  }
+  return out;
+}
+
+function pvChunks(){
+  const ps = pvPieces();
+  if (PV.mode === 'joins'){
+    const out = [];
+    pvJoins().forEach(([a, b], j) => {
+      out.push({p: a, from: Math.max(0, a.dur - PV_PRE), to: a.dur, join: j},
+               {p: b, from: 0, to: Math.min(PV_POST, b.dur), join: j});
+    });
+    return out;
+  }
+  return ps.filter(x => x.seg).map(x => ({p: x, from: 0, to: x.dur}));
+}
+
+const pvLen = ch => Math.max(0.05, ch.to - ch.from);
+function pvBase(cs){ let t = 0; return cs.map(ch => { const b = t; t += pvLen(ch); return b; }); }
+const pvTotal = cs => cs.reduce((a, ch) => a + pvLen(ch), 0);
+
+function pvInit(){
+  if (!PV) PV = {mode: null, ci: 0, marks: new Set(), rate: 1, node: null,
+                 joinFilter: 'talk'};
+  if (!PV.mode) PV.mode = (S && S.out_exists && !S.out_stale) ? 'file' : 'live';
+  return PV;
+}
+
+function pvBuild(){
+  const c = el('div', 'card');
+  c.append(el('h3', null, 'ดูผลงาน'));
+
+  const tabs = el('div', 'seg'); tabs.style.marginBottom = '.6rem';
+  [['file', 'ไฟล์ที่ต่อแล้ว'], ['live', 'ไทม์ไลน์สด'], ['joins', 'ตรวจรอยต่อ']]
+    .forEach(([m, lab]) => {
+      const b = el('button', null, lab);
+      b.dataset.mode = m;
+      b.onclick = () => pvSetMode(m);
+      tabs.appendChild(b);
+    });
+  c.appendChild(tabs);
+
+  const stage = el('div', 'pv');
+  const mk = id => { const v = el('video', 'hide'); v.id = id; v.preload = 'auto';
+                     v.playsInline = true; return v; };
+  const va = mk('pv-a'), vb = mk('pv-b'), vf = mk('pv-f');
+  vf.controls = true;
+  const badge = el('div', 'pvbadge');
+  stage.append(va, vb, vf, badge);
+  c.appendChild(stage);
+
+  const bar = el('div', 'pvbar');
+  const play = el('button', 'sm', '▶');
+  play.onclick = pvToggle;
+  const prev = el('button', 'sm', '⏮'), next = el('button', 'sm', '⏭');
+  prev.title = 'ชิ้นก่อนหน้า'; next.title = 'ชิ้นถัดไป';
+  prev.onclick = () => pvJump(-1); next.onclick = () => pvJump(1);
+  const scrub = el('div', 'pvscrub');
+  const fill = el('div', 'pvfill'), ticks = el('div', 'pvticks');
+  scrub.append(fill, ticks);
+  scrub.onclick = e => {
+    const r = scrub.getBoundingClientRect();
+    pvSeek(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * pvTotal(pvChunks()));
+  };
+  const time = el('div', 'pvtime', '0:00 / 0:00');
+  const rate = el('select', 'sm');
+  [0.5, 1, 1.5, 2].forEach(r => { const o = el('option', null, r + 'x'); o.value = r;
+                                  if (r === 1) o.selected = true; rate.appendChild(o); });
+  rate.onchange = () => { PV.rate = parseFloat(rate.value);
+                          [va, vb, vf].forEach(v => v.playbackRate = PV.rate); };
+  const full = el('button', 'sm', '⛶');
+  full.title = 'เต็มจอ';
+  full.onclick = () => { if (document.fullscreenElement) document.exitFullscreen();
+                         else stage.requestFullscreen && stage.requestFullscreen(); };
+  bar.append(play, prev, next, scrub, time, rate, full);
+  c.appendChild(bar);
+
+  const foot = el('div');
+  c.appendChild(foot);
+
+  PV.node = c;
+  PV.el = {tabs, stage, va, vb, vf, badge, play, prev, next, scrub, fill, ticks,
+           time, rate, full, foot};
+
+  // ตัวจับเวลาของโหมดที่ต่อชิ้นเอง — ท่อนหนึ่งอาจไม่ได้จบที่ท้ายไฟล์ (โหมดตรวจ
+  // รอยต่อเล่นแค่ 1.5 วิแรก) จึงต้องเฝ้าเองว่าถึง `to` แล้วหรือยัง
+  [va, vb].forEach(v => {
+    v.addEventListener('timeupdate', () => { if (v === pvActive()) pvTick(); });
+    v.addEventListener('ended', () => { if (v === pvActive()) pvAdvance(); });
+  });
+  vf.addEventListener('timeupdate', pvTick);
+}
+
+const pvActive = () => (PV.flip ? PV.el.vb : PV.el.va);
+const pvIdle = () => (PV.flip ? PV.el.va : PV.el.vb);
+
+function pvSetMode(m){
+  if (PV.mode === m) return;
+  pvPause();
+  PV.mode = m; PV.ci = 0;
+  ['va', 'vb', 'vf'].forEach(k => { PV.el[k].removeAttribute('src'); PV.el[k].load(); });
+  render();
+}
+
+function pvSrc(p){ return `/seg/${p.seg}`; }
+
+function pvLoadChunk(ci, off, autoplay){
+  const cs = pvChunks();
+  if (!cs.length) return;
+  PV.ci = Math.max(0, Math.min(cs.length - 1, ci));
+  const ch = cs[PV.ci];
+  const v = pvActive();
+  const want = pvSrc(ch.p);
+  if (!v.src.endsWith(want)) v.src = want;
+  v.playbackRate = PV.rate;
+  const go = () => { v.currentTime = ch.from + (off || 0);
+                     if (autoplay) v.play().catch(() => {}); };
+  if (v.readyState >= 1) go(); else v.addEventListener('loadedmetadata', go, {once: true});
+  [pvActive(), pvIdle()].forEach((x, i) => x.classList.toggle('hide', i === 1));
+  PV.el.vf.classList.add('hide');
+  // เตรียมท่อนถัดไปไว้ล่วงหน้าในตัวที่ไม่ได้ใช้ — ลดช่องว่างตอนสลับให้เหลือน้อยสุด
+  const nx = cs[PV.ci + 1];
+  if (nx){
+    const w = pvIdle(), s = pvSrc(nx.p);
+    if (!w.src.endsWith(s)) w.src = s;
+    const seek = () => { try { w.currentTime = nx.from; } catch (_){} };
+    if (w.readyState >= 1) seek(); else w.addEventListener('loadedmetadata', seek, {once: true});
+  }
+  pvSync();
+}
+
+function pvAdvance(){
+  const cs = pvChunks();
+  if (PV.ci + 1 >= cs.length){ pvPause(); return; }
+  PV.flip = !PV.flip;                      // ตัวที่ preload ไว้กลายเป็นตัวหลัก
+  PV.ci += 1;
+  const ch = cs[PV.ci], v = pvActive();
+  v.playbackRate = PV.rate;
+  try { if (Math.abs(v.currentTime - ch.from) > 0.05) v.currentTime = ch.from; } catch (_){}
+  v.play().catch(() => {});
+  [pvActive(), pvIdle()].forEach((x, i) => x.classList.toggle('hide', i === 1));
+  const nx = cs[PV.ci + 1];
+  if (nx){
+    const w = pvIdle(), s = pvSrc(nx.p);
+    if (!w.src.endsWith(s)) w.src = s;
+    const seek = () => { try { w.currentTime = nx.from; } catch (_){} };
+    if (w.readyState >= 1) seek(); else w.addEventListener('loadedmetadata', seek, {once: true});
+  }
+  pvSync();
+}
+
+function pvTick(){
+  const cs = pvChunks();
+  if (PV.mode === 'file'){
+    const v = PV.el.vf, d = v.duration || 0;
+    pvProgress(d ? v.currentTime / d : 0, v.currentTime, d);
+    return;
+  }
+  if (!cs.length) return;
+  const ch = cs[PV.ci], v = pvActive();
+  if (v.currentTime >= ch.to - 0.02){ pvAdvance(); return; }
+  const base = pvBase(cs)[PV.ci] + (v.currentTime - ch.from);
+  const tot = pvTotal(cs);
+  pvProgress(tot ? base / tot : 0, base, tot);
+}
+
+function pvProgress(frac, cur, tot){
+  PV.el.fill.style.width = (Math.max(0, Math.min(1, frac)) * 100).toFixed(2) + '%';
+  PV.el.time.textContent = `${mmss(cur || 0)} / ${mmss(tot || 0)}`;
+}
+
+function pvSeek(t){
+  if (PV.mode === 'file'){ PV.el.vf.currentTime = t; return; }
+  const cs = pvChunks(), base = pvBase(cs);
+  let i = 0;
+  while (i + 1 < cs.length && base[i + 1] <= t) i++;
+  pvLoadChunk(i, t - base[i], PV.playing);
+}
+
+function pvJump(d){
+  if (PV.mode === 'file'){
+    const cs = pvChunks(), base = pvBase(cs), t = PV.el.vf.currentTime;
+    let i = 0; while (i + 1 < cs.length && base[i + 1] <= t) i++;
+    PV.el.vf.currentTime = base[Math.max(0, Math.min(cs.length - 1, i + d))];
+    return;
+  }
+  pvLoadChunk(PV.ci + (PV.mode === 'joins' ? 2 * d : d), 0, PV.playing);
+}
+
+function pvToggle(){ PV.playing ? pvPause() : pvPlay(); }
+
+function pvPlay(){
+  PV.playing = true;
+  if (PV.mode === 'file'){
+    if (!PV.el.vf.src) PV.el.vf.src = '/out';
+    PV.el.vf.playbackRate = PV.rate;
+    PV.el.vf.play().catch(() => {});
+  } else {
+    const v = pvActive();
+    if (!v.src) pvLoadChunk(PV.ci, 0, true);
+    else { v.playbackRate = PV.rate; v.play().catch(() => {}); }
+  }
+  pvSync();
+}
+
+function pvPause(){
+  PV.playing = false;
+  [PV.el.va, PV.el.vb, PV.el.vf].forEach(v => { try { v.pause(); } catch (_){} });
+  pvSync();
+}
+
+// เรียกทุกครั้งที่วาดหน้าใหม่ — DOM เดิม แต่ข้อมูลรอบตัวเปลี่ยนได้ตลอด
+function pvSync(){
+  const E = PV.el, cs = pvChunks(), ps = pvPieces();
+  [...E.tabs.children].forEach(b =>
+    b.setAttribute('aria-pressed', b.dataset.mode === PV.mode));
+  E.play.textContent = PV.playing ? '⏸' : '▶';
+
+  const fileMode = PV.mode === 'file';
+  E.vf.classList.toggle('hide', !fileMode);
+  E.va.classList.toggle('hide', fileMode || PV.flip);
+  E.vb.classList.toggle('hide', fileMode || !PV.flip);
+  if (fileMode && S && S.out_exists && !E.vf.src) E.vf.src = '/out';
+
+  // ขีดบอกขอบเขตของแต่ละชิ้นบนแถบเลื่อน
+  E.ticks.innerHTML = '';
+  const tot = fileMode ? 0 : pvTotal(cs);
+  if (!fileMode && tot > 0 && cs.length < 600)
+    pvBase(cs).forEach(b => { const i = el('i');
+                              i.style.left = (b / tot * 100).toFixed(3) + '%';
+                              E.ticks.appendChild(i); });
+
+  const ch = cs[PV.ci];
+  E.badge.textContent = fileMode
+    ? (S && S.out_exists ? 'ไฟล์ที่ต่อแล้ว' : 'ยังไม่มีไฟล์')
+    : ch ? `ชิ้นที่ ${ps.indexOf(ch.p) + 1}/${ps.length} · ${ch.p.name} · `
+           + (ch.p.kind === 'TALK' ? 'พูด' : 'วิว')
+         : 'ยังไม่มีชิ้นที่ตัดไว้';
+
+  E.foot.innerHTML = '';
+  E.foot.appendChild(pvFoot(cs, ps));
+  const dead = fileMode ? !(S && S.out_exists) : !cs.length;
+  [E.play, E.prev, E.next].forEach(b => b.disabled = dead);
+}
+
+function pvFoot(cs, ps){
+  const w = el('div');
+  const notRendered = ps.filter(x => !x.seg).length;
+
+  if (PV.mode === 'file'){
+    if (!S || !S.out_exists){
+      w.appendChild(el('p', 'note warnnote',
+        'ยังไม่มีไฟล์หนัง — กด "สร้างไฟล์" ข้างบนก่อน '
+        + 'หรือสลับไปโหมด "ไทม์ไลน์สด" เพื่อดูจากชิ้นที่ตัดไว้เลย'));
+    } else {
+      w.appendChild(el('p', 'note',
+        `${S.out} · ${S.out_size} GB · ต่อเมื่อ ${clockOf(S.out_mtime)}`));
+      if (S.out_stale)
+        w.appendChild(el('p', 'note warnnote',
+          'ไทม์ไลน์ถูกแก้หลังต่อไฟล์ — สิ่งที่ดูอยู่เก่ากว่าที่จัดไว้ '
+          + 'กด "สร้างไฟล์" ใหม่ หรือดูโหมด "ไทม์ไลน์สด" แทน'));
+    }
+    return w;
+  }
+
+  if (PV.mode === 'joins'){
+    const n = cs.length / 2 | 0;
+    const whole = ps.reduce((a, b) => a + b.dur, 0);
+
+    const pick = el('div', 'seg'); pick.style.marginBottom = '.45rem';
+    Object.entries(PV_JOIN_FILTERS).forEach(([k, [lab, fn]]) => {
+      let cnt = 0;
+      for (let i = 0; i + 1 < ps.length; i++)
+        if (ps[i].seg && ps[i + 1].seg && fn(ps[i], ps[i + 1])) cnt++;
+      const b = el('button', null, `${lab} ${cnt}`);
+      b.setAttribute('aria-pressed', PV.joinFilter === k);
+      b.onclick = () => { PV.joinFilter = k; PV.ci = 0; PV.marks.clear();
+                          pvPause(); render(); };
+      pick.appendChild(b);
+    });
+    w.appendChild(pick);
+
+    const row = el('div', 'acts');
+    const ok = el('button', 'sm', 'ผ่าน');
+    ok.onclick = () => { PV.marks.delete(PV.ci / 2 | 0); pvLoadChunk((PV.ci / 2 | 0) * 2 + 2, 0, true); };
+    const bad = el('button', 'sm', 'ทำเครื่องหมายไว้');
+    bad.onclick = () => { PV.marks.add(PV.ci / 2 | 0); pvLoadChunk((PV.ci / 2 | 0) * 2 + 2, 0, true); };
+    const again = el('button', 'sm', 'เล่นซ้ำ');
+    again.onclick = () => pvLoadChunk((PV.ci / 2 | 0) * 2, 0, true);
+    row.append(ok, bad, again);
+    const cur = cs[PV.ci];
+    w.append(el('p', 'note', n
+      ? `รอยต่อที่ ${(PV.ci / 2 | 0) + 1}/${n}`
+        + (cur ? ` · ${cur.p.name}` : '')
+        + ` · เล่นแค่ ${PV_PRE} วิก่อน + ${PV_POST} วิหลังจุดตัด`
+        + ` — ดูครบใน ~${mmss(n * (PV_PRE + PV_POST))} แทนที่จะเป็น ${mmss(whole)}`
+      : 'ไม่มีรอยต่อที่เข้าเกณฑ์ที่เลือกไว้'), row);
+    if (PV.marks.size){
+      const m = el('div', 'acts');
+      m.append(el('span', 'note', `ทำเครื่องหมายไว้ ${PV.marks.size} จุด:`));
+      [...PV.marks].sort((a, b) => a - b).forEach(j => {
+        const b = el('button', 'ghost', String(j + 1));
+        b.title = `ไปที่รอยต่อที่ ${j + 1}`;
+        b.onclick = () => pvLoadChunk(j * 2, 0, true);
+        m.appendChild(b);
+      });
+      w.appendChild(m);
+    }
+    return w;
+  }
+
+  w.appendChild(el('p', 'note',
+    'เล่นจากชิ้นที่ตัดไว้ — ยังไม่ได้ต่อไฟล์ · รอยต่อจะสะดุดจาง ๆ '
+    + 'เพราะสลับไฟล์ทีนึงมีช่องว่างเสมอ ของจริงในไฟล์ที่ต่อแล้วต่อเนื่องสนิท'));
+  w.appendChild(el('p', 'note', 'ชิ้นที่กด ✕ ปิดไว้จะถูกข้ามอัตโนมัติ · '
+    + 'คลิกชิ้นในไทม์ไลน์ข้างล่างเพื่อกระโดดไปเล่นตรงนั้น'));
+  if (notRendered)
+    w.appendChild(el('p', 'note warnnote',
+      `ยังไม่ได้ตัดเป็นชิ้น ${notRendered} ชิ้น — ถูกข้ามในโหมดนี้ `
+      + 'กด "สร้างไฟล์" เพื่อตัดให้ครบ'));
+  return w;
+}
+
+// คลิกชิ้นในไทม์ไลน์ → กระโดดไปเล่นตรงนั้น (เฉพาะโหมดที่ต่อชิ้นเอง)
+function pvGotoPiece(x){
+  if (!PV || !PV.node || PV.mode === 'file') return false;
+  const cs = pvChunks();
+  const i = cs.findIndex(ch => ch.p === x);
+  if (i < 0) return false;
+  pvLoadChunk(i, 0, PV.playing);
+  return true;
+}
+
+function playerCard(){
+  pvInit();
+  if (!PV.node) pvBuild();
+  pvSync();
+  return PV.node;
+}
+
+// เวลานาฬิกาจาก unix time — คนละเรื่องกับ hhmm() ข้างบนที่แปลง "จำนวนวินาที"
+const clockOf = ts => { if (!ts) return '—';
+  const d = new Date(ts * 1000);
+  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`; };
 
 function timeline(){
   const c = el('div', 'card');
@@ -1406,8 +1803,13 @@ function tlRow(x, i){
               mk('↑', () => move(i, -1)), mk('↓', () => move(i, 1)),
               mk(x.off ? '↺' : '✕', () => { x.off = !x.off; render(); }));
   li.append(acts);
-  li.onclick = e => { if (e.target.tagName !== 'BUTTON'){ sel = i; render();
-                                                          previewPiece(x); } };
+  // คลิกชิ้น → ให้ตัวเล่นกระโดดไปตรงนั้นก่อน ถ้าโหมดปัจจุบันทำไม่ได้
+  // (กำลังดูไฟล์ที่ต่อแล้ว หรือชิ้นนี้ยังไม่ได้ตัด) ค่อยตกไปเป็นภาพตัวอย่างชิ้นเดียว
+  li.onclick = e => {
+    if (e.target.tagName === 'BUTTON') return;
+    sel = i; render();
+    if (!pvGotoPiece(x)) previewPiece(x);
+  };
   img.addEventListener('dragstart', e => { dragFrom = i; li.classList.add('drag');
     e.dataTransfer.effectAllowed = 'move'; });
   img.addEventListener('dragend', () => { li.classList.remove('drag'); dragFrom = -1; });
