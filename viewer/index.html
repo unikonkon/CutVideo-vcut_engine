@@ -2018,6 +2018,65 @@ function tlTrim(x, side, dt){
   x.dur = +(x.end - x.start).toFixed(3);
 }
 
+// ── ซูมไทม์ไลน์ ──────────────────────────────────────────────────
+//
+// ซูมโดย **ตรึงหัวอ่าน (เส้นสีส้ม) ไว้กับที่** — ตัวชี้เมาส์อยู่ตรงไหนไม่เกี่ยว
+// เพราะสิ่งที่กำลังทำงานด้วยจริง ๆ คือจุดที่หนังเล่นถึง: ปุ่ม C ซอยตรงนั้น ปุ่ม D
+// ลบชิ้นตรงนั้น พอซูมเข้าไปดูละเอียดแล้วเส้นส้มต้องยังอยู่ที่เดิมบนจอ ไม่งั้น
+// ซูมเข้าทีนึงก็ต้องไล่หาเส้นใหม่ทุกครั้ง — ปุ่ม − + ก็ใช้จุดตรึงเดียวกัน
+//
+// ถ้าเส้นส้มไม่ได้อยู่ในจอตอนนั้น (เลื่อนไปดูที่อื่นอยู่) ให้ดึงมาไว้กลางจอเลย
+// ตรึงไว้ที่เดิมทั้งที่มองไม่เห็นก็ไม่ได้ช่วยอะไร
+const TL_ZOOM_MIN = 1.5, TL_ZOOM_MAX = 240;
+
+function tlZoomAt(factor){
+  const w = document.querySelector('.tlwrap');
+  const z0 = tlZoom;
+  const z1 = Math.max(TL_ZOOM_MIN, Math.min(TL_ZOOM_MAX, z0 * factor));
+  if (Math.abs(z1 - z0) < 1e-6) return;
+  tlZoom = z1;
+  if (w){
+    const t = (PV && PV.gt) || 0;                 // วินาทีที่หัวอ่านชี้อยู่
+    const px0 = t * z0 - w.scrollLeft;            // เส้นส้มห่างขอบซ้ายของกรอบเท่าไร
+    const px = (px0 >= 0 && px0 <= w.clientWidth) ? px0 : w.clientWidth / 2;
+    tlScroll = Math.max(0, t * z1 - px);
+  }
+  render();
+}
+
+// แทร็กแพดยิง wheel มาถี่ 60–120 ครั้งต่อวินาที ถ้าวาดใหม่ทุกครั้ง (397 บล็อก +
+// ไม้บรรทัดอีกเป็นร้อยขีด) จะหน่วงจนซูมไม่ติดมือ — สะสมสัดส่วนไว้ก่อนแล้ววาด
+// ครั้งเดียวต่อเฟรม ผลลัพธ์เท่ากันเป๊ะเพราะการซูมเป็นการคูณต่อกันไปเรื่อย ๆ
+let tlZoomPend = 1, tlZoomRaf = 0;
+function tlZoomWheel(factor){
+  tlZoomPend *= factor;
+  if (tlZoomRaf) return;
+  tlZoomRaf = requestAnimationFrame(() => {
+    tlZoomRaf = 0;
+    const f = tlZoomPend; tlZoomPend = 1;
+    tlZoomAt(f);
+  });
+}
+
+// ⌘ + S ค้างไว้แล้วหมุนล้อ = ซูม  ต้องรู้ว่า S ถูกกดค้างอยู่ไหมตอนล้อหมุน
+//
+// ปล่อย ⌘ เมื่อไรก็ล้างธงทิ้งด้วย เพราะบน macOS ตอนกด ⌘ ค้าง เบราว์เซอร์มัก
+// *ไม่ส่ง keyup ของปุ่มตัวอักษร* มาให้เลย ถ้าเชื่อ keyup ของ S อย่างเดียว ธงจะ
+// ค้างเป็นจริงตลอดไป แล้ว ⌘+ล้อ ที่ควรเลื่อนซ้ายขวาจะกลายเป็นซูมไปทั้งหมด
+let tlKeyS = false;
+window.addEventListener('keydown', e => {
+  if (e.code !== 'KeyS' && (e.key || '').toLowerCase() !== 's') return;
+  tlKeyS = true;
+  // ⌘+S ปกติคือ "บันทึกหน้าเว็บ" ของเบราว์เซอร์ — กล่องเซฟจะเด้งตั้งแต่ยังไม่ได้
+  // หมุนล้อ ห้ามไว้เฉพาะตอนอยู่หน้าไทม์ไลน์แบบแถบ ที่อื่นยังเซฟหน้าได้ตามปกติ
+  if (e.metaKey && step === 3 && tlView === 'strip') e.preventDefault();
+});
+window.addEventListener('keyup', e => {
+  if (e.code === 'KeyS' || e.key === 'Meta' || (e.key || '').toLowerCase() === 's')
+    tlKeyS = false;
+});
+window.addEventListener('blur', () => { tlKeyS = false; });
+
 function tlReset(x){ if (!x.o) return; tlSnap('คืนขอบเดิม');
                      x.start = x.o.start; x.end = x.o.end;
                      x.dur = +(x.end - x.start).toFixed(3); render(); }
@@ -2084,8 +2143,15 @@ function stripView(){
     // ล้อบางตัวส่งมาเป็น "จำนวนบรรทัด" หรือ "จำนวนหน้า" ไม่ใช่พิกเซล
     const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? w.clientWidth : 1;
     // เอาแกนที่ขยับแรงกว่า — เมาส์ล้อเดียวมีแต่ deltaY ส่วนแทร็กแพดมีทั้งสองแกน
-    const d = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
-    w.scrollLeft += d * unit * TL_WHEEL;
+    const d = (Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX) * unit;
+    if (tlKeyS){
+      // ⌘ + S + ล้อ = ซูม · หมุนขึ้น = เข้า หมุนลง = ออก (ทางเดียวกับซูมหน้าเว็บ)
+      // คิดเป็นสัดส่วนต่อระยะที่หมุน ล้อหนึ่งคลิก (~100) จึงได้ราว 16%
+      // ส่วนแทร็กแพดที่ส่งมาทีละนิดก็ได้ทีละนิด ไล่ระดับได้ละเอียด
+      tlZoomWheel(Math.pow(1.0015, -d));
+      return;
+    }
+    w.scrollLeft += d * TL_WHEEL;
     tlScroll = w.scrollLeft;
   }, {passive: false});
 
@@ -2093,6 +2159,7 @@ function stripView(){
     + 'ลากตัวบล็อก = ย้ายตำแหน่ง · ลากขอบซ้าย/ขวา = ย่อ-ขยาย · '
     + 'คลิกไม้บรรทัด = ย้ายหัวอ่าน'));
   c.append(el('p', 'note', '⌘ + ล้อเมาส์ = เลื่อนไทม์ไลน์ซ้าย-ขวา · '
+    + '⌘ + S + ล้อเมาส์ = ซูมเข้า-ออก โดยตรึงหัวอ่าน (เส้นสีส้ม) ไว้กับที่ · '
     + '⌘ + คลิกตรงไหน = ย้ายหัวอ่านไปตรงนั้นทันที (คลิกทับตัวบล็อกได้เลย '
     + 'ไม่ต้องเล็งไม้บรรทัด)'));
   c.append(el('p', 'note', 'แป้นลัด — Space เล่น/หยุด · C ตัดตรงหัวอ่าน · '
@@ -2153,9 +2220,11 @@ function tlHead(on, total){
 
   if (tlView === 'strip'){
     const zo = el('button', 'ghost', '−'), zi = el('button', 'ghost', '+');
-    zo.title = 'ซูมออก'; zi.title = 'ซูมเข้า';
-    zo.onclick = () => { tlZoom = Math.max(1.5, tlZoom / 1.6); render(); };
-    zi.onclick = () => { tlZoom = Math.min(240, tlZoom * 1.6); render(); };
+    zo.title = 'ซูมออก (หรือ ⌘ + S + ล้อเมาส์ลง)';
+    zi.title = 'ซูมเข้า (หรือ ⌘ + S + ล้อเมาส์ขึ้น)';
+    // ตรึงหัวอ่านไว้ ไม่ใช่ขอบซ้าย — กดซูมแล้วเส้นส้มต้องไม่หายไปจากจอ
+    zo.onclick = () => tlZoomAt(1 / 1.6);
+    zi.onclick = () => tlZoomAt(1.6);
     bar.append(el('span', 'note', 'ซูม'), zo, zi);
   }
   w.appendChild(bar);
