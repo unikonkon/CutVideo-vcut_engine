@@ -490,6 +490,7 @@ async function load(keepEdits){
   if (S && S.timeline){
     items = S.timeline.map(x => ({...x, off: false, o: {start: x.start, end: x.end}}));
     sel = -1;
+    tlHist = [];      // ของใหม่มาจากดิสก์แล้ว ประวัติของร่างเก่าย้อนไปก็ไม่ตรงกับอะไร
   }
   $('#title').textContent = D.values['project.name'] || 'vcut';
   $('#c-proj').textContent = D.project.path || 'ยังไม่มีไฟล์โปรเจกต์';
@@ -1872,12 +1873,17 @@ function tlFollow(){
 // preventDefault จำเป็น: ค่าเริ่มต้นของ Space คือเลื่อนหน้าลงหนึ่งจอ และในโหมด
 // "ไฟล์ที่ต่อแล้ว" ที่ <video> มี controls จริง เบราว์เซอร์จะสั่งเล่น/หยุดเองอีกที
 // กลายเป็นสองครั้งซ้อนแล้วกลับมาเหมือนไม่ได้กด
+// แป้นลัดใช้ได้ไหมตอนนี้ — ใช้ร่วมกันทุกแป้น (Space · C · D · F)
+function keyFree(e){
+  if (e.ctrlKey || e.metaKey || e.altKey) return false;
+  const t = e.target;
+  if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return false;
+  return !document.querySelector('dialog[open]');
+}
+
 function pvKey(e){
   if (e.code !== 'Space' && e.key !== ' ') return;
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
-  const t = e.target;
-  if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
-  if (document.querySelector('dialog[open]')) return;
+  if (!keyFree(e)) return;
   if (!PV || !PV.node || !PV.node.isConnected) return;   // ไม่ได้อยู่หน้าที่มีตัวเล่น
   if (PV.el.play.disabled) return;                       // ยังไม่มีอะไรให้เล่น
   e.preventDefault();
@@ -1920,9 +1926,71 @@ let tlScroll = 0;
 const tlOn = () => items.filter(x => !x.off);
 function tlBase(){ let t = 0; return tlOn().map(x => { const b = t; t += x.dur; return b; }); }
 
+// ── ประวัติการแก้ (ย้อนได้) ──────────────────────────────────────
+//
+// เก็บเป็นภาพนิ่งของ items[] ทั้งชุด ไม่ใช่ "รายการสิ่งที่ทำ" ที่ต้องเขียนวิธี
+// ทำย้อนกลับให้ทุกท่า — ชิ้นละไม่กี่ตัวเลข 397 ชิ้นก็ยังเบากว่าความซับซ้อนของ
+// การ undo แบบสมมาตร (ซอยแล้วลากขอบต่อ แล้วย้าย แล้วค่อยย้อน — ท่าผสมพวกนี้
+// พังง่ายมาก)  จำกัดไว้ TL_HIST_MAX ครั้งกันกินหน่วยความจำไม่รู้จบ
+//
+// ทุกอย่างยังเป็นร่างในเบราว์เซอร์เหมือนเดิม — ย้อนกี่ครั้งก็ไม่แตะ edl.json
+const TL_HIST_MAX = 60;
+let tlHist = [];
+
+// เรียก *ก่อน* ลงมือแก้เสมอ และเรียกก็ต่อเมื่อจะแก้จริงแล้วเท่านั้น
+// (ถ้า snap ไว้ก่อนตรวจเงื่อนไข กด C บนชิ้นสั้น ๆ ที่ซอยไม่ได้จะได้ประวัติเปล่า
+//  ค้างไว้ พอกด F ทีนึงก็เหมือนไม่มีอะไรเกิดขึ้น)
+function tlSnap(what){
+  tlHist.push({what, sel, items: items.map(x => ({...x, o: x.o ? {...x.o} : null}))});
+  if (tlHist.length > TL_HIST_MAX) tlHist.shift();
+}
+
+function tlUndo(){
+  const s = tlHist.pop();
+  if (!s) return toast('ไม่มีอะไรให้ย้อนแล้ว', true);
+  items = s.items; sel = s.sel;
+  render();
+  toast(`ย้อน "${s.what}" แล้ว` + (tlHist.length ? ` · ย้อนได้อีก ${tlHist.length}` : ''));
+}
+
+// ชิ้นที่หัวอ่านทาบอยู่ตอนนี้ — เป้าหมายของทั้งปุ่มตัดและปุ่มลบ
+//
+// ใช้หัวอ่านไม่ใช่ "ชิ้นที่คลิกเลือกไว้" เพราะสองอย่างนี้ตรงกันอยู่แล้ว (คลิก
+// บล็อกทีนึงตัวเล่นก็กระโดดไปชิ้นนั้น หัวอ่านจึงตามไปด้วย) แต่ตอนกำลังเล่นอยู่
+// มีแค่หัวอ่านที่ยังเดินต่อ — เห็นตรงไหนไม่เอาก็เคาะ D ได้เลยโดยไม่ต้องหยุดก่อน
+function tlAt(){
+  const on = tlOn();
+  if (!on.length) return null;
+  const base = tlBase(), gt = (PV && PV.gt) || 0;
+  let j = 0; while (j + 1 < on.length && base[j + 1] <= gt) j++;
+  return on[j];
+}
+
+// C — ซอยชิ้นตรงหัวอ่านเป็นสองท่อน
+function tlCutHere(){
+  const x = tlAt();
+  if (!x) return toast('ไม่มีชิ้นให้ตัด', true);
+  tlSplit(x);
+}
+
+// D — เอาชิ้นตรงหัวอ่านออก (ยังไม่ลบทิ้งจริง แค่ปิดไว้ กด F คืนได้ทันที)
+function tlDropHere(){
+  const x = tlAt();
+  if (!x) return toast('ไม่มีชิ้นให้ลบ', true);
+  if (tlOn().length <= 1) return toast('ต้องเหลืออย่างน้อย 1 ชิ้น', true);
+  tlSnap('ลบชิ้น');
+  x.off = true;
+  sel = items.indexOf(x);
+  // ไม่ขยับหัวอ่าน — ชิ้นถัดไปเลื่อนมาแทนที่ตรงเวลาเดิมพอดี เคาะ D รัว ๆ เพื่อ
+  // ไล่ตัดของที่ไม่เอาออกทีละชิ้นได้เลยโดยไม่ต้องเล็งใหม่ทุกครั้ง
+  render();
+  toast(`เอา ${x.name} ออกแล้ว — กด F ย้อนได้`);
+}
+
 function tlSplit(x){
   const i = items.indexOf(x);
   if (i < 0 || x.dur < TL_MIN * 2) return toast(`ชิ้นสั้นเกินกว่าจะซอย (ต้องยาวกว่า ${TL_MIN * 2} วิ)`, true);
+  tlSnap('ซอยชิ้น');
   // ซอยตรงหัวอ่านถ้าหัวอ่านอยู่ในชิ้นนี้ ไม่งั้นซอยกลางชิ้น
   let at = x.start + x.dur / 2;
   const b = tlBase(), j = tlOn().indexOf(x);
@@ -1947,8 +2015,12 @@ function tlTrim(x, side, dt){
   x.dur = +(x.end - x.start).toFixed(3);
 }
 
-function tlReset(x){ if (!x.o) return; x.start = x.o.start; x.end = x.o.end;
+function tlReset(x){ if (!x.o) return; tlSnap('คืนขอบเดิม');
+                     x.start = x.o.start; x.end = x.o.end;
                      x.dur = +(x.end - x.start).toFixed(3); render(); }
+
+// เปิด/ปิดชิ้น (ปุ่ม ✕ กับ ↺ ในรายการและในกล่องรายละเอียด) — ผ่านประวัติเหมือนกัน
+function tlToggle(x){ tlSnap(x.off ? 'ใส่ชิ้นกลับ' : 'ลบชิ้น'); x.off = !x.off; render(); }
 
 function stripView(){
   const c = el('div', 'card');
@@ -1991,7 +2063,10 @@ function stripView(){
 
   c.append(el('p', 'note', 'คลิกบล็อก = เล่นชิ้นนั้นใน "ดูผลงาน" ทันที · '
     + 'ลากตัวบล็อก = ย้ายตำแหน่ง · ลากขอบซ้าย/ขวา = ย่อ-ขยาย · '
-    + 'คลิกไม้บรรทัด = ย้ายหัวอ่าน · เคาะ Space = เล่น/หยุด'));
+    + 'คลิกไม้บรรทัด = ย้ายหัวอ่าน'));
+  c.append(el('p', 'note', 'แป้นลัด — Space เล่น/หยุด · C ตัดตรงหัวอ่าน · '
+    + 'D ลบชิ้นตรงหัวอ่าน · F ย้อนการแก้ครั้งล่าสุด (ย้อนได้ทั้งตัด ลบ ย้าย '
+    + 'และย่อ-ขยาย ทีละครั้ง)'));
   if (cut)
     c.append(el('p', 'note warnnote',
       `▌ แก้ขอบไปแล้ว ${cut} ชิ้น — กด "สร้างไฟล์" จะตัดใหม่ ${cut} ชิ้น `
@@ -2017,24 +2092,35 @@ function tlHead(on, total){
   r1.append(seg);
   w.appendChild(r1);
 
+  // ── สามปุ่มที่ทำงานกับชิ้นตรงหัวอ่าน — มีแป้นลัด C · D · F ตรงกัน ──
   const bar = el('div', 'acts'); bar.style.marginTop = '.4rem';
+  const cutb = el('button', 'sm', '✂ ตัด (C)');
+  cutb.title = 'ซอยชิ้นที่หัวอ่านทาบอยู่เป็นสองท่อน (cut ชนเพิ่ม) — แป้น C';
+  cutb.onclick = tlCutHere;
+  const delb = el('button', 'sm', '✕ ลบ (D)');
+  delb.title = 'เอาชิ้นที่หัวอ่านทาบอยู่ออกจากหนัง — แป้น D';
+  delb.onclick = tlDropHere;
+  const unb = el('button', 'sm', '↶ ย้อน (F)');
+  unb.title = tlHist.length ? `ย้อน "${tlHist[tlHist.length - 1].what}" · ย้อนได้ ${tlHist.length} ครั้ง — แป้น F`
+                            : 'ยังไม่มีอะไรให้ย้อน — แป้น F';
+  unb.disabled = !tlHist.length;
+  unb.onclick = tlUndo;
+  bar.append(cutb, delb, unb, el('span', 'spacer'));
+
   const sv = el('button', 'sm', 'บันทึกไทม์ไลน์');
   sv.disabled = !tlDirty(); sv.onclick = saveTimeline;
-  const ud = el('button', 'sm', 'ย้อนกลับ');
-  ud.onclick = async () => { try { await post('/api/undo'); await load(true);
-    toast('ย้อนกลับแล้ว'); } catch(e){ toast(e.message, true); } };
+  // คนละเรื่องกับปุ่ม "ย้อน (F)" — อันนั้นย้อนร่างในเบราว์เซอร์ทีละครั้ง
+  // อันนี้ทิ้งร่างทั้งหมดแล้วดึงไฟล์ฉบับที่บันทึกไว้ก่อนหน้าจากดิสก์กลับมา
+  const ud = el('button', 'sm', '↺ คืนฉบับที่บันทึกไว้');
+  ud.title = 'ทิ้งร่างที่แก้อยู่ แล้วกลับไปใช้ edl.json ฉบับก่อนการบันทึกครั้งล่าสุด';
+  ud.onclick = async () => {
+    if (tlDirty() && !confirm('ร่างที่แก้ไว้ยังไม่ได้บันทึก — ทิ้งแล้วดึงฉบับก่อนหน้ากลับมาไหม?'))
+      return;
+    try { await post('/api/undo'); tlHist = []; await load(true);
+      toast('คืนฉบับที่บันทึกไว้แล้ว'); } catch(e){ toast(e.message, true); } };
   bar.append(sv, ud);
 
   if (tlView === 'strip'){
-    const cutb = el('button', 'sm', '✂ ตัดตรงหัวอ่าน');
-    cutb.title = 'ซอยชิ้นที่หัวอ่านอยู่เป็นสองท่อน (cut ชนเพิ่ม)';
-    cutb.onclick = () => {
-      const b = tlBase(), on2 = tlOn();
-      const gt = (PV && PV.gt) || 0;
-      let j = 0; while (j + 1 < on2.length && b[j + 1] <= gt) j++;
-      if (on2[j]) tlSplit(on2[j]);
-    };
-    bar.append(cutb, el('span', 'spacer'));
     const zo = el('button', 'ghost', '−'), zi = el('button', 'ghost', '+');
     zo.title = 'ซูมออก'; zi.title = 'ซูมเข้า';
     zo.onclick = () => { tlZoom = Math.max(1.5, tlZoom / 1.6); render(); };
@@ -2072,7 +2158,12 @@ function tlStart(e, x, kind, side){
   try { e.target.setPointerCapture(e.pointerId); } catch (_){}
   const move = ev => {
     const dpx = ev.clientX - tlDrag.x0;
-    if (Math.abs(dpx) > 2) tlDrag.moved = true;
+    // เก็บภาพนิ่งตอนที่ *เริ่มขยับจริง* ไม่ใช่ตอนกดลง — คลิกเฉย ๆ เพื่อสั่งเล่น
+    // ไม่ใช่การแก้ไทม์ไลน์ ถ้าเก็บทุกครั้งที่กด ประวัติจะเต็มไปด้วยของว่างเปล่า
+    if (Math.abs(dpx) > 2 && !tlDrag.moved){
+      tlDrag.moved = true;
+      tlSnap(kind === 'trim' ? 'ย่อ-ขยาย' : 'ย้ายตำแหน่ง');
+    }
     if (kind === 'trim'){
       tlDrag.x.start = tlDrag.s0; tlDrag.x.end = tlDrag.e0;
       tlTrim(tlDrag.x, side, dpx / tlZoom);
@@ -2142,7 +2233,7 @@ function tlDetail(x){
   const sp = el('button', 'sm', '✂ ซอยชิ้นนี้');
   sp.onclick = () => tlSplit(x);
   const rm = el('button', 'sm', x.off ? '↺ ใส่กลับ' : '✕ เอาออก');
-  rm.onclick = () => { x.off = !x.off; render(); };
+  rm.onclick = () => tlToggle(x);
   acts.append(sp, rm);
   if (tlCut(x)){
     const rs = el('button', 'sm', '↺ คืนขอบเดิม');
@@ -2152,6 +2243,30 @@ function tlDetail(x){
   w.appendChild(acts);
   return w;
 }
+
+// ── แป้นลัดของไทม์ไลน์: C ตัด · D ลบ · F ย้อน ────────────────────
+//
+// อ่านจาก e.code ไม่ใช่ e.key — e.key คือ *ตัวอักษรที่พิมพ์ออกมา* ซึ่งเปลี่ยน
+// ตามผังแป้นพิมพ์ ถ้าสลับเป็นภาษาไทยอยู่ ปุ่ม C จะให้ค่า "แ" ไม่ใช่ "c" แล้ว
+// แป้นลัดจะเงียบสนิททั้งชุด ส่วน e.code ผูกกับตำแหน่งปุ่มจริงบนแป้น จึงตรงเสมอ
+// (ยังเทียบ e.key ไว้เป็นทางสำรองสำหรับแป้นพิมพ์ที่ไม่ส่ง code มา)
+const TL_KEYS = {
+  KeyC: ['c', tlCutHere],
+  KeyD: ['d', tlDropHere],
+  KeyF: ['f', tlUndo],
+};
+
+function tlKey(e){
+  if (step !== 3 || e.repeat) return;          // ไทม์ไลน์อยู่แค่ในขั้น 3
+  if (!keyFree(e)) return;
+  const hit = TL_KEYS[e.code]
+    || Object.values(TL_KEYS).find(([ch]) => (e.key || '').toLowerCase() === ch);
+  if (!hit) return;
+  if (!items.length) return;
+  e.preventDefault();
+  hit[1]();
+}
+document.addEventListener('keydown', tlKey);
 
 // ย้ายหัวอ่านไปที่วินาทีที่ระบุ แล้วสั่งตัวเล่นตามไปด้วย
 function tlSeek(t){
@@ -2201,7 +2316,7 @@ function tlRow(x, i){
   const acts = el('div', 'rowacts');
   acts.append(el('div', 'dur', x.dur.toFixed(1) + 'ว'),
               mk('↑', () => move(i, -1)), mk('↓', () => move(i, 1)),
-              mk(x.off ? '↺' : '✕', () => { x.off = !x.off; render(); }));
+              mk(x.off ? '↺' : '✕', () => tlToggle(x)));
   li.append(acts);
   // คลิกชิ้น → ให้ตัวเล่นกระโดดไปตรงนั้นก่อน ถ้าโหมดปัจจุบันทำไม่ได้
   // (กำลังดูไฟล์ที่ต่อแล้ว หรือชิ้นนี้ยังไม่ได้ตัด) ค่อยตกไปเป็นภาพตัวอย่างชิ้นเดียว
@@ -2231,6 +2346,7 @@ function mk(label, fn){
 }
 function move(i, d){
   const j = i + d; if (j < 0 || j >= items.length) return;
+  tlSnap('ย้ายตำแหน่ง');
   [items[i], items[j]] = [items[j], items[i]];
   if (sel === i) sel = j; else if (sel === j) sel = i;
   render();
