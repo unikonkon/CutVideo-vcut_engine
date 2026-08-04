@@ -440,6 +440,10 @@ const el = (t, cls, txt) => { const e = document.createElement(t);
 
 let D = null, POOL = null, S = null, RV = null, RST = null, CL = null;
 let clFilter = 'all', clOpen = -1, clDrag = null;
+// ตำแหน่งที่เลื่อนตารางคลิปไว้ — render() ล้าง #body ทั้งก้อนทุกครั้ง .grid จึงเกิด
+// ใหม่เสมอและกลับไปอยู่บนสุดถ้าไม่จำไว้เอง คนเลื่อนลงไปคลิกดูคลิปใบที่ 40 แล้ว
+// ตารางเด้งกลับไปใบแรกทันที
+let clScroll = 0;
 let clEdits = {pick: {}, rot: {}, vmode: {}, order: null};
 let poolFilter = 'all', poolKeep = null, pcOpen = null;
 let step = 1, edits = {}, items = [], sel = -1, dragFrom = -1;
@@ -553,6 +557,10 @@ function headHeight(){
 window.addEventListener('resize', headHeight);
 
 function render(){
+  // จำที่เลื่อนหน้าไว้ก่อนรื้อ — ล้าง #body ทีเดียวทั้งก้อนทำให้หน้าสั้นลงชั่วขณะ
+  // เบราว์เซอร์จึงหนีบตำแหน่งที่เลื่อนไว้กลับไปบนสุด คลิกอะไรสักอย่างในขั้น 1 ที
+  // หน้าเด้งขึ้นหัวที เพราะทุกการกดวิ่งผ่าน render() หมด
+  const y = window.scrollY;
   const b = $('#body'); b.innerHTML = '';
   $('#side-est').hidden = step !== 3;
   $('#side-prev').hidden = step !== 3;
@@ -571,6 +579,11 @@ function render(){
     }
     document.body.classList.remove('wideside');
     if (step !== 1) clOpen = -1;
+  }
+  // วางกลับที่เดิม ทั้งรอบนี้และรอบหน้าจอวาด (รูปที่โหลดทีหลังดันความสูงได้อีก)
+  if (window.scrollY !== y){
+    window.scrollTo(0, y);
+    requestAnimationFrame(() => { if (window.scrollY !== y) window.scrollTo(0, y); });
   }
 }
 
@@ -710,6 +723,10 @@ function clipBrowser(){
   const g = el('div', 'grid');
   const pos = new Map(clOrder().map((n, i) => [n, i + 1]));
   shown.forEach((x, i) => g.appendChild(clCell(x, i, custom ? pos.get(x.name) : 0)));
+  g.addEventListener('scroll', () => { clScroll = g.scrollTop; });
+  // ตั้งค่าได้หลังใบนี้เข้าไปอยู่ในหน้าจริงแล้วเท่านั้น (ก่อนหน้านั้นยังไม่มีความสูง
+  // ให้เลื่อน) — clipBrowser() ยังแค่คืนกล่องให้คนเรียกเอาไปแปะ
+  requestAnimationFrame(() => { g.scrollTop = clScroll; });
   c.appendChild(g);
 
   const notes = ['ลากคลิปไปวางตำแหน่งที่ต้องการได้ — เส้นสีน้ำเงินบอกว่าจะแทรกด้านไหน'];
