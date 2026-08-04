@@ -77,8 +77,11 @@ header button{padding:.2em .65em;font-size:12.5px}
 .steps .st{font-size:11.5px;color:var(--dim)}
 .steps .st.hot{color:var(--warn)}
 
-main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:1rem;
+main{display:grid;grid-template-columns:minmax(0,1fr) var(--sidew,340px);gap:1rem;
   padding:1rem;align-items:start;max-width:1560px;margin:0 auto}
+/* กางแถบข้างให้กว้างขึ้นตอนเปิดดูคลิป — 340px ดูวิดีโอเพื่อตัดสินว่าจะหมุนไหม
+   หรือคลิปตั้งควรใช้โหมดไหน มันเล็กเกินกว่าจะเห็นอะไร */
+body.wideside{--sidew:440px}
 @media (max-width:1040px){ main{grid-template-columns:minmax(0,1fr)} aside{position:static!important} }
 /* ปักหมุดใต้แถบหัวพอดี — วัดความสูงจริงเอา (headHeight) ไม่ใช่ตัวเลขตายตัว
    เพราะแถบหัวขึ้นบรรทัดที่สองได้เองตอนจอแคบ */
@@ -261,6 +264,25 @@ li.row.bad .why{color:var(--warn)}
 .vwrap.r90 video,.vwrap.r270 video{max-height:none;max-width:46vh}
 .r90 video{transform:rotate(90deg)} .r270 video{transform:rotate(-90deg)}
 .r180 video{transform:rotate(180deg)}
+/* ── การ์ดดูคลิปในแถบข้าง (เดิมเป็นกล่องโต้ตอบทับกลางจอ) ──
+   สูงได้ไม่เกินความสูงจอที่เหลือ แล้วเลื่อนในตัวเอง — ไม่งั้นคลิปตั้งที่มีตัว
+   เลือกโหมด 16:9 อีกสามใบจะยาวเลยจอจนกดปุ่มล่างไม่ถึง */
+.clipcard{padding:0;overflow:hidden;display:flex;flex-direction:column;
+  max-height:calc(100vh - var(--headh,33px) - 2rem)}
+/* ต้องเขียนเอง — display ที่ตั้งไว้ในคลาสชนะ [hidden] ของเบราว์เซอร์ ไม่ใส่ไว้
+   จะเหลือการ์ดเปล่ากินที่อยู่ในแถบข้างตลอดเวลาที่ไม่ได้เปิดดูคลิป */
+.clipcard[hidden]{display:none}
+.clipcard .ch{display:flex;gap:.5rem;align-items:flex-start;
+  padding:.6rem .7rem .5rem;border-bottom:1px solid var(--line)}
+.clipcard .ch h3{margin:0;font-size:13px;text-transform:none;letter-spacing:0;
+  color:var(--fg)}
+.clipcard .ch .m{font:11px ui-monospace,Menlo,monospace;color:var(--dim)}
+.clipcard .cb{padding:.6rem .7rem;overflow:auto;flex:1}
+.clipcard .cf{display:flex;gap:.4rem;align-items:center;
+  padding:.5rem .7rem;border-top:1px solid var(--line)}
+.clipcard .vwrap video{max-height:44vh}
+.clipcard .vwrap.r90 video,.clipcard .vwrap.r270 video{max-width:34vh}
+
 .vmodes{display:grid;gap:.4rem}
 .vm{border:1px solid var(--line);border-radius:6px;padding:.5rem .6rem}
 .vm[aria-pressed=true]{border-color:var(--accent);
@@ -378,21 +400,6 @@ dialog .df{padding:.7rem 1rem;border-top:1px solid var(--line);display:flex;gap:
   </div>
 </dialog>
 
-<dialog id="clip">
-  <div class="dh">
-    <h2 id="cl-title">คลิป</h2>
-    <div class="m" id="cl-sub"></div>
-  </div>
-  <div class="db" id="cl-body"></div>
-  <div class="df">
-    <label class="ck"><input type="checkbox" id="cl-pick"> เอาคลิปนี้</label>
-    <span class="spacer"></span>
-    <button id="cl-prev">← ก่อนหน้า</button>
-    <button id="cl-next">ถัดไป →</button>
-    <button id="cl-close">ปิด</button>
-  </div>
-</dialog>
-
 <dialog id="rst">
   <div class="dh">
     <h2 id="rst-title">รีเซ็ต</h2>
@@ -409,6 +416,7 @@ dialog .df{padding:.7rem 1rem;border-top:1px solid var(--line);display:flex;gap:
 <main>
   <section id="body"></section>
   <aside>
+    <div class="card clipcard" id="side-clip" hidden></div>
     <div class="card" id="side-est" hidden>
       <h3>ถ้าสร้างไฟล์ตอนนี้</h3>
       <div id="est"></div>
@@ -552,6 +560,18 @@ function render(){
   if (step === 2) stepPrepare(b);
   if (step === 3) stepCompose(b);
   if (step === 3) scheduleEstimate();
+  // การ์ดดูคลิปอยู่ในแถบข้าง จึงต้องวาดหลังตารางคลิปเสมอ (ต้องรู้ว่ากรองอยู่ไหม
+  // ลำดับเปลี่ยนไหม) และหายไปเองเมื่อออกจากขั้น 1 พร้อมหยุดวิดีโอที่ค้างเล่นอยู่
+  if (step === 1 && clOpen >= 0) drawClip();
+  else {
+    const p = $('#side-clip');
+    if (!p.hidden){
+      p.querySelectorAll('video').forEach(v => { v.pause(); v.removeAttribute('src'); });
+      p.innerHTML = ''; p.hidden = true;
+    }
+    document.body.classList.remove('wideside');
+    if (step !== 1) clOpen = -1;
+  }
 }
 
 // ── ขั้น 1 · เลือกฟุตเทจ ─────────────────────────────────────────
@@ -777,22 +797,61 @@ const vmShort = m => m === 'blur_pad' ? 'เบลอ' : m === 'pillarbox' ? '�
 
 // ── ดูคลิปทีละตัว · เล่น · หมุน · เลือกโหมดแนวตั้ง ────────────────
 
-function openClip(i){ clOpen = i; drawClip(); $('#clip').showModal(); }
+// เปิดดูคลิปที่ "แถบข้าง" ไม่ใช่กล่องโต้ตอบทับกลางจอ
+//
+// ของเดิมเป็น <dialog> แบบ modal ซึ่งบังตารางคลิปทั้งหมดไว้ข้างหลัง ทั้งที่งาน
+// จริงตรงนี้คือ *ไล่ดูทีละใบแล้วติ๊กเลือก* — ต้องเห็นทั้งใบที่กำลังดูและใบอื่น
+// พร้อมกัน ถึงจะเทียบได้ว่าเอาอันไหนไม่เอาอันไหน  พอย้ายมาอยู่ข้าง ๆ ก็คลิกใบ
+// ถัดไปในตารางได้เลยโดยไม่ต้องปิดก่อน และแถบข้างปักหมุดอยู่แล้วจึงเลื่อนตาม
+function openClip(i){ clOpen = i; render(); }
+
+function closeClip(){
+  const p = $('#side-clip');
+  p.querySelectorAll('video').forEach(v => { v.pause(); v.removeAttribute('src'); });
+  clOpen = -1;
+  render();
+}
 
 function drawClip(){
   const list = clList(), x = list[clOpen];
-  if (!x) return $('#clip').close();
+  const p = $('#side-clip');
+  if (!x){ p.hidden = true; document.body.classList.remove('wideside'); return; }
+  p.hidden = false;
+  document.body.classList.add('wideside');
   const or = clOrient(x), rot = clRot(x);
-  $('#cl-title').textContent = x.name;
-  $('#cl-sub').textContent = `${x.w}×${x.h} · ${x.dur.toFixed(1)} วิ · ${x.codec}`
-    + ` · ${(x.size / 1e6).toFixed(0)} MB · ${or === 'V' ? 'แนวตั้ง' : 'แนวนอน'}`;
-  const b = $('#cl-body'); b.innerHTML = '';
+
+  // ยังเป็นคลิปใบเดิม = ย้ายตัว <video> เดิมไปใช้ต่อ ไม่สร้างใหม่
+  //
+  // การ์ดนี้ถูกวาดใหม่ทุกครั้งที่ render() (ติ๊กเลือกใบไหนก็ตาม ลากสลับลำดับ
+  // กดหมุน) ถ้าสร้าง <video> ใหม่ทุกรอบ วิดีโอจะเด้งกลับไปวินาทีที่ 0 แล้วหยุด
+  // เล่นทุกครั้งที่คนแตะอะไรสักอย่าง — ย้ายตัวเดิมข้ามที่ในหน้าเดียวกันไม่ทำให้
+  // มันโหลดใหม่
+  const keep = p.dataset.clip === x.name ? p.querySelector('.vwrap video') : null;
+  p.innerHTML = '';
+  p.dataset.clip = x.name;
+  const head = el('div', 'ch');
+  const ttl = el('div');
+  ttl.append(el('h3', null, x.name),
+             el('div', 'm', `${x.w}×${x.h} · ${x.dur.toFixed(1)} วิ · ${x.codec}`
+               + ` · ${(x.size / 1e6).toFixed(0)} MB`
+               + ` · ${or === 'V' ? 'แนวตั้ง' : 'แนวนอน'}`));
+  const cls = el('button', 'ghost', '✕');
+  cls.title = 'ปิด (Esc)';
+  cls.onclick = closeClip;
+  head.append(ttl, el('span', 'spacer'), cls);
+  p.append(head);
+
+  const b = el('div', 'cb');
+  p.append(b);
 
   const spin = rot === 'transpose=1' ? ' r90' : rot === 'transpose=2' ? ' r270'
              : rot === 'transpose=1,transpose=1' ? ' r180' : '';
   const w = el('div', 'vwrap' + spin);
-  const v = el('video'); v.controls = true; v.preload = 'metadata'; v.playsInline = true;
-  v.src = `/clip/${x.name}`;
+  let v = keep;
+  if (!v){
+    v = el('video'); v.controls = true; v.preload = 'metadata'; v.playsInline = true;
+    v.src = `/clip/${x.name}`;
+  }
   v.onerror = () => { w.innerHTML = '';
     w.append(el('p', 'note', 'เบราว์เซอร์เล่นไฟล์นี้ไม่ได้ (codec ' + x.codec
       + ') — ลองเปิดด้วย Safari หรือดูจากตัวอย่างที่ ffmpeg ทำให้ข้างล่าง')); };
@@ -804,7 +863,7 @@ function drawClip(){
   CL.rotations.forEach(r => {
     const bt = el('button', null, r.label);
     bt.setAttribute('aria-pressed', rot === r.value);
-    bt.onclick = () => { clSet('rot', x.name, r.value, x.rot); drawClip(); render(); };
+    bt.onclick = () => { clSet('rot', x.name, r.value, x.rot); render(); };
     seg.append(bt);
   });
   s1.append(seg);
@@ -827,7 +886,7 @@ function drawClip(){
       rb.onchange = () => {
         // ตรงกับค่ากลางอยู่แล้ว = ไม่ต้องเขียนลงไฟล์ ปล่อยให้ตามค่ากลางไป
         clSet('vmode', x.name, m.value === CL.vertical_default ? '' : m.value, x.vmode);
-        drawClip(); render();
+        render();
       };
       t.append(rb, document.createTextNode(m.label));
       if (m.value === CL.vertical_default) t.append(el('span', 'sub', '· ค่ากลาง'));
@@ -842,10 +901,33 @@ function drawClip(){
       + 'ตอน render จริง ครั้งแรกรอ ~1 วินาที หลังจากนั้นเก็บ cache ไว้'));
     b.append(s2);
   }
-  $('#cl-pick').checked = clPicked(x);
-  $('#cl-prev').disabled = clOpen <= 0;
-  $('#cl-next').disabled = clOpen >= list.length - 1;
+
+  // แถวล่างติดขอบการ์ดไว้เสมอ — เลื่อนดูตัวเลือกอยู่ก็ยังกดเลือก/ข้ามใบได้
+  const f = el('div', 'cf');
+  const lab = el('label', 'ck');
+  const cb = el('input'); cb.type = 'checkbox'; cb.checked = clPicked(x);
+  cb.onchange = () => { clSet('pick', x.name, cb.checked, x.picked); render(); };
+  lab.append(cb, document.createTextNode('เอาคลิปนี้'));
+  const prev = el('button', 'sm', '←'), next = el('button', 'sm', '→');
+  prev.title = 'ใบก่อนหน้า (←)'; next.title = 'ใบถัดไป (→)';
+  prev.disabled = clOpen <= 0;
+  next.disabled = clOpen >= list.length - 1;
+  prev.onclick = () => { clOpen--; render(); };
+  next.onclick = () => { clOpen++; render(); };
+  f.append(lab, el('span', 'spacer'),
+           el('span', 'note', `${clOpen + 1}/${list.length}`), prev, next);
+  p.append(f);
 }
+
+// ปิดด้วย Esc · เลื่อนดูใบก่อนหน้า/ถัดไปด้วยลูกศรซ้าย-ขวา
+// (ตอนเป็นกล่องโต้ตอบ Esc ทำงานให้ฟรีจาก <dialog> ย้ายมาเป็นการ์ดแล้วต้องทำเอง)
+document.addEventListener('keydown', e => {
+  if (step !== 1 || clOpen < 0 || !keyFree(e)) return;
+  const list = clList();
+  if (e.key === 'Escape'){ e.preventDefault(); return closeClip(); }
+  if (e.key === 'ArrowLeft' && clOpen > 0){ e.preventDefault(); clOpen--; render(); }
+  if (e.key === 'ArrowRight' && clOpen < list.length - 1){ e.preventDefault(); clOpen++; render(); }
+});
 
 function realPreview(name, mode){
   const box = el('div');
@@ -3270,20 +3352,6 @@ $('#piece').addEventListener('click', e => {
 $('#piece').addEventListener('close', () => {
   $('#pc-body').querySelectorAll('video').forEach(v => { v.pause(); v.removeAttribute('src'); });
   pcOpen = null;
-});
-
-$('#cl-close').onclick = () => $('#clip').close();
-$('#cl-prev').onclick = () => { clOpen--; drawClip(); render(); };
-$('#cl-next').onclick = () => { clOpen++; drawClip(); render(); };
-$('#cl-pick').onchange = () => {
-  const x = clList()[clOpen];
-  if (x){ clSet('pick', x.name, $('#cl-pick').checked, x.picked); render(); }
-};
-$('#clip').addEventListener('click', e => { if (e.target === $('#clip')) $('#clip').close(); });
-// วิดีโอที่เล่นค้างไว้ต้องหยุด ไม่งั้นเสียงดังต่อหลังปิดกล่อง
-$('#clip').addEventListener('close', () => {
-  $('#cl-body').querySelectorAll('video').forEach(v => { v.pause(); v.removeAttribute('src'); });
-  clOpen = -1; if (step === 1) render();
 });
 
 $('#stop').onclick = async () => {
