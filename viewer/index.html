@@ -492,6 +492,7 @@ async function load(keepEdits){
     sel = -1;
     tlHist = [];      // ของใหม่มาจากดิสก์แล้ว ประวัติของร่างเก่าย้อนไปก็ไม่ตรงกับอะไร
   }
+  pvDropStaleFile();
   $('#title').textContent = D.values['project.name'] || 'vcut';
   $('#c-proj').textContent = D.project.path || 'ยังไม่มีไฟล์โปรเจกต์';
   $('#c-proj').title = D.project.path || '';   // ตัดท้ายด้วย … ตอนที่อยู่ยาว
@@ -1396,9 +1397,44 @@ function stepCompose(box){
   box.appendChild(c);
 
   if (mode === 'manual') box.appendChild(pickList());
-  if (items.length) box.appendChild(playerCard());
+
+  // ตัวเล่นกับการแก้ไทม์ไลน์ทำงานได้ต่อเมื่อไทม์ไลน์ตรงกับค่าที่ตั้งไว้ข้างบน
+  // — ไม่งั้นสิ่งที่เล่นให้ดูคือหนังคนละเรื่องกับที่กำลังจะได้
+  const lock = composeLock();
+  if (lock){
+    // ตัวเล่นถูกถอดออกจากหน้า แต่ <video> ยังอยู่ใน PV.node ที่ลอยอยู่ข้างนอก
+    // ถ้าไม่สั่งหยุด เสียงจะดังต่อทั้งที่ไม่มีตัวเล่นให้เห็นแล้ว
+    if (PV && PV.playing) pvPause();
+    box.appendChild(lockCard(lock, usesAI, mode));
+  } else if (items.length){
+    box.appendChild(playerCard());
+  }
   if (items.length) box.appendChild(timeline());
   box.appendChild(reviewCard());
+}
+
+// การ์ดแทนที่ "ดูผลงาน" ตอนที่ยังจัดไทม์ไลน์ไม่ตรงกับค่าปัจจุบัน
+//
+// เขียนให้ชัดว่า *ทำไม* ถึงเล่นไม่ได้ และให้กดจัดใหม่ได้จากตรงนี้เลย ไม่ต้อง
+// เลื่อนกลับขึ้นไปหาปุ่มข้างบน — เดิมกรณี "ยังไม่เคยจัด" หน้าเว็บเงียบสนิท
+// ไม่มีทั้งตัวเล่นและคำอธิบาย เหมือนหน้าพัง
+function lockCard(why, usesAI, mode){
+  const label = usesAI ? 'ให้ AI จัดให้' : 'จัดใหม่';   // = composeLabel() แต่รู้อยู่แล้วตรงนี้
+  const c = el('div', 'card');
+  c.append(el('h3', null, 'ดูผลงาน'));
+  c.append(el('p', 'note warnnote', `ยังเล่นและแก้ไม่ได้ — ${why}`));
+  c.append(el('p', 'note', items.length
+    ? `ไทม์ไลน์ข้างล่างคือผลของการจัดรอบก่อน ดูได้แต่แก้ไม่ได้ · กด "${label}" `
+      + 'ให้จัดตามค่าใหม่ก่อน แล้วตัวเล่นกับการแก้ไทม์ไลน์จะกลับมาใช้ได้ทันที'
+    : `กด "${label}" เพื่อหยิบชิ้นจากคลังมาเรียงเป็นไทม์ไลน์ก่อน `
+      + 'จากนั้นถึงจะเล่นดูและแก้ทีละชิ้นได้'));
+  const a = el('div', 'acts');
+  const b = el('button', 'primary runbtn', label);
+  b.dataset.step = 'compose';
+  b.onclick = () => doCompose(mode);
+  a.append(b);
+  c.appendChild(a);
+  return c;
 }
 
 function pickList(){
@@ -1499,8 +1535,21 @@ const pvTotal = cs => cs.reduce((a, ch) => a + pvLen(ch), 0);
 function pvInit(){
   if (!PV) PV = {mode: null, ci: 0, marks: new Set(), rate: 1, node: null,
                  joinFilter: 'talk'};
-  if (!PV.mode) PV.mode = (S && S.out_exists && !S.out_stale) ? 'file' : 'live';
+  if (!PV.mode) PV.mode = pvFileWhy() ? 'live' : 'file';
   return PV;
+}
+
+// เรียกทุกครั้งที่โหลดสถานะใหม่จากเซิร์ฟเวอร์ — ถ้าเพิ่งกดจัดใหม่/บันทึกไทม์ไลน์
+// ไฟล์ที่ต่อไว้จะกลายเป็นของเก่าทันที ต้องเด้งออกจากโหมดนั้นเองโดยไม่ต้องรอให้คน
+// สังเกต ไม่งั้นภาพที่เห็นหลังกด "จัดใหม่" ยังเป็นหนังเรื่องเดิมทุกประการ
+function pvDropStaleFile(){
+  if (!PV || !PV.el || PV.mode !== 'file' || !pvFileWhy()) return;
+  if (PV.playing) pvPause();
+  PV.mode = 'live'; PV.ci = 0;
+  ['va', 'vb', 'vf'].forEach(k => {
+    PV.el[k].pause(); PV.el[k].removeAttribute('src'); PV.el[k].load();
+  });
+  pvSync();          // ป้ายกับแท็บต้องเปลี่ยนตามทันที ไม่ต้องรอ render รอบถัดไป
 }
 
 function pvBuild(){
@@ -1689,6 +1738,10 @@ function pvJump(d){
 function pvToggle(){ PV.playing ? pvPause() : pvPlay(); }
 
 function pvPlay(){
+  if (PV.mode === 'file'){
+    const why = pvFileWhy();
+    if (why){ PV.playing = false; pvSync(); return toast(`เล่นไม่ได้ — ${why}`, true); }
+  }
   PV.playing = true;
   if (PV.mode === 'file'){
     if (!PV.el.vf.src) PV.el.vf.src = '/out';
@@ -1708,18 +1761,44 @@ function pvPause(){
   pvSync();
 }
 
+// ── ไฟล์ที่ต่อแล้วยังใช้ดูได้อยู่ไหม ─────────────────────────────
+//
+// โหมดนี้เล่น final.mp4 ซึ่งเป็นผลของ "สร้างไฟล์" ไม่ใช่ผลของ "จัดใหม่" — พอกด
+// จัดใหม่ ไทม์ไลน์เปลี่ยนทันทีแต่ไฟล์ยังเป็นของรอบก่อน เดิมยังปล่อยให้เล่นต่อโดย
+// ขึ้นแค่คำเตือนตัวเล็ก ๆ ผลคือคนนั่งดูหนังคนละเรื่องกับที่กำลังจะได้ แล้วสรุปว่า
+// "กดจัดใหม่แล้วไม่เห็นเปลี่ยน"  ตอนนี้ไม่ให้เล่นเลยจนกว่าไฟล์จะตรงกับไทม์ไลน์
+//
+// เทียบด้วยเวลาแก้ไฟล์ (out_stale = final.mp4 เก่ากว่า edl.json) ซึ่งครอบคลุมทั้ง
+// การกดจัดใหม่ การให้ AI จัด และการกดบันทึกไทม์ไลน์เอง
+function pvFileWhy(){
+  if (!S || !S.out_exists) return 'ยังไม่มีไฟล์หนัง — ยังไม่เคยกด "สร้างไฟล์"';
+  if (S.out_stale) return 'ไฟล์ที่ต่อไว้เก่ากว่าไทม์ไลน์ตอนนี้';
+  return '';
+}
+
 // เรียกทุกครั้งที่วาดหน้าใหม่ — DOM เดิม แต่ข้อมูลรอบตัวเปลี่ยนได้ตลอด
 function pvSync(){
   const E = PV.el, cs = pvChunks(), ps = pvPieces();
-  [...E.tabs.children].forEach(b =>
-    b.setAttribute('aria-pressed', b.dataset.mode === PV.mode));
+  const why0 = pvFileWhy();
+  [...E.tabs.children].forEach(b => {
+    b.setAttribute('aria-pressed', b.dataset.mode === PV.mode);
+    // ติดธงบนแท็บเลยว่าโหมดนี้ใช้ไม่ได้ตอนนี้ ไม่ต้องกดเข้าไปก่อนถึงจะรู้
+    if (b.dataset.mode === 'file'){
+      b.textContent = 'ไฟล์ที่ต่อแล้ว' + (why0 ? ' ⚠' : '');
+      b.title = why0 || 'เล่นไฟล์ที่ต่อเสร็จแล้ว — ตรงกับไทม์ไลน์ตอนนี้';
+    }
+  });
   E.play.textContent = PV.playing ? '⏸' : '▶';
 
   const fileMode = PV.mode === 'file';
-  E.vf.classList.toggle('hide', !fileMode);
+  const fileWhy = fileMode ? pvFileWhy() : '';
+  // ไฟล์ใช้ไม่ได้ก็ไม่ต้องโผล่ตัววิดีโอมาเลย — ไม่งั้นแถบควบคุมของเบราว์เซอร์
+  // ยังกดเล่นได้อยู่ดี ทั้งที่เราตั้งใจห้าม
+  E.vf.classList.toggle('hide', !fileMode || !!fileWhy);
   E.va.classList.toggle('hide', fileMode || PV.flip);
   E.vb.classList.toggle('hide', fileMode || !PV.flip);
-  if (fileMode && S && S.out_exists && !E.vf.src) E.vf.src = '/out';
+  if (fileMode && !fileWhy && !E.vf.src) E.vf.src = '/out';
+  if (fileWhy && E.vf.src){ E.vf.pause(); E.vf.removeAttribute('src'); E.vf.load(); }
 
   // ขีดบอกขอบเขตของแต่ละชิ้นบนแถบเลื่อน
   E.ticks.innerHTML = '';
@@ -1731,14 +1810,14 @@ function pvSync(){
 
   const ch = cs[PV.ci];
   E.badge.textContent = fileMode
-    ? (S && S.out_exists ? 'ไฟล์ที่ต่อแล้ว' : 'ยังไม่มีไฟล์')
+    ? (fileWhy || 'ไฟล์ที่ต่อแล้ว')
     : ch ? `ชิ้นที่ ${ps.indexOf(ch.p) + 1}/${ps.length} · ${ch.p.name} · `
            + (ch.p.kind === 'TALK' ? 'พูด' : 'วิว')
          : 'ยังไม่มีชิ้นที่ตัดไว้';
 
   E.foot.innerHTML = '';
   E.foot.appendChild(pvFoot(cs, ps));
-  const dead = fileMode ? !(S && S.out_exists) : !cs.length;
+  const dead = fileMode ? !!fileWhy : !cs.length;
   [E.play, E.prev, E.next].forEach(b => b.disabled = dead);
 }
 
@@ -1747,18 +1826,28 @@ function pvFoot(cs, ps){
   const notRendered = ps.filter(pvRaw).length;
 
   if (PV.mode === 'file'){
-    if (!S || !S.out_exists){
-      w.appendChild(el('p', 'note warnnote',
-        'ยังไม่มีไฟล์หนัง — กด "สร้างไฟล์" ข้างบนก่อน '
-        + 'หรือสลับไปโหมด "ไทม์ไลน์สด" เพื่อดูจากชิ้นที่ตัดไว้เลย'));
-    } else {
+    const why = pvFileWhy();
+    if (why){
+      w.appendChild(el('p', 'note warnnote', `เล่นไม่ได้ — ${why}`));
       w.appendChild(el('p', 'note',
-        `${S.out} · ${S.out_size} GB · ต่อเมื่อ ${clockOf(S.out_mtime)}`));
-      if (S.out_stale)
-        w.appendChild(el('p', 'note warnnote',
-          'ไทม์ไลน์ถูกแก้หลังต่อไฟล์ — สิ่งที่ดูอยู่เก่ากว่าที่จัดไว้ '
-          + 'กด "สร้างไฟล์" ใหม่ หรือดูโหมด "ไทม์ไลน์สด" แทน'));
+        'โหมดนี้เล่นไฟล์ที่ "สร้างไฟล์" ผลิตไว้ ซึ่งยังไม่ใช่ไทม์ไลน์ที่จัดล่าสุด '
+        + '— ดูของจริงตอนนี้ได้ที่โหมด "ไทม์ไลน์สด" (ต่อชิ้นให้ดูในเบราว์เซอร์เลย) '
+        + 'หรือกด "สร้างไฟล์" เพื่อผลิตไฟล์ใหม่ให้ตรงกับไทม์ไลน์'));
+      if (S && S.out_exists)
+        w.appendChild(el('p', 'note',
+          `ไฟล์เดิม: ${S.out} · ${S.out_size} GB · ต่อเมื่อ ${clockOf(S.out_mtime)}`));
+      const a = el('div', 'acts');
+      const live = el('button', 'sm primary', 'ดูจากไทม์ไลน์สดแทน');
+      live.onclick = () => pvSetMode('live');
+      const mk2 = el('button', 'sm runbtn', 'สร้างไฟล์');
+      mk2.dataset.step = 'build';
+      mk2.onclick = buildFile;
+      a.append(live, mk2);
+      w.appendChild(a);
+      return w;
     }
+    w.appendChild(el('p', 'note',
+      `${S.out} · ${S.out_size} GB · ต่อเมื่อ ${clockOf(S.out_mtime)} — ตรงกับไทม์ไลน์ตอนนี้`));
     return w;
   }
 
@@ -1829,7 +1918,7 @@ function pvFoot(cs, ps){
 function pvGotoPiece(x, play){
   if (!PV || !PV.node) return false;
   if (PV.mode === 'file'){
-    if (!S || !S.out_exists) return false;
+    if (pvFileWhy()) return false;      // ไฟล์ไม่ตรงกับไทม์ไลน์ ตำแหน่งที่คำนวณได้ก็ผิด
     const on = tlOn(), base = tlBase(), j = on.indexOf(x);
     if (j < 0) return false;
     if (!PV.el.vf.src) PV.el.vf.src = '/out';
@@ -1926,6 +2015,42 @@ let tlDrag = null;
 // แถบจะเด้งกลับไปต้นเรื่องทันที
 let tlScroll = 0;
 
+// ── ไทม์ไลน์ที่เห็นอยู่ ยังตรงกับค่าที่ตั้งไว้ข้างบนไหม ──────────────
+//
+// ตัวเล่นกับการแก้ไทม์ไลน์ทำงานกับ "ผลของการจัดครั้งล่าสุด" เสมอ ถ้าเพิ่งไปแก้
+// วิธีเลือกชิ้นหรือวิธีเรียงไว้แล้วยังไม่ได้กด "จัดใหม่" สิ่งที่เห็นอยู่คือของ
+// รอบก่อน — เล่นดูก็ไม่ใช่หนังที่จะได้ และแก้ขอบชิ้นไปก็จะถูกทับทิ้งทั้งหมด
+// ตอนกดจัดใหม่อยู่ดี เพราะ decide เขียน edl.json ใหม่หมดทั้งไฟล์
+//
+// ดูจาก tier ของค่าที่แก้ ไม่ใช่ชื่อคีย์ — tier 'edl' แปลว่า "แก้แล้วต้อง decide
+// ใหม่" ซึ่งครอบคลุมทั้ง compose.* order.* และ ai.enabled ที่ชื่อไม่ได้ขึ้นต้น
+// เหมือนกันเลย  ส่วนค่าพวก encode.* (tier 'render') แก้แล้วไทม์ไลน์ไม่ขยับ
+// เปลี่ยนแค่หน้าตาไฟล์ที่ได้ จึงไม่ล็อก
+function composeLock(){
+  if (!items.length) return 'ยังไม่เคยจัดไทม์ไลน์';
+  if (!D || !D.fields) return '';
+  const n = Object.keys(edits).filter(k => {
+    const f = D.fields.find(x => x.key === k);
+    return f && f.tier === 'edl';
+  }).length;
+  return n ? `แก้ค่าที่ใช้จัดไทม์ไลน์ไว้ ${n} อย่าง แต่ยังไม่ได้จัดใหม่` : '';
+}
+
+// ด่านเดียวที่ทุกการแก้ไทม์ไลน์ต้องผ่าน — ปุ่มถูกปิดไว้อยู่แล้วแต่แป้นลัดกับ
+// การลากเมาส์เข้ามาทางอื่น จึงต้องกันตรงนี้ด้วย ไม่ใช่กันแค่ที่หน้าตา
+function tlEditable(){
+  const why = composeLock();
+  if (why) toast(`แก้ไทม์ไลน์ไม่ได้ตอนนี้ — ${why}`, true);
+  return !why;
+}
+
+// ปุ่มที่ต้องไปกดชื่อว่าอะไร — โหมดที่ใช้ AI ปุ่มเขียนคนละคำ
+const composeLabel = () => {
+  const f = ((D && D.fields) || []).find(x => x.key === 'compose.mode') || {};
+  return (f.ai_options || []).includes(val('compose.mode') || 'all')
+    ? 'ให้ AI จัดให้' : 'จัดใหม่';
+};
+
 const tlOn = () => items.filter(x => !x.off);
 function tlBase(){ let t = 0; return tlOn().map(x => { const b = t; t += x.dur; return b; }); }
 
@@ -1949,6 +2074,7 @@ function tlSnap(what){
 }
 
 function tlUndo(){
+  if (!tlEditable()) return;
   const s = tlHist.pop();
   if (!s) return toast('ไม่มีอะไรให้ย้อนแล้ว', true);
   items = s.items; sel = s.sel;
@@ -1978,6 +2104,7 @@ function tlCutHere(){
 
 // D — เอาชิ้นตรงหัวอ่านออก (ยังไม่ลบทิ้งจริง แค่ปิดไว้ กด F คืนได้ทันที)
 function tlDropHere(){
+  if (!tlEditable()) return;
   const x = tlAt();
   if (!x) return toast('ไม่มีชิ้นให้ลบ', true);
   if (tlOn().length <= 1) return toast('ต้องเหลืออย่างน้อย 1 ชิ้น', true);
@@ -1991,6 +2118,7 @@ function tlDropHere(){
 }
 
 function tlSplit(x){
+  if (!tlEditable()) return;
   const i = items.indexOf(x);
   if (i < 0 || x.dur < TL_MIN * 2) return toast(`ชิ้นสั้นเกินกว่าจะซอย (ต้องยาวกว่า ${TL_MIN * 2} วิ)`, true);
   tlSnap('ซอยชิ้น');
@@ -2077,12 +2205,13 @@ window.addEventListener('keyup', e => {
 });
 window.addEventListener('blur', () => { tlKeyS = false; });
 
-function tlReset(x){ if (!x.o) return; tlSnap('คืนขอบเดิม');
+function tlReset(x){ if (!x.o || !tlEditable()) return; tlSnap('คืนขอบเดิม');
                      x.start = x.o.start; x.end = x.o.end;
                      x.dur = +(x.end - x.start).toFixed(3); render(); }
 
 // เปิด/ปิดชิ้น (ปุ่ม ✕ กับ ↺ ในรายการและในกล่องรายละเอียด) — ผ่านประวัติเหมือนกัน
-function tlToggle(x){ tlSnap(x.off ? 'ใส่ชิ้นกลับ' : 'ลบชิ้น'); x.off = !x.off; render(); }
+function tlToggle(x){ if (!tlEditable()) return;
+                      tlSnap(x.off ? 'ใส่ชิ้นกลับ' : 'ลบชิ้น'); x.off = !x.off; render(); }
 
 function stripView(){
   const c = el('div', 'card');
@@ -2191,6 +2320,7 @@ function tlHead(on, total){
   w.appendChild(r1);
 
   // ── สามปุ่มที่ทำงานกับชิ้นตรงหัวอ่าน — มีแป้นลัด C · D · F ตรงกัน ──
+  const lock = composeLock();
   const bar = el('div', 'acts'); bar.style.marginTop = '.4rem';
   const cutb = el('button', 'sm', '✂ ตัด (C)');
   cutb.title = 'ซอยชิ้นที่หัวอ่านทาบอยู่เป็นสองท่อน (cut ชนเพิ่ม) — แป้น C';
@@ -2204,12 +2334,17 @@ function tlHead(on, total){
   unb.disabled = !tlHist.length;
   unb.onclick = tlUndo;
   bar.append(cutb, delb, unb, el('span', 'spacer'));
+  if (lock) [cutb, delb, unb].forEach(b => {
+    b.disabled = true;
+    b.title = `แก้ไม่ได้ตอนนี้ — ${lock}`;
+  });
 
   const sv = el('button', 'sm', 'บันทึกไทม์ไลน์');
-  sv.disabled = !tlDirty(); sv.onclick = saveTimeline;
+  sv.disabled = !tlDirty() || !!lock; sv.onclick = saveTimeline;
   // คนละเรื่องกับปุ่ม "ย้อน (F)" — อันนั้นย้อนร่างในเบราว์เซอร์ทีละครั้ง
   // อันนี้ทิ้งร่างทั้งหมดแล้วดึงไฟล์ฉบับที่บันทึกไว้ก่อนหน้าจากดิสก์กลับมา
   const ud = el('button', 'sm', '↺ คืนฉบับที่บันทึกไว้');
+  ud.disabled = !!lock;
   ud.title = 'ทิ้งร่างที่แก้อยู่ แล้วกลับไปใช้ edl.json ฉบับก่อนการบันทึกครั้งล่าสุด';
   ud.onclick = async () => {
     if (tlDirty() && !confirm('ร่างที่แก้ไว้ยังไม่ได้บันทึก — ทิ้งแล้วดึงฉบับก่อนหน้ากลับมาไหม?'))
@@ -2228,6 +2363,10 @@ function tlHead(on, total){
     bar.append(el('span', 'note', 'ซูม'), zo, zi);
   }
   w.appendChild(bar);
+  if (lock)
+    w.appendChild(el('p', 'note warnnote',
+      `🔒 ดูได้อย่างเดียว — ${lock} · กด "${composeLabel()}" ข้างบนก่อน `
+      + 'แล้วจะกลับมาแก้ได้'));
   return w;
 }
 
@@ -2253,6 +2392,8 @@ function tlStart(e, x, kind, side){
   // ⌘ ค้างไว้ = กำลังหาตำแหน่ง ไม่ได้จะแก้ชิ้น — คลิกทับบล็อกได้เลยโดยไม่ต้อง
   // เล็งไม้บรรทัดบาง ๆ ข้างบน และไม่เผลอลากชิ้นเคลื่อนไปด้วย
   if (e.metaKey){ tlSeekAt(e); return; }
+  // ล็อกอยู่ = ดูได้ เลือกดูรายละเอียดได้ แต่ลากขยับไม่ได้
+  if (composeLock()){ sel = items.indexOf(x); render(); return; }
   sel = items.indexOf(x);
   const blk = e.target.closest ? e.target.closest('.tlblk') : null;
   tlDrag = {x, kind, side, x0: e.clientX, s0: x.start, e0: x.end, moved: false, blk};
@@ -2343,6 +2484,7 @@ function tlDetail(x){
     rs.onclick = () => tlReset(x);
     acts.append(rs);
   }
+  if (composeLock()) [...acts.children].forEach(b => { b.disabled = true; });
   w.appendChild(acts);
   return w;
 }
@@ -2434,6 +2576,10 @@ function tlRow(x, i){
               mk('↑', () => move(i, -1)), mk('↓', () => move(i, 1)),
               mk(x.off ? '↺' : '✕', () => tlToggle(x)));
   li.append(acts);
+  if (composeLock()){
+    [...acts.querySelectorAll('button')].forEach(b => { b.disabled = true; });
+    img.draggable = false;
+  }
   // คลิกชิ้น → ให้ตัวเล่นกระโดดไปตรงนั้นก่อน ถ้าโหมดปัจจุบันทำไม่ได้
   // (กำลังดูไฟล์ที่ต่อแล้ว หรือชิ้นนี้ยังไม่ได้ตัด) ค่อยตกไปเป็นภาพตัวอย่างชิ้นเดียว
   li.onclick = e => {
@@ -2449,6 +2595,8 @@ function tlRow(x, i){
   li.addEventListener('drop', e => {
     e.preventDefault(); li.classList.remove('over');
     if (dragFrom >= 0 && dragFrom !== i){
+      if (!tlEditable()) return;
+      tlSnap('ย้ายตำแหน่ง');
       const [m] = items.splice(dragFrom, 1); items.splice(i, 0, m); sel = i; render();
     }
   });
@@ -2462,6 +2610,7 @@ function mk(label, fn){
 }
 function move(i, d){
   const j = i + d; if (j < 0 || j >= items.length) return;
+  if (!tlEditable()) return;
   tlSnap('ย้ายตำแหน่ง');
   [items[i], items[j]] = [items[j], items[i]];
   if (sel === i) sel = j; else if (sel === j) sel = i;
@@ -2670,6 +2819,7 @@ async function doCompose(mode){
 }
 
 async function saveTimeline(){
+  if (!tlEditable()) return;
   // ส่ง end ไปด้วย — เซิร์ฟเวอร์ตรวจจากช่วงจริง ไม่ได้เทียบกับชิ้นเดิมอีกแล้ว
   const keep = items.filter(x => !x.off)
     .map(({name, start, end, dur, kind}) => ({name, start, end, dur, kind}));
@@ -2822,6 +2972,7 @@ function reviewCard(){
 }
 
 function applyOps(list){
+  if (!tlEditable()) return;          // ข้อเสนอของ AI ก็แก้ไทม์ไลน์ ต้องผ่านด่านเดียวกัน
   const ids = [...list.querySelectorAll('input:checked')].map(i => +i.dataset.id);
   const ops = (RV.ops || []).filter(o => ids.includes(o.id));
   if (!ops.length) return toast('ยังไม่ได้ติ๊กข้อไหนเลย', true);
@@ -2831,6 +2982,7 @@ function applyOps(list){
   // ทำงานกับ "ตัวช็อต" ไม่ใช่ตำแหน่ง เพราะพอย้ายข้อแรกแล้วเลขของข้อถัดไปเลื่อนหมด
   const drops = ops.filter(o => o.op === 'drop');
   const moves = ops.filter(o => o.op === 'move').map(o => ({item: items[o.at], to: o.to}));
+  tlSnap('ใส่ข้อเสนอ AI');            // เก็บภาพก่อนแก้ กด F ถอยคืนได้ทั้งชุด
   drops.forEach(o => { items[o.at].off = true; });
   moves.sort((a,b) => a.to - b.to).forEach(({item, to}) => {
     const from = items.indexOf(item); if (from < 0) return;
