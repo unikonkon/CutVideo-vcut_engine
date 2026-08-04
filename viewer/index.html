@@ -324,13 +324,27 @@ dialog .df{padding:.7rem 1rem;border-top:1px solid var(--line);display:flex;gap:
 .tlh-l{left:0} .tlh-r{right:0}
 .tlhead{position:absolute;top:-26px;bottom:0;width:2px;background:var(--warn);z-index:4;
   pointer-events:none}
-.tlclip{position:relative;height:14px;border-radius:3px;background:var(--off);
-  overflow:hidden;margin:.2rem 0 .35rem}
-.tlclip-use{position:absolute;top:0;bottom:0;background:var(--accent);opacity:.75}
-.tlclip-o{position:absolute;top:0;bottom:0;width:2px;background:#fff;opacity:.85}
-/* ตัวเล่นวิดีโอขั้น 3 */
-.pv{background:#000;border-radius:6px;overflow:hidden;position:relative;line-height:0}
-.pv video{display:block;width:100%;max-height:52vh;background:#000;object-fit:contain}
+/* ตัวเล่นวิดีโอขั้น 3
+   กรอบมีขนาดเท่า "หนังที่จะได้" พอดี แล้วจัดกึ่งกลางการ์ด — ไม่มีขอบดำเหลือ
+   --pvr = สัดส่วนกว้าง/สูงของหนัง ตั้งจาก video.width/height ใน pvSync
+
+   สูงเท่าที่ยอมได้ (--pvh) แล้วถอยความกว้างกลับมาจากสัดส่วน · จอแคบกว่านั้นก็ให้
+   max-width หนีบไว้ที่ความกว้างการ์ด แล้ว aspect-ratio ลดความสูงลงตาม
+
+   ที่ต้องผูกขนาดไว้กับกรอบ ไม่ใช่ปล่อยให้ <video> เป็นคนกำหนด: ทุกครั้งที่กด
+   C/D/F หรือคลิกชิ้นอื่น ตัวเล่นต้องถอด src แล้วใส่ใหม่ ระหว่างที่ยังไม่รู้ขนาด
+   สื่อ ตัววิดีโอไม่มีขนาดของตัวเอง กรอบจะแฟบแล้วดันทั้งหน้าเด้ง — และคลิป
+   แนวตั้งกับแนวนอนก็เคยทำให้กรอบสูงไม่เท่ากัน ทั้งที่หนังจริงสัดส่วนเดียวกันหมด */
+.pv{--pvh:52vh;
+  aspect-ratio:var(--pvr,1.7778);
+  width:calc(var(--pvh) * var(--pvr,1.7778));max-width:100%;max-height:var(--pvh);
+  margin-inline:auto;
+  background:#000;border-radius:6px;overflow:hidden;position:relative;line-height:0}
+/* เต็มจอก็ใช้กติกาเดียวกัน แค่เปลี่ยนเพดานความสูงเป็นทั้งจอ — ไม่งั้นเพดาน 52vh
+   ตามไปด้วย กดเต็มจอแล้วได้หนังสูงครึ่งจอลอยอยู่กลางพื้นดำ */
+.pv:fullscreen{--pvh:100vh;max-width:100vw;margin:auto}
+.pv video{position:absolute;inset:0;display:block;width:100%;height:100%;
+  background:#000;object-fit:contain}
 .pv video.hide{display:none}
 .pvbadge{position:absolute;left:.5rem;top:.5rem;background:rgba(0,0,0,.62);color:#fff;
   font-size:11.5px;line-height:1.5;padding:.1rem .45rem;border-radius:4px;pointer-events:none}
@@ -1663,7 +1677,7 @@ function pvInit(){
 function pvDropStaleFile(){
   if (!PV || !PV.el || PV.mode !== 'file' || !pvFileWhy()) return;
   if (PV.playing) pvPause();
-  PV.mode = 'live'; PV.ci = 0;
+  PV.mode = 'live'; PV.ci = 0; PV.cp = null; PV.cfrom = 0;
   ['va', 'vb', 'vf'].forEach(k => {
     PV.el[k].pause(); PV.el[k].removeAttribute('src'); PV.el[k].load();
   });
@@ -1997,6 +2011,10 @@ function pvFileWhy(){
 // เรียกทุกครั้งที่วาดหน้าใหม่ — DOM เดิม แต่ข้อมูลรอบตัวเปลี่ยนได้ตลอด
 function pvSync(){
   const E = PV.el, cs = pvChunks(), ps = pvPieces();
+  // สัดส่วนของกรอบตามขนาดหนังที่ตั้งไว้ (ไม่ใช่ขนาดของคลิปที่กำลังเล่น) — คลิป
+  // แนวตั้งจะถูกใส่กรอบให้เหมือนตอน render จริง แทนที่จะดันกรอบให้สูงขึ้นเอง
+  const vw = +val('video.width') || 16, vh = +val('video.height') || 9;
+  E.stage.style.setProperty('--pvr', (vw / vh).toFixed(4));
   const why0 = pvFileWhy();
   [...E.tabs.children].forEach(b => {
     b.setAttribute('aria-pressed', b.dataset.mode === PV.mode);
@@ -2141,20 +2159,20 @@ function pvFoot(cs, ps){
   w.appendChild(pick);
 
   if (pvStreaming()){
-    if (notRendered){
-      w.appendChild(el('p', 'note warnnote',
-        `โหมดนี้ต่อจากไฟล์ที่ตัดไว้เท่านั้น แต่มี ${notRendered} ชิ้นที่ยังไม่มีไฟล์ `
-        + '(เพิ่งแก้ขอบหรือเพิ่งซอย) — กด "สร้างไฟล์" ให้ตัดครบก่อน '
-        + 'หรือกลับไปโหมด "ต่อชิ้นในเบราว์เซอร์" ที่เล่นจากไฟล์ต้นฉบับแทนได้'));
-    } else {
-      w.appendChild(el('p', 'note',
-        'เซิร์ฟเวอร์ต่อชิ้นด้วย ffmpeg แล้วส่งมาเป็นสายเดียว — ไม่มีการสลับไฟล์ '
-        + 'รอยต่อจึงเนียนสนิทเท่าไฟล์จริง และไม่เขียนไฟล์ลงดิสก์เลย'));
-      w.appendChild(el('p', 'note',
-        'แลกกับการเลื่อนดู: สายสตรีมกระโดดกลางชิ้นไม่ได้ '
-        + 'เลื่อนไปตรงไหนจะไปเริ่มที่ต้นชิ้นที่ใกล้ที่สุด (ต่อสายใหม่ ~0.4 วิ) · '
-        + 'เปลี่ยนลำดับแล้วกดเล่นใหม่ได้เลย ไม่ต้องบันทึกก่อน'));
-    }
+    // สองบรรทัดเสมอ ไม่ว่าจะเล่นได้หรือไม่ได้ — เดิมสลับระหว่าง "เตือน 1 บรรทัด"
+    // กับ "อธิบาย 2 บรรทัด" ซอยชิ้นทีนึงการ์ดจึงหดแล้วดันไทม์ไลน์ขยับ
+    w.appendChild(el('p', 'note',
+      'เซิร์ฟเวอร์ต่อชิ้นด้วย ffmpeg แล้วส่งมาเป็นสายเดียว — ไม่มีการสลับไฟล์ '
+      + 'รอยต่อจึงเนียนสนิทเท่าไฟล์จริง และไม่เขียนไฟล์ลงดิสก์เลย'));
+    w.appendChild(notRendered
+      ? el('p', 'note warnnote',
+          `เล่นไม่ได้ตอนนี้ — โหมดนี้ต่อจากไฟล์ที่ตัดไว้เท่านั้น แต่มี ${notRendered} `
+          + 'ชิ้นที่ยังไม่มีไฟล์ (เพิ่งแก้ขอบหรือเพิ่งซอย) · กด "สร้างไฟล์" ให้ตัดครบก่อน '
+          + 'หรือกลับไปโหมด "ต่อชิ้นในเบราว์เซอร์" ที่เล่นจากไฟล์ต้นฉบับแทนได้')
+      : el('p', 'note',
+          'แลกกับการเลื่อนดู: สายสตรีมกระโดดกลางชิ้นไม่ได้ '
+          + 'เลื่อนไปตรงไหนจะไปเริ่มที่ต้นชิ้นที่ใกล้ที่สุด (ต่อสายใหม่ ~0.4 วิ) · '
+          + 'เปลี่ยนลำดับแล้วกดเล่นใหม่ได้เลย ไม่ต้องบันทึกก่อน'));
     return w;
   }
 
@@ -2162,13 +2180,14 @@ function pvFoot(cs, ps){
     'เบราว์เซอร์ต่อชิ้นเอง — เห็นทันทีโดยไม่ต้องรออะไร แลกกับรอยต่อที่สะดุดจาง ๆ '
     + 'เพราะสลับไฟล์ทีนึงมีช่องว่างเสมอ (วัดจริงราว 70 ms) '
     + 'อยากได้รอยต่อเนียนสนิทให้กด "ต่อเนื่องจริง"'));
+  // ไม่มีกล่องเตือน "N ชิ้นยังไม่มีไฟล์ที่ตัดไว้" ตรงนี้แล้ว — มันโผล่มาทันทีที่ซอย
+  // หรือลากขอบชิ้นแรก แล้วดันไทม์ไลน์ที่กำลังเล็งอยู่ให้เลื่อนลงทั้งแถบ  เรื่องเดียว
+  // กันนี้บอกไว้แล้วสองที่ที่ไม่ดันหน้า: บล็อกที่ขอบถูกแก้ติดสี .cut ในราง และ
+  // บรรทัด "▌ แก้ขอบไปแล้ว N ชิ้น" ที่ท้ายการ์ดไทม์ไลน์ ซึ่งอยู่ *ใต้* รางอยู่แล้ว
   w.appendChild(el('p', 'note', 'ชิ้นที่กด ✕ ปิดไว้จะถูกข้ามอัตโนมัติ · '
-    + 'คลิกชิ้นในไทม์ไลน์ข้างล่างเพื่อกระโดดไปเล่นตรงนั้น'));
-  if (notRendered)
-    w.appendChild(el('p', 'note warnnote',
-      `${notRendered} ชิ้นยังไม่มีไฟล์ที่ตัดไว้ (เพิ่งแก้ขอบหรือเพิ่งซอย) — `
-      + 'เล่นจากไฟล์ต้นฉบับให้ก่อน ตำแหน่งถูกต้องแต่ภาพยังไม่ผ่านฟิลเตอร์ '
-      + 'และเสียงยังไม่ปรับระดับ · กด "สร้างไฟล์" เพื่อให้เป็นของจริง'));
+    + 'คลิกชิ้นในไทม์ไลน์ข้างล่างเพื่อกระโดดไปเล่นตรงนั้น · '
+    + 'ชิ้นที่เพิ่งซอยหรือเพิ่งลากขอบจะเล่นจากไฟล์ต้นฉบับให้ก่อน '
+    + '(ตำแหน่งถูกต้อง แต่ภาพยังไม่ผ่านฟิลเตอร์และเสียงยังไม่ปรับระดับ)'));
   return w;
 }
 
@@ -2223,9 +2242,10 @@ function pvResync(){
   // isConnected เพราะตอนไทม์ไลน์ถูกล็อก (composeLock) ตัวเล่นถูกถอดออกจากหน้าไป
   // แล้ว PV.node ยังลอยอยู่ข้างนอก — ไปสั่งโหลดชิ้นใส่มันตอนนั้นไม่มีประโยชน์
   if (!PV || !PV.node || !PV.node.isConnected || step !== 3) return;
-  // โหมดไฟล์ไม่มีอะไรให้ตามไทม์ไลน์ — pvFileWhy รู้แล้วว่าร่างไม่ตรงกับไฟล์
-  // และ pvSync เป็นคนหยุด+ถอดไฟล์ออกให้เอง
-  if (PV.mode === 'file'){ pvSync(); return; }
+  // แก้ไทม์ไลน์ทีเดียวไฟล์ที่ต่อไว้ก็เป็นของเก่าทันที — เด้งออกจากโหมดนั้นไปเลย
+  // แทนที่จะค้างอยู่แล้วให้การ์ดงอกกล่องเตือนสามบรรทัดพร้อมปุ่มขึ้นมาดันไทม์ไลน์
+  pvDropStaleFile();
+  if (PV.mode === 'file'){ pvSync(); return; }   // ไฟล์ยังตรงอยู่ ไม่มีอะไรต้องตาม
 
   const cs = pvChunks();
   if (!cs.length){ pvPause(); pvClearAll(); PV.ci = 0; PV.stok = null; pvSync(); return; }
@@ -2444,8 +2464,9 @@ function tlUndo(){
   const s = tlHist.pop();
   if (!s) return toast('ไม่มีอะไรให้ย้อนแล้ว', true);
   items = s.items; sel = s.sel;
+  // ไม่เด้งข้อความบอกว่าย้อนอะไรไป — ไทม์ไลน์เปลี่ยนให้เห็นอยู่แล้ว และปุ่ม ↶ บอก
+  // ไว้ในคำบรรยายว่าครั้งถัดไปจะย้อนอะไร  ท่านี้กดรัว ๆ ข้อความจึงบังจอตลอดเวลา
   tlChanged();
-  toast(`ย้อน "${s.what}" แล้ว` + (tlHist.length ? ` · ย้อนได้อีก ${tlHist.length}` : ''));
 }
 
 // ชิ้นที่หัวอ่านทาบอยู่ตอนนี้ — เป้าหมายของทั้งปุ่มตัดและปุ่มลบ
@@ -2479,8 +2500,9 @@ function tlDropHere(){
   sel = items.indexOf(x);
   // ไม่ขยับหัวอ่าน — ชิ้นถัดไปเลื่อนมาแทนที่ตรงเวลาเดิมพอดี เคาะ D รัว ๆ เพื่อ
   // ไล่ตัดของที่ไม่เอาออกทีละชิ้นได้เลยโดยไม่ต้องเล็งใหม่ทุกครั้ง
+  // (ไม่เด้งข้อความยืนยัน — บล็อกหายไปจากรางให้เห็นอยู่แล้ว ส่วนวิธีย้อนเขียนไว้
+  //  ที่ปุ่ม ↶ กับบรรทัดแป้นลัดแล้ว ไม่ต้องบอกซ้ำทุกครั้งที่กด)
   tlChanged();
-  toast(`เอา ${x.name} ออกแล้ว — กด F ย้อนได้`);
 }
 
 function tlSplit(x){
@@ -2575,6 +2597,13 @@ function tlReset(x){ if (!x.o || !tlEditable()) return; tlSnap('คืนขอ�
                      x.start = x.o.start; x.end = x.o.end;
                      x.dur = +(x.end - x.start).toFixed(3); tlChanged(); }
 
+// R — คืนขอบของชิ้นตรงหัวอ่าน (เป้าหมายเดียวกับ C กับ D)
+function tlResetHere(){
+  const x = tlAt();
+  if (!x || !x.o || !tlCut(x)) return;
+  tlReset(x);
+}
+
 // เปิด/ปิดชิ้น (ปุ่ม ✕ กับ ↺ ในรายการและในกล่องรายละเอียด) — ผ่านประวัติเหมือนกัน
 function tlToggle(x){ if (!tlEditable()) return;
                       tlSnap(x.off ? 'ใส่ชิ้นกลับ' : 'ลบชิ้น'); x.off = !x.off; tlChanged(); }
@@ -2658,15 +2687,19 @@ function stripView(){
     + '⌘ + คลิกตรงไหน = ย้ายหัวอ่านไปตรงนั้นทันที (คลิกทับตัวบล็อกได้เลย '
     + 'ไม่ต้องเล็งไม้บรรทัด)'));
   c.append(el('p', 'note', 'แป้นลัด — Space เล่น/หยุด · C ตัดตรงหัวอ่าน · '
-    + 'D ลบชิ้นตรงหัวอ่าน · F ย้อนการแก้ครั้งล่าสุด (ย้อนได้ทั้งตัด ลบ ย้าย '
+    + 'D ลบชิ้นตรงหัวอ่าน · R คืนขอบเดิมของชิ้นตรงหัวอ่าน · '
+    + 'F ย้อนการแก้ครั้งล่าสุด (ย้อนได้ทั้งตัด ลบ ย้าย '
     + 'และย่อ-ขยาย ทีละครั้ง)'));
   if (cut)
     c.append(el('p', 'note warnnote',
       `▌ แก้ขอบไปแล้ว ${cut} ชิ้น — กด "สร้างไฟล์" จะตัดใหม่ ${cut} ชิ้น `
       + `(~${mmss(Math.round(cut * 2.3))})`));
 
-  const x = items[sel];
-  if (x && !x.off) c.appendChild(tlDetail(x));
+  // ไม่มีกล่อง "เลือกอยู่ · …" ท้ายการ์ดแล้ว — มันโผล่มา หายไป และเปลี่ยนความสูงทุก
+  // ครั้งที่ sel เปลี่ยน ซึ่งเกิดกับทุกท่าที่ใช้บ่อยที่สุด (คลิกบล็อก · C · D · F)
+  // ทั้งหน้าเลยกระตุกตลอดเวลาที่กำลังไล่ตัด  ของที่เคยอยู่ในกล่องนั้นย้ายไปหมดแล้ว:
+  // ปุ่มซอย/เอาออกคือ C กับ D อยู่แล้ว · คืนขอบเดิมย้ายไปแถบปุ่มบนสุด (R) ·
+  // ช่วงที่ใช้กับข้อความถอดเสียงอ่านได้จาก tooltip ของบล็อกโดยไม่ต้องดันหน้า
   return c;
 }
 
@@ -2699,8 +2732,19 @@ function tlHead(on, total){
                             : 'ยังไม่มีอะไรให้ย้อน — แป้น F';
   unb.disabled = !tlHist.length;
   unb.onclick = tlUndo;
-  bar.append(cutb, delb, unb, el('span', 'spacer'));
-  if (lock) [cutb, delb, unb].forEach(b => {
+  // ย้ายมาจากกล่อง "เลือกอยู่ · …" ที่ถอดออกไปแล้ว — อยู่ตรงนี้ตลอดเวลาเหมือน C/D/F
+  // จึงไม่ดันหน้าเวลาโผล่/หาย และทำกับชิ้นตรงหัวอ่านเหมือนกันทั้งสามปุ่ม
+  const at = tlAt();
+  const rsb = el('button', 'sm', '↺ คืนขอบเดิม (R)');
+  // tlCut เป็นจริงตอน x.o หายไปด้วย จึงต้องเช็ค at.o ก่อนอ่านค่าในนั้นเสมอ
+  const canReset = !!(at && at.o && tlCut(at));
+  rsb.title = canReset
+    ? `คืนขอบของ ${at.name} กลับเป็น ${at.o.start.toFixed(2)}–${at.o.end.toFixed(2)} วิ — แป้น R`
+    : 'ชิ้นตรงหัวอ่านยังไม่ได้ถูกลากขอบ — แป้น R';
+  rsb.disabled = !canReset;
+  rsb.onclick = tlResetHere;
+  bar.append(cutb, delb, unb, rsb, el('span', 'spacer'));
+  if (lock) [cutb, delb, unb, rsb].forEach(b => {
     b.disabled = true;
     b.title = `แก้ไม่ได้ตอนนี้ — ${lock}`;
   });
@@ -2819,45 +2863,7 @@ function tlStart(e, x, kind, side){
   window.addEventListener('pointerup', up);
 }
 
-function tlDetail(x){
-  const w = el('div', 'sect'); w.style.marginTop = '.7rem';
-  w.append(el('h4', null, `เลือกอยู่ · ${x.name} · ${x.kind === 'TALK' ? 'พูด' : 'วิว'}`));
-
-  const cd = x.clip_dur || x.end;
-  const bar = el('div', 'tlclip');
-  const use = el('div', 'tlclip-use');
-  use.style.left = (x.start / cd * 100) + '%';
-  use.style.width = ((x.end - x.start) / cd * 100) + '%';
-  bar.appendChild(use);
-  if (x.o){
-    [['tlclip-o', x.o.start], ['tlclip-o', x.o.end]].forEach(([cls, t]) => {
-      const m = el('i', cls); m.style.left = (t / cd * 100) + '%'; bar.appendChild(m);
-    });
-  }
-  w.appendChild(bar);
-  w.append(el('p', 'note',
-    `ใช้ ${x.start.toFixed(2)}–${x.end.toFixed(2)} วิ (ยาว ${x.dur.toFixed(2)}) `
-    + `จากคลิปต้นฉบับ ${cd.toFixed(2)} วิ`
-    + (x.o && tlCut(x) ? ` · เดิม ${x.o.start.toFixed(2)}–${x.o.end.toFixed(2)}` : '')));
-  if (x.text) w.append(el('p', 'note', x.text));
-
-  const acts = el('div', 'acts');
-  const sp = el('button', 'sm', '✂ ซอยชิ้นนี้');
-  sp.onclick = () => tlSplit(x);
-  const rm = el('button', 'sm', x.off ? '↺ ใส่กลับ' : '✕ เอาออก');
-  rm.onclick = () => tlToggle(x);
-  acts.append(sp, rm);
-  if (tlCut(x)){
-    const rs = el('button', 'sm', '↺ คืนขอบเดิม');
-    rs.onclick = () => tlReset(x);
-    acts.append(rs);
-  }
-  if (composeLock()) [...acts.children].forEach(b => { b.disabled = true; });
-  w.appendChild(acts);
-  return w;
-}
-
-// ── แป้นลัดของไทม์ไลน์: C ตัด · D ลบ · F ย้อน ────────────────────
+// ── แป้นลัดของไทม์ไลน์: C ตัด · D ลบ · R คืนขอบ · F ย้อน ─────────
 //
 // อ่านจาก e.code ไม่ใช่ e.key — e.key คือ *ตัวอักษรที่พิมพ์ออกมา* ซึ่งเปลี่ยน
 // ตามผังแป้นพิมพ์ ถ้าสลับเป็นภาษาไทยอยู่ ปุ่ม C จะให้ค่า "แ" ไม่ใช่ "c" แล้ว
@@ -2867,6 +2873,7 @@ const TL_KEYS = {
   KeyC: ['c', tlCutHere],
   KeyD: ['d', tlDropHere],
   KeyF: ['f', tlUndo],
+  KeyR: ['r', tlResetHere],
 };
 
 function tlKey(e){
