@@ -1917,6 +1917,9 @@ const clockOf = ts => { if (!ts) return '—';
 let tlView = 'list';
 let tlZoom = 14;                      // พิกเซลต่อวินาที
 const TL_MIN = 0.30;                  // ชิ้นสั้นสุด — ตรงกับ MIN_PIECE ฝั่งเซิร์ฟเวอร์
+// ⌘+ล้อ เลื่อนเร็วกว่าที่ล้อส่งมา 2.5 เท่า — ที่ซูมปกติหนัง 24 นาทีกว้างสองหมื่น
+// พิกเซล เลื่อน 1:1 ต้องหมุนล้อเป็นร้อยครั้งกว่าจะถึงท้ายเรื่อง
+const TL_WHEEL = 2.5;
 let tlDrag = null;
 // ตำแหน่งที่เลื่อนแถบไว้ — render() ล้าง #body ทั้งก้อนทุกครั้ง .tlwrap จึงเกิดใหม่
 // เสมอและกลับไปอยู่ที่ 0 ถ้าไม่จำไว้เอง คนเลื่อนไปดูนาทีที่ 12 แล้วคลิกชิ้นเดียว
@@ -2054,6 +2057,10 @@ function stripView(){
   const head = el('div', 'tlhead'); head.id = 'tl-head';
   head.style.left = ((PV && PV.gt ? PV.gt : 0) * tlZoom) + 'px';
   track.appendChild(head);
+  // คลิกที่ว่างในราง (หรือโดนตัวหัวอ่านเอง) = ย้ายหัวอ่านมาตรงนั้น เหมือนไม้บรรทัด
+  track.addEventListener('pointerdown', e => {
+    if (e.target === track || e.target === head) tlSeekAt(e);
+  });
   inner.appendChild(track);
   scroll.appendChild(inner);
   scroll.addEventListener('scroll', () => { tlScroll = scroll.scrollLeft; });
@@ -2061,9 +2068,33 @@ function stripView(){
   requestAnimationFrame(() => { scroll.scrollLeft = tlScroll; });
   c.appendChild(scroll);
 
+  // ⌘ + ล้อเมาส์ = เลื่อนไทม์ไลน์ซ้าย-ขวา
+  //
+  // ผูกไว้ที่ทั้งการ์ด ไม่ใช่แค่ตัวแถบ — ชี้อยู่ตรงปุ่มหรือคำอธิบายก็เลื่อนได้
+  // ไม่ต้องเล็งให้โดนรางสูง 44px ก่อน
+  //
+  // passive:false เพราะต้อง preventDefault จริง ๆ: ค่าเริ่มต้นของ ⌘+ล้อ บน Chrome
+  // คือย่อ-ขยายทั้งหน้า ถ้าไม่ห้ามไว้ ตัวหนังสือทั้งหน้าจะเล็กลงทุกครั้งที่เลื่อน
+  // (ไม่แตะ Ctrl+ล้อ — บน macOS นั่นคือท่าซูมของระบบที่คนสายตาไม่ดีใช้จริง)
+  c.addEventListener('wheel', e => {
+    if (!e.metaKey) return;              // ไม่กด ⌘ ก็ปล่อยให้หน้าเลื่อนตามปกติ
+    const w = c.querySelector('.tlwrap');
+    if (!w) return;
+    e.preventDefault();
+    // ล้อบางตัวส่งมาเป็น "จำนวนบรรทัด" หรือ "จำนวนหน้า" ไม่ใช่พิกเซล
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? w.clientWidth : 1;
+    // เอาแกนที่ขยับแรงกว่า — เมาส์ล้อเดียวมีแต่ deltaY ส่วนแทร็กแพดมีทั้งสองแกน
+    const d = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+    w.scrollLeft += d * unit * TL_WHEEL;
+    tlScroll = w.scrollLeft;
+  }, {passive: false});
+
   c.append(el('p', 'note', 'คลิกบล็อก = เล่นชิ้นนั้นใน "ดูผลงาน" ทันที · '
     + 'ลากตัวบล็อก = ย้ายตำแหน่ง · ลากขอบซ้าย/ขวา = ย่อ-ขยาย · '
     + 'คลิกไม้บรรทัด = ย้ายหัวอ่าน'));
+  c.append(el('p', 'note', '⌘ + ล้อเมาส์ = เลื่อนไทม์ไลน์ซ้าย-ขวา · '
+    + '⌘ + คลิกตรงไหน = ย้ายหัวอ่านไปตรงนั้นทันที (คลิกทับตัวบล็อกได้เลย '
+    + 'ไม่ต้องเล็งไม้บรรทัด)'));
   c.append(el('p', 'note', 'แป้นลัด — Space เล่น/หยุด · C ตัดตรงหัวอ่าน · '
     + 'D ลบชิ้นตรงหัวอ่าน · F ย้อนการแก้ครั้งล่าสุด (ย้อนได้ทั้งตัด ลบ ย้าย '
     + 'และย่อ-ขยาย ทีละครั้ง)'));
@@ -2150,6 +2181,9 @@ function tlBlock(x, j, at){
 
 function tlStart(e, x, kind, side){
   e.preventDefault();
+  // ⌘ ค้างไว้ = กำลังหาตำแหน่ง ไม่ได้จะแก้ชิ้น — คลิกทับบล็อกได้เลยโดยไม่ต้อง
+  // เล็งไม้บรรทัดบาง ๆ ข้างบน และไม่เผลอลากชิ้นเคลื่อนไปด้วย
+  if (e.metaKey){ tlSeekAt(e); return; }
   sel = items.indexOf(x);
   const blk = e.target.closest ? e.target.closest('.tlblk') : null;
   tlDrag = {x, kind, side, x0: e.clientX, s0: x.start, e0: x.end, moved: false, blk};
@@ -2267,6 +2301,19 @@ function tlKey(e){
   hit[1]();
 }
 document.addEventListener('keydown', tlKey);
+
+// ย้ายหัวอ่านไปที่ "ตำแหน่งที่คลิก" — แปลงพิกัดจอเป็นวินาทีบนไทม์ไลน์
+//
+// วัดจาก .tlinner ไม่ใช่จากตัวที่ถูกคลิก เพราะทั้งไม้บรรทัด ราง และบล็อกทุกอัน
+// อยู่บนระบบพิกัดเดียวกันที่เริ่มนับจากขอบซ้ายของ .tlinner — คลิกโดนอะไรก็ได้
+// เวลาที่คำนวณได้ก็ยังตรงกัน
+function tlSeekAt(e){
+  const inner = e.target.closest && e.target.closest('.tlinner');
+  if (!inner) return false;
+  const r = inner.getBoundingClientRect();
+  tlSeek(Math.max(0, (e.clientX - r.left) / tlZoom));
+  return true;
+}
 
 // ย้ายหัวอ่านไปที่วินาทีที่ระบุ แล้วสั่งตัวเล่นตามไปด้วย
 function tlSeek(t){
