@@ -509,6 +509,9 @@ async function load(keepEdits){
   $('#c-proj').textContent = D.project.path || 'ยังไม่มีไฟล์โปรเจกต์';
   $('#c-proj').title = D.project.path || '';   // ตัดท้ายด้วย … ตอนที่อยู่ยาว
   renderSteps(); render();
+  // items[] เพิ่งถูกแทนด้วยของจากดิสก์ — ตัวเล่นที่ค้างชิ้นเก่าอยู่ต้องตามให้ทัน
+  // เหมือนตอนแก้เอง (บันทึกไทม์ไลน์แล้ว seg ของชิ้นที่ขยับขอบจะเปลี่ยนไปด้วย)
+  pvResync();
   loadReview();
 }
 
@@ -1648,7 +1651,7 @@ const pvStreamMissing = () => pvPieces().filter(p => pvRaw(p)).length;
 
 function pvInit(){
   if (!PV) PV = {mode: null, ci: 0, marks: new Set(), rate: 1, node: null,
-                 joinFilter: 'talk', live: 'chunks', sfrom: 0};
+                 joinFilter: 'talk', live: 'chunks', sfrom: 0, cp: null, cfrom: 0};
   if (!PV.live) PV.live = 'chunks';
   if (!PV.mode) PV.mode = pvFileWhy() ? 'live' : 'file';
   return PV;
@@ -1764,7 +1767,10 @@ const pvIdle = () => (PV.flip ? PV.el.va : PV.el.vb);
 // เลื่อนดู = สั่งสตรีมใหม่จากชิ้นนั้น ไม่ใช่ seek ในสายเดิม เพราะสายที่ส่งแบบ
 // chunked ไม่มีความยาวรวมให้เบราว์เซอร์กระโดดไปข้างหน้าได้ · ต่อแบบ -c copy
 // เร็วกว่าเวลาจริง 54 เท่า การเริ่มสายใหม่จึงใช้เวลาราววินาทีเดียว
-const pvSegKey = () => pvPieces().map(p => p.seg || '?').join(',');
+// ขอบชิ้นต้องอยู่ในกุญแจด้วย ไม่ใช่แค่ชื่อไฟล์ชิ้น — ลากขอบแล้วชื่อไฟล์เดิมยังอยู่
+// ครบทุกตัว ถ้าเทียบแค่ชื่อจะสรุปว่า "ลำดับเดิม" แล้วใช้สายเก่าที่ขอบยังไม่ถูกแก้ต่อ
+const pvSegKey = () =>
+  pvPieces().map(p => `${p.seg || '?'}@${p.start.toFixed(3)}-${p.end.toFixed(3)}`).join(',');
 
 async function pvStreamToken(){
   const key = pvSegKey();
@@ -1819,6 +1825,7 @@ function pvClearAll(){
   ['va', 'vb', 'vf', 'vs'].forEach(k => {
     PV.el[k].removeAttribute('src'); PV.el[k].load();
   });
+  PV.cp = null; PV.cfrom = 0;      // ไม่มีชิ้นไหนค้างอยู่ในตัวเล่นแล้ว
 }
 
 // สลับระหว่าง "ต่อชิ้นในเบราว์เซอร์" กับ "ต่อเนื่องจริง"
@@ -1835,6 +1842,9 @@ function pvLoadChunk(ci, off, autoplay){
   if (!cs.length) return;
   PV.ci = Math.max(0, Math.min(cs.length - 1, ci));
   const ch = cs[PV.ci];
+  // จำ *ตัวชิ้น* ที่โหลดเข้าไปจริง ไม่ใช่แค่เลขดัชนี — pvResync ใช้ตามหาว่าสิ่งที่
+  // ดังอยู่ในลำโพงย้ายไปอยู่ตรงไหนของไทม์ไลน์ที่เพิ่งถูกแก้ (หรือหายไปแล้ว)
+  PV.cp = ch.p; PV.cfrom = ch.from;
   const v = pvActive();
   const want = pvSrc(ch.p);
   if (!v.src.endsWith(want)) v.src = want;
@@ -1844,15 +1854,21 @@ function pvLoadChunk(ci, off, autoplay){
   if (v.readyState >= 1) go(); else v.addEventListener('loadedmetadata', go, {once: true});
   [pvActive(), pvIdle()].forEach((x, i) => x.classList.toggle('hide', i === 1));
   PV.el.vf.classList.add('hide');
-  // เตรียมท่อนถัดไปไว้ล่วงหน้าในตัวที่ไม่ได้ใช้ — ลดช่องว่างตอนสลับให้เหลือน้อยสุด
-  const nx = cs[PV.ci + 1];
-  if (nx){
-    const w = pvIdle(), s = pvSrc(nx.p);
-    if (!w.src.endsWith(s)) w.src = s;
-    const seek = () => { try { w.currentTime = nx.from; } catch (_){} };
-    if (w.readyState >= 1) seek(); else w.addEventListener('loadedmetadata', seek, {once: true});
-  }
+  pvPreloadNext();
   pvSync();
+}
+
+// เตรียมท่อนถัดไปไว้ล่วงหน้าในตัวที่ไม่ได้ใช้ — ลดช่องว่างตอนสลับให้เหลือน้อยสุด
+//
+// ต้องเรียกใหม่ทุกครั้งที่ไทม์ไลน์เปลี่ยนด้วย ไม่ใช่แค่ตอนขยับท่อน — ลบชิ้นทีนึง
+// "ท่อนถัดไป" ก็กลายเป็นคนละชิ้นทันที ถ้าไม่อุ่นใหม่ pvAdvance จะสลับไปเจอของเก่า
+function pvPreloadNext(){
+  const nx = pvChunks()[PV.ci + 1];
+  if (!nx) return;
+  const w = pvIdle(), s = pvSrc(nx.p);
+  if (!w.src.endsWith(s)) w.src = s;
+  const seek = () => { try { w.currentTime = nx.from; } catch (_){} };
+  if (w.readyState >= 1) seek(); else w.addEventListener('loadedmetadata', seek, {once: true});
 }
 
 function pvAdvance(){
@@ -1861,17 +1877,12 @@ function pvAdvance(){
   PV.flip = !PV.flip;                      // ตัวที่ preload ไว้กลายเป็นตัวหลัก
   PV.ci += 1;
   const ch = cs[PV.ci], v = pvActive();
+  PV.cp = ch.p; PV.cfrom = ch.from;
   v.playbackRate = PV.rate;
   try { if (Math.abs(v.currentTime - ch.from) > 0.05) v.currentTime = ch.from; } catch (_){}
   v.play().catch(() => {});
   [pvActive(), pvIdle()].forEach((x, i) => x.classList.toggle('hide', i === 1));
-  const nx = cs[PV.ci + 1];
-  if (nx){
-    const w = pvIdle(), s = pvSrc(nx.p);
-    if (!w.src.endsWith(s)) w.src = s;
-    const seek = () => { try { w.currentTime = nx.from; } catch (_){} };
-    if (w.readyState >= 1) seek(); else w.addEventListener('loadedmetadata', seek, {once: true});
-  }
+  pvPreloadNext();
   pvSync();
 }
 
@@ -1973,9 +1984,13 @@ function pvPause(){
 //
 // เทียบด้วยเวลาแก้ไฟล์ (out_stale = final.mp4 เก่ากว่า edl.json) ซึ่งครอบคลุมทั้ง
 // การกดจัดใหม่ การให้ AI จัด และการกดบันทึกไทม์ไลน์เอง
+// out_stale เทียบไฟล์บนดิสก์เท่านั้น จึงไม่รู้จัก *ร่างในเบราว์เซอร์* ที่ยังไม่ได้
+// บันทึก — ตัด/ลบ/ลากขอบแล้ว edl.json ยังไม่ขยับสักนิด ไฟล์เลยดู "ตรง" อยู่ทั้งที่
+// ชิ้นที่เพิ่งกดลบยังอยู่ในหนังครบทั้งภาพและเสียง  นับร่างเป็นของไม่ตรงด้วย
 function pvFileWhy(){
   if (!S || !S.out_exists) return 'ยังไม่มีไฟล์หนัง — ยังไม่เคยกด "สร้างไฟล์"';
   if (S.out_stale) return 'ไฟล์ที่ต่อไว้เก่ากว่าไทม์ไลน์ตอนนี้';
+  if (tlDirty()) return 'แก้ไทม์ไลน์ไว้แล้วยังไม่ได้ต่อไฟล์ใหม่';
   return '';
 }
 
@@ -2004,6 +2019,14 @@ function pvSync(){
   E.vb.classList.toggle('hide', fileMode || stream || !PV.flip);
   if (fileMode && !fileWhy && !E.vf.src) E.vf.src = '/out';
   if (fileWhy && E.vf.src){ E.vf.pause(); E.vf.removeAttribute('src'); E.vf.load(); }
+  // สายสตรีมที่ใช้ไม่ได้แล้วต้อง **สั่งหยุด** ไม่ใช่แค่ปิดปุ่มกับซ่อนตัววิดีโอ —
+  // display:none ไม่ได้ทำให้เสียงเงียบ  ลากขอบชิ้นทีนึง pvStreamMissing เป็นจริง
+  // ทันที ปุ่ม ▶ ดับไปแล้วแต่สายเก่ายังส่งเสียงของขอบเดิมต่อโดยกดหยุดไม่ได้
+  if ((!stream || pvStreamMissing()) && E.vs.src){
+    E.vs.pause(); E.vs.removeAttribute('src'); E.vs.load();
+    PV.stok = null;
+    if (stream) PV.playing = false;
+  }
 
   // ขีดบอกขอบเขตของแต่ละชิ้นบนแถบเลื่อน
   E.ticks.innerHTML = '';
@@ -2180,6 +2203,105 @@ function pvGotoPiece(x, play){
   return true;
 }
 
+// ── ดึงตัวเล่นให้ตรงกับไทม์ไลน์ที่เพิ่งถูกแก้ ──────────────────────
+//
+// ทุกท่าแก้ (C ซอย · D ลบ · F ย้อน · ลากขอบ · ย้ายตำแหน่ง) แก้ items[] แล้วเรียก
+// render() ซึ่งวาดใหม่แค่ป้ายกับปุ่ม — ตัว <video> ยังถือไฟล์เดิมค้างอยู่ที่ตำแหน่ง
+// เดิม อาการที่ได้จริงคือ:
+//
+//   ลบชิ้นที่กำลังเล่น  → ชิ้นนั้นเล่นต่อจนจบครบทั้งภาพและเสียง เหมือนไม่ได้ลบ
+//   ลากขอบชิ้นที่ตัดไว้ → ต้องสลับไปเล่นจากไฟล์ต้นฉบับ (pvRaw) แต่ไม่มีใครสั่งโหลด
+//                        ใหม่ จึงยังได้ยินขอบเดิม แถม ch.from เปลี่ยนจาก 0 เป็น
+//                        p.start ทำให้ pvProgress คำนวณเวลาติดลบ หัวอ่านดีดกลับต้นเรื่อง
+//   PV.ci เป็นเลขดัชนี  → ลบชิ้นทีนึงรายการเลื่อนทั้งแถว เลขเดิมชี้คนละชิ้นกับที่ดัง
+//                        อยู่ pvTick เลยเทียบขอบผิดตัวแล้วข้ามท่อนมั่ว
+//
+// ยึด **เวลาบนไทม์ไลน์** (PV.gt) เป็นหลัก ไม่ใช่เลขชิ้น — ลบชิ้นตรงหัวอ่านแล้ว
+// ชิ้นถัดไปเลื่อนมาแทนที่เวลาเดิมพอดี เคาะ D รัว ๆ ไล่ตัดของที่ไม่เอาได้โดยเสียง
+// ไม่กระโดดและไม่ต้องเล็งใหม่ทุกครั้ง
+function pvResync(){
+  // isConnected เพราะตอนไทม์ไลน์ถูกล็อก (composeLock) ตัวเล่นถูกถอดออกจากหน้าไป
+  // แล้ว PV.node ยังลอยอยู่ข้างนอก — ไปสั่งโหลดชิ้นใส่มันตอนนั้นไม่มีประโยชน์
+  if (!PV || !PV.node || !PV.node.isConnected || step !== 3) return;
+  // โหมดไฟล์ไม่มีอะไรให้ตามไทม์ไลน์ — pvFileWhy รู้แล้วว่าร่างไม่ตรงกับไฟล์
+  // และ pvSync เป็นคนหยุด+ถอดไฟล์ออกให้เอง
+  if (PV.mode === 'file'){ pvSync(); return; }
+
+  const cs = pvChunks();
+  if (!cs.length){ pvPause(); pvClearAll(); PV.ci = 0; PV.stok = null; pvSync(); return; }
+  const base = pvBase(cs), tot = pvTotal(cs);
+
+  if (pvStreaming()){
+    if (pvStreamMissing()){ pvSync(); return; }         // pvSync ถอดสายทิ้งให้แล้ว
+    if (PV.stok && PV.stok.key === pvSegKey()){ pvSync(); return; }   // สายเดิมยังตรง
+    PV.stok = null;
+    return pvStreamReflow();
+  }
+
+  const v = pvActive();
+  // ชิ้นที่ *ดังอยู่ในลำโพงตอนนี้* คือ PV.cp ไม่ใช่ cs[PV.ci] — ลบชิ้นทีนึงรายการ
+  // เลื่อนทั้งแถว เลขดัชนีเดิมชี้ไปคนละใบทันทีทั้งที่ยังไม่มีอะไรถูกโหลดใหม่
+  let k = PV.cp ? cs.findIndex(c => c.p === PV.cp) : -1;
+  let off;
+  if (k >= 0){
+    // ชิ้นเดิมยังอยู่ (แค่ถูกย้ายที่ หรือถูกลากขอบ) — เล่นต่อจากตรงที่ค้างไว้ในใบเดิม
+    off = Math.max(0, (v.currentTime || 0) - (PV.cfrom || 0));
+  } else {
+    // ชิ้นเดิมหายไปแล้ว (กด D หรือ ✕) — ไปเริ่ม *ต้น* ใบที่เลื่อนมาแทนที่เวลาเดิม
+    // ไม่ใช่กระโดดเข้ากลางใบใหม่ตามวินาทีที่ค้างไว้ ซึ่งจะกินหัวประโยคของใบใหม่หายไป
+    const t = Math.max(0, Math.min(tot - 0.05, PV.gt || 0));
+    k = 0; while (k + 1 < cs.length && base[k + 1] <= t) k++;
+    off = 0;
+  }
+  const ch = cs[k];
+  off = Math.min(off, Math.max(0, ch.to - ch.from - 0.05));
+  // หัวอ่านกับแถบเลื่อนต้องตรงเดี๋ยวนั้น ไม่ใช่รอ timeupdate ครั้งหน้า (ตอนหยุดอยู่
+  // ไม่มี timeupdate มาให้รอด้วยซ้ำ)
+  pvProgress(tot ? (base[k] + off) / tot : 0, base[k] + off, tot);
+
+  // ยังไม่เคยเริ่มเล่นเลย = ไม่ต้องโหลดอะไรมารอ แค่ให้เลขชิ้นตรงก็พอ
+  if (!v.src && !PV.playing){ PV.ci = k; PV.cp = ch.p; PV.cfrom = ch.from; pvSync(); return; }
+  // ถือไฟล์เดิมอยู่ที่ตำแหน่งเดิมพอดี = ไม่ต้องรื้อ เสียงไม่สะดุดเลย — เข้าเคสนี้ทั้ง
+  // การย้ายชิ้นอื่น การลบชิ้นอื่น และการลากขอบ *ท้าย* ใบที่กำลังเล่นอยู่ (ขอบใหม่
+  // มีผลทันทีผ่าน pvTick เพราะมันอ่าน ch.to สด ๆ ทุกครั้ง)
+  if (PV.ci === k && v.src.endsWith(pvSrc(ch.p))
+      && Math.abs(v.currentTime - (ch.from + off)) < 0.05){
+    PV.cp = ch.p; PV.cfrom = ch.from;
+    pvPreloadNext(); pvSync(); return;
+  }
+  pvLoadChunk(k, off, PV.playing);
+}
+
+// ต่อสายสตรีมใหม่หลังไทม์ไลน์เปลี่ยน — หยุดเสียงทันที แล้วค่อยต่อสายทีหลัง
+//
+// การต่อสายใหม่ต้องปลุก ffmpeg ตัวใหม่ทุกครั้ง ถ้าสั่งทุกครั้งที่กด D ระหว่างไล่
+// ตัดรัว ๆ จะได้ ffmpeg โผล่มาแล้วถูกฆ่าทิ้งเป็นสิบตัวติด ๆ กัน  แต่เสียงของชิ้นที่
+// เพิ่งลบต้องเงียบ *เดี๋ยวนั้น* ไม่ใช่รอ — จึงแยกเป็นสองจังหวะ: หยุดทันที
+// แล้วรอให้มือนิ่งก่อนค่อยต่อสายเดียวจากชิ้นที่หัวอ่านชี้อยู่
+const PV_RESTREAM_MS = 400;
+let pvReTimer = 0;
+function pvStreamReflow(){
+  // ถอดสายเก่าทิ้งเลย ไม่ใช่แค่ pause — ระหว่างรอ 400 ms ถ้าคนเคาะ Space พอดี
+  // pvPlay จะเห็นว่า vs.src ยังอยู่แล้วสั่งเล่นสายเก่าต่อ ได้ยินชิ้นที่เพิ่งลบอีกรอบ
+  try { PV.el.vs.pause(); } catch (_){}
+  PV.el.vs.removeAttribute('src'); PV.el.vs.load();
+  clearTimeout(pvReTimer);
+  pvReTimer = setTimeout(() => {
+    pvReTimer = 0;
+    if (!PV || !PV.node || !PV.node.isConnected || step !== 3 || !pvStreaming()) return;
+    const cs = pvChunks();
+    if (!cs.length || pvStreamMissing()) return;
+    const base = pvBase(cs);
+    const t = Math.max(0, Math.min(pvTotal(cs) - 0.05, PV.gt || 0));
+    let i = 0; while (i + 1 < cs.length && base[i + 1] <= t) i++;
+    pvStreamStart(i, PV.playing);
+  }, PV_RESTREAM_MS);
+  pvSync();
+}
+
+// เรียกแทน render() ทุกครั้งที่ "แก้ไทม์ไลน์" — วาดหน้าใหม่แล้วดึงตัวเล่นตามไปด้วย
+function tlChanged(){ render(); pvResync(); }
+
 // แถบเลื่อนตามหัวอ่านตอนกำลังเล่น — เลื่อนก็ต่อเมื่อหัวอ่านจะหลุดขอบจอแล้ว
 // จะได้ไม่แย่งการเลื่อนมือของคนดูตลอดเวลา
 function tlFollow(){
@@ -2322,7 +2444,7 @@ function tlUndo(){
   const s = tlHist.pop();
   if (!s) return toast('ไม่มีอะไรให้ย้อนแล้ว', true);
   items = s.items; sel = s.sel;
-  render();
+  tlChanged();
   toast(`ย้อน "${s.what}" แล้ว` + (tlHist.length ? ` · ย้อนได้อีก ${tlHist.length}` : ''));
 }
 
@@ -2357,7 +2479,7 @@ function tlDropHere(){
   sel = items.indexOf(x);
   // ไม่ขยับหัวอ่าน — ชิ้นถัดไปเลื่อนมาแทนที่ตรงเวลาเดิมพอดี เคาะ D รัว ๆ เพื่อ
   // ไล่ตัดของที่ไม่เอาออกทีละชิ้นได้เลยโดยไม่ต้องเล็งใหม่ทุกครั้ง
-  render();
+  tlChanged();
   toast(`เอา ${x.name} ออกแล้ว — กด F ย้อนได้`);
 }
 
@@ -2376,7 +2498,7 @@ function tlSplit(x){
   x.end = at; x.dur = +(at - x.start).toFixed(3);
   items.splice(i + 1, 0, right);
   sel = i;
-  render();
+  tlChanged();
 }
 
 function tlTrim(x, side, dt){
@@ -2451,11 +2573,11 @@ window.addEventListener('blur', () => { tlKeyS = false; });
 
 function tlReset(x){ if (!x.o || !tlEditable()) return; tlSnap('คืนขอบเดิม');
                      x.start = x.o.start; x.end = x.o.end;
-                     x.dur = +(x.end - x.start).toFixed(3); render(); }
+                     x.dur = +(x.end - x.start).toFixed(3); tlChanged(); }
 
 // เปิด/ปิดชิ้น (ปุ่ม ✕ กับ ↺ ในรายการและในกล่องรายละเอียด) — ผ่านประวัติเหมือนกัน
 function tlToggle(x){ if (!tlEditable()) return;
-                      tlSnap(x.off ? 'ใส่ชิ้นกลับ' : 'ลบชิ้น'); x.off = !x.off; render(); }
+                      tlSnap(x.off ? 'ใส่ชิ้นกลับ' : 'ลบชิ้น'); x.off = !x.off; tlChanged(); }
 
 function stripView(){
   const c = el('div', 'card');
@@ -2687,7 +2809,9 @@ function tlStart(e, x, kind, side){
     const tapped = !tlDrag.moved;
     const piece = tlDrag.x;
     tlDrag = null;
-    render();                      // วาดเต็มทีเดียวตอนปล่อย
+    // วาดเต็มทีเดียวตอนปล่อย — และดึงตัวเล่นตามขอบใหม่ตอนนี้ที่เดียว ไม่ใช่ทุก
+    // pointermove (ลากขอบทีนึงยิงเป็นร้อยครั้ง โหลดวิดีโอใหม่ทุกครั้งไม่ไหว)
+    if (tapped) render(); else tlChanged();
     // คลิกเฉย ๆ (ไม่ได้ลาก) = สั่งให้ "ดูผลงาน" ไปเล่นชิ้นนั้นทันที
     if (tapped) pvGotoPiece(piece, true);
   };
@@ -2841,7 +2965,7 @@ function tlRow(x, i){
     if (dragFrom >= 0 && dragFrom !== i){
       if (!tlEditable()) return;
       tlSnap('ย้ายตำแหน่ง');
-      const [m] = items.splice(dragFrom, 1); items.splice(i, 0, m); sel = i; render();
+      const [m] = items.splice(dragFrom, 1); items.splice(i, 0, m); sel = i; tlChanged();
     }
   });
   return li;
@@ -2858,7 +2982,7 @@ function move(i, d){
   tlSnap('ย้ายตำแหน่ง');
   [items[i], items[j]] = [items[j], items[i]];
   if (sel === i) sel = j; else if (sel === j) sel = i;
-  render();
+  tlChanged();
 }
 
 function previewPiece(x){
