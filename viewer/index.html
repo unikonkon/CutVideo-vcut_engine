@@ -1532,9 +1532,25 @@ const pvLen = ch => Math.max(0.05, ch.to - ch.from);
 function pvBase(cs){ let t = 0; return cs.map(ch => { const b = t; t += pvLen(ch); return b; }); }
 const pvTotal = cs => cs.reduce((a, ch) => a + pvLen(ch), 0);
 
+// ── โหมดย่อยของ "ไทม์ไลน์สด" ─────────────────────────────────────
+//
+// chunks = ต่อชิ้นเองในเบราว์เซอร์ด้วย <video> สองตัวสลับกัน — เริ่มเล่นทันที
+//          ไม่ต้องพึ่งอะไรเลย แต่ตอนสลับมีช่องว่างเสมอ วัดจริงได้ 45–86 ms
+//          (เฉลี่ย 69 = 3–5 เฟรมที่ 60fps) ซึ่งมากพอจะทำให้ตัดสินจังหวะผิด
+// stream = ให้ ffmpeg ฝั่งเซิร์ฟเวอร์ต่อเป็นสายเดียวแล้วส่งมาเล่นรวดเดียว
+//          รอยต่อเป็นศูนย์เพราะไม่มี "การสลับ" ให้สะดุดตั้งแต่แรก
+//
+// เคยลองทางที่ถูกกว่านี้แล้วไม่รอด: อุ่นเครื่องตัวถัดไปด้วยการเล่นล่วงหน้าแบบ
+// ปิดเสียง+ช้า 0.0625x ผลคือช่องว่างพุ่งเป็น 254–280 ms แล้วเล่นค้างไปเลย
+// เพราะถอดรหัสสองสายพร้อมกันแย่งกำลังกันเอง
+const pvStreaming = () => PV.mode === 'live' && PV.live === 'stream';
+// ต่อด้วย -c copy ได้เฉพาะชิ้นที่มีไฟล์ตัดไว้แล้วและขอบไม่ถูกแก้หลังจากนั้น
+const pvStreamMissing = () => pvPieces().filter(p => pvRaw(p)).length;
+
 function pvInit(){
   if (!PV) PV = {mode: null, ci: 0, marks: new Set(), rate: 1, node: null,
-                 joinFilter: 'talk'};
+                 joinFilter: 'talk', live: 'chunks', sfrom: 0};
+  if (!PV.live) PV.live = 'chunks';
   if (!PV.mode) PV.mode = pvFileWhy() ? 'live' : 'file';
   return PV;
 }
@@ -1569,10 +1585,10 @@ function pvBuild(){
   const stage = el('div', 'pv');
   const mk = id => { const v = el('video', 'hide'); v.id = id; v.preload = 'auto';
                      v.playsInline = true; return v; };
-  const va = mk('pv-a'), vb = mk('pv-b'), vf = mk('pv-f');
+  const va = mk('pv-a'), vb = mk('pv-b'), vf = mk('pv-f'), vs = mk('pv-s');
   vf.controls = true;
   const badge = el('div', 'pvbadge');
-  stage.append(va, vb, vf, badge);
+  stage.append(va, vb, vf, vs, badge);
   c.appendChild(stage);
 
   const bar = el('div', 'pvbar');
@@ -1606,7 +1622,7 @@ function pvBuild(){
   c.appendChild(foot);
 
   PV.node = c;
-  PV.el = {tabs, stage, va, vb, vf, badge, play, prev, next, scrub, fill, ticks,
+  PV.el = {tabs, stage, va, vb, vf, vs, badge, play, prev, next, scrub, fill, ticks,
            time, rate, full, foot};
 
   // ตัวจับเวลาของโหมดที่ต่อชิ้นเอง — ท่อนหนึ่งอาจไม่ได้จบที่ท้ายไฟล์ (โหมดตรวจ
@@ -1616,6 +1632,9 @@ function pvBuild(){
     v.addEventListener('ended', () => { if (v === pvActive()) pvAdvance(); });
   });
   vf.addEventListener('timeupdate', pvTick);
+  vs.addEventListener('timeupdate', pvTick);
+  // สายสตรีมจบ = เล่นถึงชิ้นสุดท้ายแล้ว
+  vs.addEventListener('ended', () => { if (pvStreaming()) pvPause(); });
 
   // PV.playing ต้องตรงกับความจริงเสมอ ไม่ใช่แค่ตรงกับปุ่มที่เรากดเอง — โหมด
   // "ไฟล์ที่ต่อแล้ว" มีแถบควบคุมของเบราว์เซอร์อยู่ด้วย คนสั่งเล่น/หยุดจากตรงนั้น
@@ -1638,11 +1657,77 @@ function pvBuild(){
 const pvActive = () => (PV.flip ? PV.el.vb : PV.el.va);
 const pvIdle = () => (PV.flip ? PV.el.va : PV.el.vb);
 
+// ── เครื่องยนต์ของโหมด "ต่อเนื่องจริง" ────────────────────────────
+//
+// ส่งลำดับชิ้นที่เห็นอยู่ตอนนี้ไปแลกโทเคน (รวมที่ลากสลับไว้แต่ยังไม่บันทึก —
+// จุดขายของไทม์ไลน์สดคือเห็นตามที่จัดอยู่จริง) แล้วขอสตรีมจากชิ้นที่ต้องการ
+//
+// เลื่อนดู = สั่งสตรีมใหม่จากชิ้นนั้น ไม่ใช่ seek ในสายเดิม เพราะสายที่ส่งแบบ
+// chunked ไม่มีความยาวรวมให้เบราว์เซอร์กระโดดไปข้างหน้าได้ · ต่อแบบ -c copy
+// เร็วกว่าเวลาจริง 54 เท่า การเริ่มสายใหม่จึงใช้เวลาราววินาทีเดียว
+const pvSegKey = () => pvPieces().map(p => p.seg || '?').join(',');
+
+async function pvStreamToken(){
+  const key = pvSegKey();
+  if (PV.stok && PV.stok.key === key) return PV.stok.token;   // ลำดับเดิม ใช้โทเคนเดิม
+  const r = await post('/api/live', {segs: pvPieces().map(p => p.seg)});
+  PV.stok = {key, token: r.token};
+  return r.token;
+}
+
+// เริ่มสายใหม่ที่ "ต้นชิ้นที่ i" เสมอ — กระโดดไปกลางชิ้นไม่ได้
+//
+// วัดจริงแล้ว: สายที่ส่งแบบ chunked ไม่มีดัชนีให้เบราว์เซอร์ใช้ ค่า seekable
+// จึงเป็น [0,0] สั่ง currentTime ไปเท่าไรก็เด้งกลับ 0 ทุกครั้ง  จะทำให้กระโดด
+// กลางชิ้นได้ต้องให้ ffmpeg ตัดหัวสายด้วย -ss ซึ่งกับ -c copy ก็ยังต้องไปเริ่มที่
+// คีย์เฟรมอยู่ดี และแต่ละชิ้นมีคีย์เฟรมอยู่ที่ต้นชิ้นเป็นหลัก — สุดท้ายจึงลง
+// เอวเดียวกัน  ยอมรับว่า "เลื่อนดู = ไปต้นชิ้นที่ใกล้ที่สุด" ตรงไปตรงมากว่า
+async function pvStreamStart(i, play){
+  const ps = pvPieces();
+  if (!ps.length) return;
+  if (pvStreamMissing()) return;
+  i = Math.max(0, Math.min(ps.length - 1, i | 0));
+  let tok;
+  try { tok = await pvStreamToken(); }
+  catch (e){ return toast(e.message, true); }
+  if (!pvStreaming()) return;              // สลับโหมดไปแล้วระหว่างรอ
+  const v = PV.el.vs;
+  PV.sfrom = i;
+  PV.ci = i;
+  v.playbackRate = PV.rate;
+  v.src = `/live/${tok}?from=${i}`;
+  v.load();
+  if (play) v.addEventListener('loadedmetadata',
+                               () => v.play().catch(() => {}), {once: true});
+  pvSync();
+}
+
+// เวลาบนไทม์ไลน์ตอนนี้ = จุดเริ่มของชิ้นที่สั่งสตรีม + เวลาที่เล่นไปในสาย
+function pvStreamTime(){
+  const base = pvBase(pvChunks());
+  return (base[PV.sfrom] || 0) + (PV.el.vs.currentTime || 0);
+}
+
 function pvSetMode(m){
   if (PV.mode === m) return;
   pvPause();
   PV.mode = m; PV.ci = 0;
-  ['va', 'vb', 'vf'].forEach(k => { PV.el[k].removeAttribute('src'); PV.el[k].load(); });
+  pvClearAll();
+  render();
+}
+
+function pvClearAll(){
+  ['va', 'vb', 'vf', 'vs'].forEach(k => {
+    PV.el[k].removeAttribute('src'); PV.el[k].load();
+  });
+}
+
+// สลับระหว่าง "ต่อชิ้นในเบราว์เซอร์" กับ "ต่อเนื่องจริง"
+function pvSetLive(v){
+  if (PV.live === v) return;
+  pvPause();
+  PV.live = v; PV.ci = 0; PV.sfrom = 0;
+  pvClearAll();
   render();
 }
 
@@ -1698,6 +1783,14 @@ function pvTick(){
     pvProgress(d ? v.currentTime / d : 0, v.currentTime, d);
     return;
   }
+  if (pvStreaming()){
+    if (!cs.length) return;
+    const base = pvBase(cs), tot = pvTotal(cs), t = pvStreamTime();
+    let j = 0; while (j + 1 < cs.length && base[j + 1] <= t) j++;
+    if (j !== PV.ci){ PV.ci = j; pvSync(); }     // ป้ายบอกชิ้นต้องเดินตามด้วย
+    pvProgress(tot ? t / tot : 0, t, tot);
+    return;
+  }
   if (!cs.length) return;
   const ch = cs[PV.ci], v = pvActive();
   if (v.currentTime >= ch.to - 0.02){ pvAdvance(); return; }
@@ -1722,6 +1815,8 @@ function pvSeek(t){
   const cs = pvChunks(), base = pvBase(cs);
   let i = 0;
   while (i + 1 < cs.length && base[i + 1] <= t) i++;
+  // สายสตรีมกระโดดข้ามในสายเดิมไม่ได้ — สั่งต่อสายใหม่จากชิ้นนั้นแทน
+  if (pvStreaming()) return pvStreamStart(i, PV.playing);
   pvLoadChunk(i, t - base[i], PV.playing);
 }
 
@@ -1732,6 +1827,7 @@ function pvJump(d){
     PV.el.vf.currentTime = base[Math.max(0, Math.min(cs.length - 1, i + d))];
     return;
   }
+  if (pvStreaming()) return pvStreamStart(PV.ci + d, PV.playing);
   pvLoadChunk(PV.ci + (PV.mode === 'joins' ? 2 * d : d), 0, PV.playing);
 }
 
@@ -1743,6 +1839,13 @@ function pvPlay(){
     if (why){ PV.playing = false; pvSync(); return toast(`เล่นไม่ได้ — ${why}`, true); }
   }
   PV.playing = true;
+  if (pvStreaming()){
+    const v = PV.el.vs;
+    if (!v.src) pvStreamStart(PV.ci, true);
+    else { v.playbackRate = PV.rate; v.play().catch(() => {}); }
+    pvSync();
+    return;
+  }
   if (PV.mode === 'file'){
     if (!PV.el.vf.src) PV.el.vf.src = '/out';
     PV.el.vf.playbackRate = PV.rate;
@@ -1757,7 +1860,8 @@ function pvPlay(){
 
 function pvPause(){
   PV.playing = false;
-  [PV.el.va, PV.el.vb, PV.el.vf].forEach(v => { try { v.pause(); } catch (_){} });
+  [PV.el.va, PV.el.vb, PV.el.vf, PV.el.vs]
+    .forEach(v => { try { v.pause(); } catch (_){} });
   pvSync();
 }
 
@@ -1792,11 +1896,13 @@ function pvSync(){
 
   const fileMode = PV.mode === 'file';
   const fileWhy = fileMode ? pvFileWhy() : '';
+  const stream = pvStreaming();
   // ไฟล์ใช้ไม่ได้ก็ไม่ต้องโผล่ตัววิดีโอมาเลย — ไม่งั้นแถบควบคุมของเบราว์เซอร์
   // ยังกดเล่นได้อยู่ดี ทั้งที่เราตั้งใจห้าม
   E.vf.classList.toggle('hide', !fileMode || !!fileWhy);
-  E.va.classList.toggle('hide', fileMode || PV.flip);
-  E.vb.classList.toggle('hide', fileMode || !PV.flip);
+  E.vs.classList.toggle('hide', !stream);
+  E.va.classList.toggle('hide', fileMode || stream || PV.flip);
+  E.vb.classList.toggle('hide', fileMode || stream || !PV.flip);
   if (fileMode && !fileWhy && !E.vf.src) E.vf.src = '/out';
   if (fileWhy && E.vf.src){ E.vf.pause(); E.vf.removeAttribute('src'); E.vf.load(); }
 
@@ -1817,7 +1923,9 @@ function pvSync(){
 
   E.foot.innerHTML = '';
   E.foot.appendChild(pvFoot(cs, ps));
-  const dead = fileMode ? !!fileWhy : !cs.length;
+  const dead = fileMode ? !!fileWhy
+             : stream ? (!cs.length || !!pvStreamMissing())
+             : !cs.length;
   [E.play, E.prev, E.next].forEach(b => b.disabled = dead);
 }
 
@@ -1897,9 +2005,41 @@ function pvFoot(cs, ps){
     return w;
   }
 
+  // ── เลือกวิธีเล่นของโหมดไทม์ไลน์สด ──
+  const pick = el('div', 'seg'); pick.style.marginBottom = '.45rem';
+  [['chunks', 'ต่อชิ้นในเบราว์เซอร์', 'เริ่มเล่นทันที แต่รอยต่อสะดุดจาง ๆ (~70 ms)'],
+   ['stream', 'ต่อเนื่องจริง', 'ให้เซิร์ฟเวอร์ต่อเป็นสายเดียว รอยต่อเนียนสนิท']]
+    .forEach(([v, lab, tip]) => {
+      const b = el('button', null, lab);
+      b.setAttribute('aria-pressed', PV.live === v);
+      b.title = tip;
+      b.onclick = () => pvSetLive(v);
+      pick.appendChild(b);
+    });
+  w.appendChild(pick);
+
+  if (pvStreaming()){
+    if (notRendered){
+      w.appendChild(el('p', 'note warnnote',
+        `โหมดนี้ต่อจากไฟล์ที่ตัดไว้เท่านั้น แต่มี ${notRendered} ชิ้นที่ยังไม่มีไฟล์ `
+        + '(เพิ่งแก้ขอบหรือเพิ่งซอย) — กด "สร้างไฟล์" ให้ตัดครบก่อน '
+        + 'หรือกลับไปโหมด "ต่อชิ้นในเบราว์เซอร์" ที่เล่นจากไฟล์ต้นฉบับแทนได้'));
+    } else {
+      w.appendChild(el('p', 'note',
+        'เซิร์ฟเวอร์ต่อชิ้นด้วย ffmpeg แล้วส่งมาเป็นสายเดียว — ไม่มีการสลับไฟล์ '
+        + 'รอยต่อจึงเนียนสนิทเท่าไฟล์จริง และไม่เขียนไฟล์ลงดิสก์เลย'));
+      w.appendChild(el('p', 'note',
+        'แลกกับการเลื่อนดู: สายสตรีมกระโดดกลางชิ้นไม่ได้ '
+        + 'เลื่อนไปตรงไหนจะไปเริ่มที่ต้นชิ้นที่ใกล้ที่สุด (ต่อสายใหม่ ~0.4 วิ) · '
+        + 'เปลี่ยนลำดับแล้วกดเล่นใหม่ได้เลย ไม่ต้องบันทึกก่อน'));
+    }
+    return w;
+  }
+
   w.appendChild(el('p', 'note',
-    'เล่นจากชิ้นที่ตัดไว้ — ยังไม่ได้ต่อไฟล์ · รอยต่อจะสะดุดจาง ๆ '
-    + 'เพราะสลับไฟล์ทีนึงมีช่องว่างเสมอ ของจริงในไฟล์ที่ต่อแล้วต่อเนื่องสนิท'));
+    'เบราว์เซอร์ต่อชิ้นเอง — เห็นทันทีโดยไม่ต้องรออะไร แลกกับรอยต่อที่สะดุดจาง ๆ '
+    + 'เพราะสลับไฟล์ทีนึงมีช่องว่างเสมอ (วัดจริงราว 70 ms) '
+    + 'อยากได้รอยต่อเนียนสนิทให้กด "ต่อเนื่องจริง"'));
   w.appendChild(el('p', 'note', 'ชิ้นที่กด ✕ ปิดไว้จะถูกข้ามอัตโนมัติ · '
     + 'คลิกชิ้นในไทม์ไลน์ข้างล่างเพื่อกระโดดไปเล่นตรงนั้น'));
   if (notRendered)
@@ -1932,6 +2072,11 @@ function pvGotoPiece(x, play){
   const i = cs.findIndex(ch => ch.p === x);
   if (i < 0) return false;
   if (play) PV.playing = true;
+  if (pvStreaming()){
+    if (pvStreamMissing()) return false;
+    pvStreamStart(i, play || PV.playing);
+    return true;
+  }
   pvLoadChunk(i, 0, play || PV.playing);
   return true;
 }

@@ -18,6 +18,7 @@
 import json
 import mimetypes
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -216,6 +217,55 @@ class Job:
                     "elapsed": round((time.time() - self.started) if self.running
                                      else self.took, 1),
                     "progress": self.prog}
+
+
+# ─────────────────────────── เล่นต่อเนื่องแบบไม่มีรอยต่อ ───────────────────────────
+#
+# ตัวเล่นในเบราว์เซอร์ต่อชิ้นเองด้วย <video> สองตัวสลับกัน ซึ่งมีช่องว่างตอนสลับ
+# เสมอ — วัดจริงได้ 45–86 ms (เฉลี่ย 69) หรือ 3–5 เฟรมที่ 60fps ฟังแล้วสะดุด
+# จนตัดสินจังหวะไม่ได้  ทางเดียวที่รอยต่อเป็นศูนย์จริงคือให้มันเป็น *สายเดียว*
+# ตั้งแต่ต้นทาง จึงให้ ffmpeg ต่อชิ้นแล้วส่งออกมาเป็น fragmented MP4 สายเดียว
+#
+# ไม่เขียนไฟล์ลงดิสก์เลย — ส่งออก pipe แล้วส่งต่อให้เบราว์เซอร์ทันที เริ่มเล่นได้
+# ในราววินาทีเดียว (วัดจริง: ต่อแบบ -c copy เร็วกว่าเวลาจริง 54 เท่า) แลกกับการ
+# เลื่อนดูที่ทำได้เฉพาะในช่วงที่โหลดมาแล้ว — ข้ามไปจุดไกล ๆ = สั่งสตรีมใหม่จาก
+# ชิ้นนั้นเลย ซึ่งเร็วพอจนแทบไม่รู้สึก
+#
+# เสียงเข้ารหัสใหม่รวดเดียวทั้งสาย จึงไม่มีปัญหา AAC priming สะสมแบบตอนต่อไฟล์
+# ทีละชิ้น (บั๊กที่เคยทำให้ภาพกับเสียงเพี้ยนสะสมถึง 6.9 วินาที)
+LIVE_LISTS = {}          # token → [Path ของ segment ตามลำดับ]
+LIVE_MAX = 4             # เก็บของเก่าไว้ไม่กี่ชุด กันโตไม่รู้จบเวลาเปิดหลายแท็บ
+
+
+def live_paths(ctx, names):
+    """ชื่อไฟล์ชิ้นที่หน้าเว็บส่งมา → path จริง — ตรวจทีละชื่อก่อนเชื่อ"""
+    out = []
+    for n in names or []:
+        n = str(n)
+        if not SAFE_NAME.match(n):
+            return None, f"ชื่อไฟล์ไม่ถูกต้อง: {n}"
+        p = ctx.seg_dir / n
+        if not p.exists():
+            return None, f"ไม่พบไฟล์ของชิ้น {n} — ต้องตัดชิ้นนั้นก่อน"
+        out.append(p)
+    if not out:
+        return None, "ไม่มีชิ้นให้ต่อ"
+    return out, None
+
+
+def live_cmd(ctx, lst):
+    e = ctx.get("encode", {})
+    return ["ffmpeg", "-nostdin", "-hide_banner", "-v", "error",
+            "-f", "concat", "-safe", "0", "-i", str(lst),
+            "-c:v", "copy",
+            "-c:a", str(e.get("acodec", "aac")),
+            "-b:a", str(e.get("abitrate", "192k")),
+            "-ar", str(int(e.get("arate", 48000))),
+            "-ac", str(int(e.get("achannels", 2))),
+            # empty_moov = ส่งหัวไฟล์ได้ทันทีโดยไม่ต้องรู้ความยาวรวมก่อน
+            # frag_keyframe = ปิดก้อนที่คีย์เฟรม เบราว์เซอร์เล่นได้ตั้งแต่ก้อนแรก
+            "-movflags", "frag_keyframe+empty_moov+default_base_moof",
+            "-f", "mp4", "pipe:1"]
 
 
 # ─────────────────────────── ตรวจ EDL ที่ส่งกลับมา ───────────────────────────
@@ -629,6 +679,50 @@ def make_handler(ctx, job):
             except (BrokenPipeError, ConnectionResetError):
                 pass          # คนดูกดข้ามหรือปิดหน้าไป — ไม่ใช่ความผิดพลาด
 
+        def _live(self, token, start):
+            """ต่อชิ้นด้วย ffmpeg แล้วส่งออกเป็นสายเดียว — ไม่แตะดิสก์
+
+            ตอบแบบ chunked เพราะไม่รู้ความยาวรวมล่วงหน้า (ยังต่อไม่เสร็จตอนเริ่ม
+            ส่ง) เบราว์เซอร์จึงเล่นไปโหลดไปได้ แต่จะเลื่อนข้ามไปข้างหน้าไกล ๆ
+            ไม่ได้ — ฝั่งหน้าเว็บแก้ด้วยการสั่งสตรีมใหม่จากชิ้นที่ต้องการแทน
+            """
+            files = LIVE_LISTS.get(token)
+            if not files:
+                return self._send(404, "ไม่รู้จักรายการนี้ — สั่งเล่นใหม่อีกครั้ง",
+                                  "text/plain; charset=utf-8")
+            files = files[max(0, min(start, len(files) - 1)):]
+            # ชื่อไฟล์รายการต้องไม่ซ้ำกันข้ามคำขอ แม้จะเป็นโทเคนเดียวกัน — concat
+            # demuxer เปิดไฟล์นี้ค้างไว้แล้วไล่อ่านทีละบรรทัดตามที่เล่นไปเรื่อย ๆ
+            # ไม่ได้อ่านจบตั้งแต่แรก  พอกดเลื่อนดู สายใหม่จะเขียนทับ/ลบไฟล์ที่สาย
+            # เก่ายังอ่านอยู่ แล้วพังทั้งคู่ (เจอจริงตอนทดสอบ: สายใหม่ขึ้น
+            # DEMUXER_ERROR_COULD_NOT_OPEN เพราะไฟล์ถูกลบใต้เท้าพอดี)
+            lst = ctx.work / f"live_{token}_{secrets.token_hex(4)}.txt"
+            lst.write_text("".join(f"file '{f.as_posix()}'\n" for f in files),
+                           encoding="utf-8")
+            proc = subprocess.Popen(live_cmd(ctx, lst), stdout=subprocess.PIPE,
+                                    stderr=subprocess.DEVNULL)
+            self.send_response(200)
+            self.send_header("Content-Type", "video/mp4")
+            self.send_header("Transfer-Encoding", "chunked")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            try:
+                while True:
+                    buf = proc.stdout.read(1 << 16)
+                    if not buf:
+                        break
+                    self.wfile.write(b"%X\r\n" % len(buf) + buf + b"\r\n")
+                self.wfile.write(b"0\r\n\r\n")
+            except (BrokenPipeError, ConnectionResetError):
+                pass          # คนกดข้ามหรือปิดหน้าไป — ปกติมาก ไม่ใช่ความผิดพลาด
+            finally:
+                # ต้องฆ่าให้แน่ใจ ไม่งั้น ffmpeg ค้างรอเขียน pipe ที่ไม่มีใครอ่านแล้ว
+                if proc.poll() is None:
+                    proc.kill()
+                proc.stdout.close()
+                proc.wait()
+                lst.unlink(missing_ok=True)
+
         # ── เส้นทาง ──
         def do_GET(self):
             if not self._guard():
@@ -724,6 +818,17 @@ def make_handler(ctx, job):
                 # ไฟล์หนังที่ต่อเสร็จแล้ว — ตัวเล่นโหมด "ไฟล์ที่ต่อแล้ว" ใช้เส้นนี้
                 return self._range_file(ctx.out)
 
+            if p.startswith("/live/"):
+                token = p[len("/live/"):]
+                if not SAFE_NAME.match(token):
+                    return self._send(400, b"bad token", "text/plain")
+                q = dict(x.split("=", 1) for x in u.query.split("&") if "=" in x)
+                try:
+                    start = int(q.get("from", 0))
+                except ValueError:
+                    start = 0
+                return self._live(token, start)
+
             if p.startswith("/seg/"):
                 name = p[len("/seg/"):]
                 if not SAFE_NAME.match(name):
@@ -755,6 +860,19 @@ def make_handler(ctx, job):
                 if err:
                     return self._json({"error": err}, 400)
                 return self._json({"ok": True, "summary": edl["summary"]})
+
+            if p == "/api/live":
+                # หน้าเว็บส่งลำดับชิ้นที่เห็นอยู่ตอนนี้มา (รวมที่ลากสลับไว้แต่ยัง
+                # ไม่บันทึก) แลกเป็นโทเคนไว้ขอสตรีม — ไม่ได้อ่านจาก edl.json
+                # เพราะทั้งจุดขายของโหมดนี้คือ "เห็นตามที่จัดอยู่ตอนนี้"
+                files, err = live_paths(ctx, payload.get("segs"))
+                if err:
+                    return self._json({"error": err}, 400)
+                token = secrets.token_hex(8)
+                LIVE_LISTS[token] = files
+                for old in list(LIVE_LISTS)[:-LIVE_MAX]:
+                    LIVE_LISTS.pop(old, None)
+                return self._json({"token": token, "count": len(files)})
 
             if p == "/api/undo":
                 prev = ctx.work / "edl.prev.json"
