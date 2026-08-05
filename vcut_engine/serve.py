@@ -402,6 +402,9 @@ def build_state(ctx):
             "start": s["start"], "end": s["end"], "dur": s["dur"],
             "clip_dur": clip_dur.get(s["name"], s["end"]),
             "orient": s.get("orient", "H"),
+            # ชิ้นที่ยังไม่มีไฟล์ตัด ตัวเล่นจะไปเปิดไฟล์ต้นฉบับแทน ซึ่งยังไม่ผ่าน
+            # ฟิลเตอร์หมุน — ต้องรู้ค่าหมุนถึงจะพลิกภาพให้ตรงกับของจริงได้
+            "rot": s.get("rot_override", ""),
             "text": s.get("text", ""),
             "motion": s.get("motion"), "bright": s.get("bright"),
             "chapter": s.get("chapter", ""), "chapter_title": s.get("chapter_title", ""),

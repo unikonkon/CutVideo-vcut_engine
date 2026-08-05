@@ -346,6 +346,15 @@ dialog .df{padding:.7rem 1rem;border-top:1px solid var(--line);display:flex;gap:
 .pv video{position:absolute;inset:0;display:block;width:100%;height:100%;
   background:#000;object-fit:contain}
 .pv video.hide{display:none}
+/* ── หมุนภาพให้ตรงกับที่ตั้งไว้ในขั้น 1 ──
+   ใช้เฉพาะตอนเล่นจาก *ไฟล์ต้นฉบับ* (ชิ้นที่ยังไม่มีไฟล์ตัด) เพราะไฟล์ที่ตัดแล้ว
+   ffmpeg หมุนมาให้ในภาพเลย  หมุน 90° แล้วกรอบกว้าง-สูงสลับกัน จึงต้องวัดกล่อง
+   จากอีกด้าน ไม่งั้นภาพจะโดนกรอบ 16:9 บีบจนเหลือแถบผอม ๆ กลางจอ */
+.pv video.rot90,.pv video.rot270{width:var(--pvh);height:calc(var(--pvh) * var(--pvr,1.7778));
+  inset:auto;left:50%;top:50%}
+.pv video.rot90{transform:translate(-50%,-50%) rotate(90deg)}
+.pv video.rot270{transform:translate(-50%,-50%) rotate(-90deg)}
+.pv video.rot180{transform:rotate(180deg)}
 .pvbadge{position:absolute;left:.5rem;top:.5rem;background:rgba(0,0,0,.62);color:#fff;
   font-size:11.5px;line-height:1.5;padding:.1rem .45rem;border-radius:4px;pointer-events:none}
 .pvbar{display:flex;align-items:center;gap:.45rem;margin-top:.55rem}
@@ -516,7 +525,7 @@ async function load(keepEdits){
   if (S && S.timeline){
     items = S.timeline.map(x => ({...x, off: false, o: {start: x.start, end: x.end}}));
     sel = -1;
-    tlHist = [];      // ของใหม่มาจากดิสก์แล้ว ประวัติของร่างเก่าย้อนไปก็ไม่ตรงกับอะไร
+    tlHist = []; tlFuture = [];   // ของใหม่มาจากดิสก์แล้ว ประวัติของร่างเก่าไม่ตรงกับอะไร
   }
   pvDropStaleFile();
   $('#title').textContent = D.values['project.name'] || 'vcut';
@@ -1672,6 +1681,20 @@ const pvRaw = p => !p.seg || tlCut(p);
 const pvSrc = p => pvRaw(p) ? `/clip/${p.name}` : `/seg/${p.seg}`;
 const pvOff = p => pvRaw(p) ? p.start : 0;   // จุดเริ่มของชิ้นในไฟล์ที่กำลังเล่น
 
+// คลิปที่ตั้งหมุนไว้ในขั้น 1 — ไฟล์ต้นฉบับยังไม่ผ่านฟิลเตอร์หมุน ต้องพลิกเอง
+// ตอนเล่น ไม่งั้นชิ้นที่เพิ่งลากขอบ/เพิ่งซอยจะโผล่มาตะแคงคนละทางกับหนังจริง
+const PV_ROT = {'transpose=1': 'rot90', 'transpose=2': 'rot270',
+                'transpose=1,transpose=1': 'rot180'};
+const pvRotClass = p => (pvRaw(p) && PV_ROT[p && p.rot]) || '';
+
+// ติดคลาสหมุนให้ตัววิดีโอตามชิ้นที่กำลังจะเล่น — ถอดของเก่าออกก่อนเสมอ
+// เพราะ <video> สองตัวถูกใช้ซ้ำสลับกันไปทั้งเรื่อง
+function pvSetRot(v, p){
+  v.classList.remove('rot90', 'rot270', 'rot180');
+  const cls = pvRotClass(p);
+  if (cls) v.classList.add(cls);
+}
+
 function pvChunks(){
   const ps = pvPieces();
   if (PV.mode === 'joins'){
@@ -1706,7 +1729,8 @@ const pvStreamMissing = () => pvPieces().filter(p => pvRaw(p)).length;
 
 function pvInit(){
   if (!PV) PV = {mode: null, ci: 0, marks: new Set(), rate: 1, node: null,
-                 joinFilter: 'talk', live: 'chunks', sfrom: 0, cp: null, cfrom: 0};
+                 joinFilter: 'talk', live: 'chunks', sfrom: 0, cp: null, cfrom: 0,
+                 flip: false};
   if (!PV.live) PV.live = 'chunks';
   if (!PV.mode) PV.mode = pvFileWhy() ? 'live' : 'file';
   return PV;
@@ -1903,6 +1927,7 @@ function pvLoadChunk(ci, off, autoplay){
   const v = pvActive();
   const want = pvSrc(ch.p);
   if (!v.src.endsWith(want)) v.src = want;
+  pvSetRot(v, ch.p);
   v.playbackRate = PV.rate;
   const go = () => { v.currentTime = ch.from + (off || 0);
                      if (autoplay) v.play().catch(() => {}); };
@@ -1922,6 +1947,7 @@ function pvPreloadNext(){
   if (!nx) return;
   const w = pvIdle(), s = pvSrc(nx.p);
   if (!w.src.endsWith(s)) w.src = s;
+  pvSetRot(w, nx.p);     // ติดตั้งแต่ตอน preload — จะได้ไม่พลิกให้เห็นตอนสลับ
   const seek = () => { try { w.currentTime = nx.from; } catch (_){} };
   if (w.readyState >= 1) seek(); else w.addEventListener('loadedmetadata', seek, {once: true});
 }
@@ -1933,6 +1959,7 @@ function pvAdvance(){
   PV.ci += 1;
   const ch = cs[PV.ci], v = pvActive();
   PV.cp = ch.p; PV.cfrom = ch.from;
+  pvSetRot(v, ch.p);
   v.playbackRate = PV.rate;
   try { if (Math.abs(v.currentTime - ch.from) > 0.05) v.currentTime = ch.from; } catch (_){}
   v.play().catch(() => {});
@@ -2074,8 +2101,12 @@ function pvSync(){
   // ยังกดเล่นได้อยู่ดี ทั้งที่เราตั้งใจห้าม
   E.vf.classList.toggle('hide', !fileMode || !!fileWhy);
   E.vs.classList.toggle('hide', !stream);
-  E.va.classList.toggle('hide', fileMode || stream || PV.flip);
-  E.vb.classList.toggle('hide', fileMode || stream || !PV.flip);
+  // ต้องแปลงเป็น boolean ให้ชัด — classList.toggle(name, undefined) ไม่ได้แปลว่า
+  // "เอาออก" แต่แปลว่า "ไม่ได้ส่งค่ามา" ซึ่งคือ *สลับ* ค่าเดิม  PV.flip ยังไม่ถูก
+  // ตั้งจนกว่าจะสลับชิ้นครั้งแรก ตอนเปิดหน้ามาใหม่ va จึงติด/หลุด hide สลับกันไป
+  // ทุกครั้งที่ pvSync ทำงาน = จอดำสลับกับมีภาพโดยไม่มีใครสั่ง
+  E.va.classList.toggle('hide', !!(fileMode || stream || PV.flip));
+  E.vb.classList.toggle('hide', !!(fileMode || stream || !PV.flip));
   if (fileMode && !fileWhy && !E.vf.src) E.vf.src = '/out';
   if (fileWhy && E.vf.src){ E.vf.pause(); E.vf.removeAttribute('src'); E.vf.load(); }
   // สายสตรีมที่ใช้ไม่ได้แล้วต้อง **สั่งหยุด** ไม่ใช่แค่ปิดปุ่มกับซ่อนตัววิดีโอ —
@@ -2491,22 +2522,44 @@ function tlBase(){ let t = 0; return tlOn().map(x => { const b = t; t += x.dur; 
 // ทุกอย่างยังเป็นร่างในเบราว์เซอร์เหมือนเดิม — ย้อนกี่ครั้งก็ไม่แตะ edl.json
 const TL_HIST_MAX = 60;
 let tlHist = [];
+// กองที่ย้อนไปแล้ว — รอให้กด G เอากลับคืน (ล้างทิ้งทันทีที่แก้อะไรใหม่ เพราะ
+// พอแตกเส้นทางแล้ว "อนาคต" ที่เก็บไว้ไม่ใช่อนาคตของเส้นนี้อีกต่อไป)
+let tlFuture = [];
 
 // เรียก *ก่อน* ลงมือแก้เสมอ และเรียกก็ต่อเมื่อจะแก้จริงแล้วเท่านั้น
 // (ถ้า snap ไว้ก่อนตรวจเงื่อนไข กด C บนชิ้นสั้น ๆ ที่ซอยไม่ได้จะได้ประวัติเปล่า
 //  ค้างไว้ พอกด F ทีนึงก็เหมือนไม่มีอะไรเกิดขึ้น)
+const tlShot = what => ({what, sel,
+                         items: items.map(x => ({...x, o: x.o ? {...x.o} : null}))});
+
 function tlSnap(what){
-  tlHist.push({what, sel, items: items.map(x => ({...x, o: x.o ? {...x.o} : null}))});
+  tlHist.push(tlShot(what));
   if (tlHist.length > TL_HIST_MAX) tlHist.shift();
+  tlFuture = [];        // แก้ของใหม่ = แตกเส้นทาง ของที่ย้อนไว้ทำซ้ำไม่ได้แล้ว
 }
 
+// ภาพนิ่งที่เก็บไว้คือ "สภาพก่อนทำ what" เสมอ ย้อนกับทำซ้ำจึงเป็นการสลับภาพนิ่ง
+// ข้ามกองกันไปมา โดยยกป้ายชื่อของท่านั้นติดไปด้วย — ปุ่มถึงบอกได้ว่าครั้งถัดไป
+// จะย้อน/ทำซ้ำ "อะไร" ไม่ใช่บอกแค่ว่ามีอะไรให้กด
 function tlUndo(){
   if (!tlEditable()) return;
   const s = tlHist.pop();
   if (!s) return toast('ไม่มีอะไรให้ย้อนแล้ว', true);
+  tlFuture.push(tlShot(s.what));
   items = s.items; sel = s.sel;
   // ไม่เด้งข้อความบอกว่าย้อนอะไรไป — ไทม์ไลน์เปลี่ยนให้เห็นอยู่แล้ว และปุ่ม ↶ บอก
   // ไว้ในคำบรรยายว่าครั้งถัดไปจะย้อนอะไร  ท่านี้กดรัว ๆ ข้อความจึงบังจอตลอดเวลา
+  tlChanged();
+}
+
+// G — เอาที่เพิ่งย้อนไปกลับคืนมา
+function tlRedo(){
+  if (!tlEditable()) return;
+  const s = tlFuture.pop();
+  if (!s) return toast('ไม่มีอะไรให้ทำซ้ำ — กด F ย้อนอะไรไปก่อน', true);
+  tlHist.push(tlShot(s.what));
+  if (tlHist.length > TL_HIST_MAX) tlHist.shift();
+  items = s.items; sel = s.sel;
   tlChanged();
 }
 
@@ -2729,8 +2782,8 @@ function stripView(){
     + 'ไม่ต้องเล็งไม้บรรทัด)'));
   c.append(el('p', 'note', 'แป้นลัด — Space เล่น/หยุด · C ตัดตรงหัวอ่าน · '
     + 'D ลบชิ้นตรงหัวอ่าน · R คืนขอบเดิมของชิ้นตรงหัวอ่าน · '
-    + 'F ย้อนการแก้ครั้งล่าสุด (ย้อนได้ทั้งตัด ลบ ย้าย '
-    + 'และย่อ-ขยาย ทีละครั้ง)'));
+    + 'F ย้อนการแก้ครั้งล่าสุด · G เอาที่เพิ่งย้อนกลับคืน '
+    + '(ย้อน/ทำซ้ำได้ทั้งตัด ลบ ย้าย และย่อ-ขยาย ทีละครั้ง)'));
   if (cut)
     c.append(el('p', 'note warnnote',
       `▌ แก้ขอบไปแล้ว ${cut} ชิ้น — กด "สร้างไฟล์" จะตัดใหม่ ${cut} ชิ้น `
@@ -2773,6 +2826,12 @@ function tlHead(on, total){
                             : 'ยังไม่มีอะไรให้ย้อน — แป้น F';
   unb.disabled = !tlHist.length;
   unb.onclick = tlUndo;
+  const reb = el('button', 'sm', '↷ ทำซ้ำ (G)');
+  reb.title = tlFuture.length
+    ? `เอา "${tlFuture[tlFuture.length - 1].what}" กลับคืน · ทำซ้ำได้ ${tlFuture.length} ครั้ง — แป้น G`
+    : 'ยังไม่มีอะไรให้ทำซ้ำ — ต้องกด F ย้อนอะไรไปก่อน';
+  reb.disabled = !tlFuture.length;
+  reb.onclick = tlRedo;
   // ย้ายมาจากกล่อง "เลือกอยู่ · …" ที่ถอดออกไปแล้ว — อยู่ตรงนี้ตลอดเวลาเหมือน C/D/F
   // จึงไม่ดันหน้าเวลาโผล่/หาย และทำกับชิ้นตรงหัวอ่านเหมือนกันทั้งสามปุ่ม
   const at = tlAt();
@@ -2784,8 +2843,8 @@ function tlHead(on, total){
     : 'ชิ้นตรงหัวอ่านยังไม่ได้ถูกลากขอบ — แป้น R';
   rsb.disabled = !canReset;
   rsb.onclick = tlResetHere;
-  bar.append(cutb, delb, unb, rsb, el('span', 'spacer'));
-  if (lock) [cutb, delb, unb, rsb].forEach(b => {
+  bar.append(cutb, delb, unb, reb, rsb, el('span', 'spacer'));
+  if (lock) [cutb, delb, unb, reb, rsb].forEach(b => {
     b.disabled = true;
     b.title = `แก้ไม่ได้ตอนนี้ — ${lock}`;
   });
@@ -2800,7 +2859,7 @@ function tlHead(on, total){
   ud.onclick = async () => {
     if (tlDirty() && !confirm('ร่างที่แก้ไว้ยังไม่ได้บันทึก — ทิ้งแล้วดึงฉบับก่อนหน้ากลับมาไหม?'))
       return;
-    try { await post('/api/undo'); tlHist = []; await load(true);
+    try { await post('/api/undo'); tlHist = []; tlFuture = []; await load(true);
       toast('คืนฉบับที่บันทึกไว้แล้ว'); } catch(e){ toast(e.message, true); } };
   bar.append(sv, ud);
 
@@ -2914,6 +2973,7 @@ const TL_KEYS = {
   KeyC: ['c', tlCutHere],
   KeyD: ['d', tlDropHere],
   KeyF: ['f', tlUndo],
+  KeyG: ['g', tlRedo],
   KeyR: ['r', tlResetHere],
 };
 
