@@ -384,7 +384,7 @@ def order_pieces(pieces, ctx, adv):
 # ─────────────────────────── main ───────────────────────────
 
 SEG_KEYS = ("name", "src", "orient", "rot_override", "full_range", "achannels",
-            "kind", "start", "end", "dur", "target_lufs", "text", "motion",
+            "kind", "start", "end", "dur", "target_lufs", "loud_ref", "text", "motion",
             "bright", "chapter", "chapter_title", "ai_score", "id", "jump")
 
 

@@ -1050,6 +1050,49 @@ function minLen(){
   return s;
 }
 
+// ── ระดับเสียง ──────────────────────────────────────────────────
+//
+// เครื่องปรับความดังให้อยู่แล้วโดยไม่ต้องตั้งอะไร สองสวิตช์นี้ไม่ได้เปิด/ปิดการปรับ
+// แต่เปลี่ยน "เท่ากัน" ให้แปลว่าอะไร ซึ่งเป็นคนละคำถามกันสองข้อ:
+//   ช่วงวิวควรเบากว่าช่วงพูดไหม   → เป้าคนละตัว หรือตัวเดียว
+//   เทียบเสียงกันด้วยหน่วยไหน     → ทีละท่อน หรือทั้งคลิป
+// เปิดแยกกันได้ เพราะเปิดตัวหนึ่งไม่ได้บังคับอีกตัว
+function levelSect(){
+  const s = el('div', 'sect'); s.style.marginTop = '.9rem';
+  s.appendChild(el('h4', null, 'ระดับเสียง'));
+
+  const talk = +val('audio.target_lufs_talk');
+  const broll = +val('audio.target_lufs_broll');
+  const same = !!val('audio.same_level');
+  const match = !!val('audio.match_clips');
+
+  putField(s, 'audio.same_level');
+  s.appendChild(el('p', 'note', same
+    ? `ทุกชิ้นดังเท่ากันที่ ${talk} LUFS — ช่วงวิวไม่ถูกหรี่ลงอีกแล้ว`
+    : `ตอนนี้ช่วงพูด ${talk} · ช่วงวิว ${broll} LUFS `
+      + `— ช่วงวิวเบากว่า ${Math.abs(talk - broll).toFixed(1)} dB`));
+
+  putField(s, 'audio.match_clips');
+  s.appendChild(el('p', 'note', match
+    ? 'วัดทั้งคลิปครั้งเดียว ทุกท่อนในคลิปเดียวกันได้ค่าปรับเท่ากันเป๊ะ '
+      + '— คลิปต่อคลิปดังเท่ากัน แต่ในคลิปยังมีเสียงดัง-เบาตามที่ถ่ายมา'
+    : 'วัดทีละท่อน ทุกท่อนถูกดันขึ้นเป้าแยกกัน — เสียงสม่ำเสมอที่สุด '
+      + 'แต่เสียงกระซิบกับเสียงตะโกนในคลิปเดียวกันจะออกมาดังพอ ๆ กัน'));
+
+  if (match){
+    const n = ((CL && CL.clips) || []).filter(clPicked).length;
+    s.appendChild(el('p', 'note', n
+      ? `ต้องวัดเสียง ${n} คลิปก่อนตัด — ราวไม่กี่วินาที และวัดครั้งเดียวต่อไฟล์ `
+        + '(ไฟล์เดิมรอบหน้าไม่วัดซ้ำ)'
+      : 'จะวัดเสียงทุกคลิปที่เลือกไว้ก่อนตัด — วัดครั้งเดียวต่อไฟล์'));
+  }
+
+  s.appendChild(el('p', 'note',
+    'เพดานพีคกับ limiter ยังทำงานเหมือนเดิมทั้งสองโหมด — ชิ้นที่เร่งแล้วจะชนยอดคลื่น '
+    + 'ถูกกันไว้ก่อนตั้งแต่ตอนคิดค่าปรับ · เป้าเป็นตัวเลข LUFS แก้ได้ที่ขั้น 3'));
+  return s;
+}
+
 // ขั้นนี้ต้องทำใหม่ไหม — ยังไม่เคยทำ หรือทำไว้แล้วแต่ค่าที่ใช้ตอนนั้นเปลี่ยนไปแล้ว
 // (ตรรกะเดียวกับที่ serve.py ใช้เลือกขั้นให้ปุ่มหลัก จะได้ไม่บอกคนละอย่างกัน)
 const stepPending = id => {
@@ -1097,6 +1140,7 @@ function stepPrepare(box){
   // ทำงานต่อแม้ปิด cut ชน ถ้าซ่อนตามสวิตช์จะกลายเป็นตัวกรองที่ยังคัดของอยู่
   // แต่หาที่แก้ไม่เจอ
   basic.appendChild(minLen());
+  basic.appendChild(levelSect());
   c.appendChild(basic);
 
   // ── กล่อง 2 · ปุ่มหลัก ──
@@ -3130,6 +3174,7 @@ function advanced(stages){
          'compose.mode', 'jumpcut.enabled', 'jumpcut.noise_db',
          'jumpcut.min_silence', 'jumpcut.pad', 'jumpcut.min_piece',
          'prepare.min_piece', 'prepare.min_clip',
+         'audio.same_level', 'audio.match_clips',
          'order.mode', 'order.reverse']
         .includes(f.key)
     && !Object.values(MODE_FIELDS).flat().includes(f.key));
@@ -3137,6 +3182,12 @@ function advanced(stages){
   fs.forEach(f => d.appendChild(field(f)));
   return d;
 }
+
+// สวิตช์ที่เปลี่ยน "หน้าตาของการ์ด" ไม่ใช่แค่ค่าในช่องตัวเอง — ต้องวาดการ์ดใหม่
+// ทั้งใบ ไม่งั้นสวิตช์ติดแล้วแต่ของรอบข้างยังเป็นของเดิม: ปิด cut ชน แล้วปุ่ม
+// ② หาช่วงเงียบ ยังอยู่ · เปิดโหมดเสียงแล้วคำอธิบายใต้สวิตช์ยังบอกของโหมดเก่า
+const RERENDER = new Set(['ai.enabled', 'jumpcut.enabled',
+                          'audio.same_level', 'audio.match_clips']);
 
 function setKey(key, orig, v){
   if (JSON.stringify(v) === JSON.stringify(orig)) delete edits[key];
@@ -3169,7 +3220,7 @@ function widget(f, row){
   if (f.type === 'bool'){
     const l = el('label', 'ck');
     const i = el('input'); i.type = 'checkbox'; i.checked = !!v;
-    i.onchange = () => { set(i.checked); if (f.key === 'ai.enabled') render(); };
+    i.onchange = () => { set(i.checked); if (RERENDER.has(f.key)) render(); };
     l.append(i); return l;
   }
   if (f.type === 'select'){

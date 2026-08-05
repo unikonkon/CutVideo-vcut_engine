@@ -136,6 +136,20 @@ def compute_gain(I, TP, target, a):
     return round(gain, 2), (g_peak < g_loud)
 
 
+def seg_loud(seg, loud):
+    """ค่าความดัง/พีคที่ใช้คิด gain ของชิ้นนี้
+
+    ปกติเป็นของท่อนนี้เอง แต่ถ้าขั้นเตรียมวัดทั้งคลิปมาให้ (loud_ref) ใช้ของ
+    ทั้งคลิปแทน — ทุกท่อนในคลิปเดียวกันจึงได้ gain เท่ากันเป๊ะ ซึ่งคือทั้งหมด
+    ของโหมดนั้น · ต้องเอาพีคของทั้งคลิปมาด้วย ไม่ใช่แค่ LUFS ไม่งั้นเพดานพีค
+    จะบีบแต่ละท่อนคนละค่าแล้ว gain กลับมาไม่เท่ากันอีก
+    """
+    ref = seg.get("loud_ref")
+    if ref and len(ref) == 2:
+        return float(ref[0]), float(ref[1])
+    return loud.get(seg.get("_lkey"), [-70.0, -70.0])
+
+
 def build_afilter(seg, gain, ctx):
     a = ctx.get("audio", {})
     e = ctx.get("encode", {})
@@ -199,6 +213,9 @@ def measure_all(ctx, timeline, force=False):
     for s in timeline:
         k = f"{s['name']}@{s['start']:.3f}+{s['dur']:.3f}"
         s["_lkey"] = k
+        # ชิ้นที่มีค่าของทั้งคลิปติดมาแล้วไม่ต้องวัดซ้ำ — ค่าที่วัดได้จะไม่ถูกใช้
+        if s.get("loud_ref"):
+            continue
         if k not in cache:
             todo.append(s)
     if todo:
@@ -292,7 +309,7 @@ def run(ctx, force=False):
 
     plan, n_lim = [], 0
     for i, seg in enumerate(tl):
-        I, TP = loud.get(seg["_lkey"], [-70.0, -70.0])
+        I, TP = seg_loud(seg, loud)
         gain, limited = compute_gain(I, TP, float(seg["target_lufs"]), a)
         n_lim += limited
         k = seg_key(seg, ctx, gain)

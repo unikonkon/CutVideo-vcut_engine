@@ -290,6 +290,16 @@ FIELDS = [
       min=-40, max=-5, step=0.5, unit="LUFS"),
     F("audio.target_lufs_broll", "ความดังเป้า — ช่วงวิว", "float", "render", "render",
       min=-40, max=-5, step=0.5, unit="LUFS"),
+    # ── ระดับเสียง: สองสวิตช์ที่ทำให้ "ทุกวิดีโอดังเท่ากัน" คนละความหมาย ──
+    # stage เป็น prepare เพราะขั้นเตรียมเป็นคนตัดสินทั้งคู่ (เขียน target_lufs กับ
+    # loud_ref ลง pool.json) ส่วน tier เป็น render เพราะแก้แล้ว gain เปลี่ยน = ตัดชิ้นใหม่
+    F("audio.same_level", "ช่วงวิวดังเท่าช่วงพูด", "bool", "render", "prepare",
+      help="ปกติช่วงวิวตั้งไว้เบากว่าช่วงพูด เพื่อไม่ให้เสียงลมเสียงรถมาแข่งกับเสียงพูด "
+           "· เปิด = ใช้ 'ความดังเป้า — ช่วงพูด' กับทุกชิ้น ไม่แยกพูด/วิวอีก"),
+    F("audio.match_clips", "ปรับทั้งคลิปด้วยค่าเดียว", "bool", "render", "prepare",
+      help="ปกติวัดและปรับทีละท่อน — เสียงกระซิบกับเสียงตะโกนในคลิปเดียวกันจึงออกมา "
+           "ดังเท่ากันหมด · เปิด = วัดทั้งคลิปครั้งเดียวแล้วใช้ค่าเดียวทั้งคลิป "
+           "คลิปต่อคลิปดังเท่ากันแต่ในคลิปยังดัง-เบาตามที่ถ่ายมา"),
     F("audio.allow_limit", "ยอมให้ limiter กดได้", "float", "render", "render",
       min=0, max=24, step=1, unit="dB",
       help="สูงขึ้น = เสียงสม่ำเสมอขึ้นแต่ไดนามิกแคบลง · 0 = ไม่ให้ limiter ทำงานเลย"),
@@ -328,7 +338,8 @@ STEP_PARAMS = {
                 "prepare.keep", "prepare.min_piece", "prepare.min_clip",
                 "scan.exclude", "ai.enabled",
                 "ai.apply.drop", "ai.apply.trim",
-                "audio.target_lufs_talk", "audio.target_lufs_broll"],
+                "audio.target_lufs_talk", "audio.target_lufs_broll",
+                "audio.same_level", "audio.match_clips"],
 }
 
 
@@ -724,6 +735,9 @@ def step_status(ctx, cfg):
 # ─────────────────────────── ประเมินราคาก่อนกด ───────────────────────────
 
 DEFAULT_SEC_PER_SEGMENT = 11.0     # ใช้ตอนยังไม่เคย render จนวัดอัตราจริงได้
+# วัดจริงกับฟุตเทจชุดนี้: 271 คลิป (56 นาที) ใช้ 7.6 วิ ด้วย 6 งานพร้อมกัน
+# = 0.028 วิ/คลิป — ebur128 ถอดแค่เสียง ไม่แตะภาพเลย จึงเร็วกว่าที่คิดมาก
+SEC_PER_CLIP_MEASURE = 0.1
 
 
 def estimate(ctx):
@@ -746,14 +760,23 @@ def estimate(ctx):
     loud = read_json(ctx.work / "loudness.json", {}) or {}
     a = ctx.get("audio", {})
 
+    # โหมด "ปรับทั้งคลิปด้วยค่าเดียว" วัดเป็นรายคลิป ไม่ใช่รายท่อน — ต้องนับ
+    # ของที่ยังไม่ได้วัดด้วยหน่วยเดียวกับที่จะวัดจริง ไม่งั้นเวลาที่ประเมินบวมตาม
+    # จำนวนท่อน ทั้งที่งานจริงมีแค่จำนวนคลิป
+    by_clip = bool(ctx.get("audio.match_clips", False))
     reuse, new, unmeasured = 0, 0, 0
+    todo_clips = set()
     for seg in tl:
         k = f"{seg['name']}@{seg['start']:.3f}+{seg['dur']:.3f}"
-        if k not in loud:
+        seg["_lkey"] = k
+        # โหมดวัดทั้งคลิป: ชิ้นที่ยังไม่มีค่าของคลิปตัวเองคิดราคาไม่ได้เลย แม้จะเคย
+        # วัดทีละท่อนไว้ — ค่าที่เคยวัดจะไม่ถูกใช้ gain จริงจึงยังไม่รู้ = ต้องตัดใหม่
+        if not seg.get("loud_ref") and (by_clip or k not in loud):
             unmeasured += 1
             new += 1
+            todo_clips.add(seg["name"])
             continue
-        I, TP = loud[k]
+        I, TP = render.seg_loud(seg, loud)
         gain, _ = render.compute_gain(I, TP, float(seg["target_lufs"]), a)
         p = ctx.seg_dir / f"{render.seg_key(seg, ctx, gain)}.mov"
         if p.exists() and p.stat().st_size > 1024:
@@ -776,6 +799,7 @@ def estimate(ctx):
         "unmeasured": unmeasured,
         "sec_per_segment": round(rate, 2),
         "render_seconds": int(new * rate),
-        "measure_seconds": int(unmeasured * 1.2),
+        "measure_seconds": int(len(todo_clips) * SEC_PER_CLIP_MEASURE if by_clip
+                               else unmeasured * 1.2),
         "orphans": max(0, len(have) - reuse),
     }

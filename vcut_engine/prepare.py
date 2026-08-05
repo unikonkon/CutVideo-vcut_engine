@@ -12,8 +12,12 @@
 pool.json เก็บ **ทุกชิ้น** รวมทั้งชิ้นที่ตัวกรองคัดออก (ติดธง ok=false พร้อม
 เหตุผล) เพื่อให้หน้าเว็บหยิบกลับมาใส่เองได้ถ้าไม่เห็นด้วยกับตัวกรอง
 """
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
 from . import ai as ai_mod
-from .util import c, die, info, read_json, warn, write_json
+from .util import (Progress, c, die, info, measure_loudness, read_json, warn,
+                   write_json)
 
 
 # ─────────────────────────── ช่วงพูด ───────────────────────────
@@ -185,6 +189,58 @@ def drop_short(pieces, ctx, force):
             p["why"] = f"คลิปเหลือรวม {got:.1f} วิ (น้อยกว่า {min_clip:g} วิ)"
 
 
+# ─────────────────────────── ความดังของทั้งคลิป ───────────────────────────
+
+def _sig(path):
+    """ลายเซ็นไฟล์ — ขนาด+เวลาแก้ ใช้บอกว่าค่าที่วัดไว้ยังเป็นของไฟล์นี้อยู่ไหม"""
+    try:
+        st = Path(path).stat()
+        return f"{st.st_size}:{int(st.st_mtime)}"
+    except OSError:
+        return "0:0"
+
+
+def clip_loudness(ctx, clips, write):
+    """วัดความดังของ **ทั้งคลิป** ครั้งเดียวต่อไฟล์ → {ชื่อคลิป: [LUFS, true peak]}
+
+    ทำไมต้องวัดทั้งคลิป ทั้งที่ขั้น render วัดให้อยู่แล้ว: ตรงนั้นวัด *ทีละท่อน*
+    แล้วดันแต่ละท่อนขึ้นเป้าแยกกัน ผลคือเสียงกระซิบกับเสียงตะโกนในคลิปเดียวกัน
+    ออกมาดังเท่ากันหมด — ไดนามิกที่ถ่ายมาหายไปทั้งที่ไม่มีใครสั่ง
+    วัดทั้งคลิปแล้วใช้ค่าเดียวทั้งคลิป = คลิปต่อคลิปดังเท่ากัน แต่ข้างในคลิป
+    ยังดัง-เบาตามจริง
+
+    คืน true peak มาด้วย เพราะเพดานพีคต้องคิดจากทั้งคลิปเหมือนกัน ไม่งั้นท่อนที่
+    มีพีคสูงจะโดนบีบคนละค่ากับท่อนอื่น กลายเป็น gain ไม่เท่ากันทั้งที่ตั้งใจให้เท่า
+
+    แคชผูกกับลายเซ็นไฟล์ ไฟล์เดิมจึงวัดครั้งเดียวตลอดชีวิตโปรเจกต์ · ตอนประเมิน
+    (write=False) อ่านแคชอย่างเดียวไม่ยิง ffmpeg — พิมพ์เลขในฟอร์มไม่ควรจุดงานหนัก
+    คลิปที่ยังไม่มีค่าก็แค่ไม่ได้ loud_ref แล้วตกไปใช้วิธีวัดทีละท่อนตามเดิม
+    """
+    path = ctx.work / "cliploud.json"
+    cache = read_json(path, {}) or {}
+    sig = {cl["name"]: _sig(cl["src"]) for cl in clips}
+    todo = [cl for cl in clips
+            if cache.get(cl["name"], {}).get("sig") != sig[cl["name"]]]
+
+    if todo and write:
+        pr = Progress(len(todo), "วัดเสียงทั้งคลิป")
+
+        def one(cl):
+            I, TP = measure_loudness(cl["src"])
+            return cl["name"], {"sig": sig[cl["name"]],
+                                "lufs": round(I, 2), "peak": round(TP, 2)}
+
+        with ThreadPoolExecutor(max_workers=int(ctx.get("scan.workers", 6))) as ex:
+            for name, rec in ex.map(one, todo):
+                cache[name] = rec
+                pr.step(name)
+        pr.done()
+        write_json(path, cache)
+
+    return {n: [r["lufs"], r["peak"]] for n, r in cache.items()
+            if r.get("sig") == sig.get(n)}
+
+
 # ─────────────────────────── main ───────────────────────────
 
 def run(ctx, write=True):
@@ -210,8 +266,12 @@ def run(ctx, write=True):
     bands = bcfg.get("motion_bands", [8.0, 15.0])
     durs = bcfg.get("durations", [4.0, 3.0, 1.5])
     pick = bcfg.get("pick", "center")
+    # ระดับเสียง — สองสวิตช์ที่ตอบคนละคำถาม เปิดแยกกันได้
+    #   same_level  ช่วงวิวควรเบากว่าช่วงพูดไหม (เป้าคนละตัว vs ตัวเดียว)
+    #   match_clips เทียบเสียงกันด้วยหน่วยไหน (ทีละท่อน vs ทั้งคลิป)
     lufs_t = float(ctx.get("audio.target_lufs_talk", -19.0))
-    lufs_b = float(ctx.get("audio.target_lufs_broll", -26.0))
+    lufs_b = (lufs_t if bool(ctx.get("audio.same_level", False))
+              else float(ctx.get("audio.target_lufs_broll", -26.0)))
 
     thr = float(ctx.get("classify.min_speech_total", 1.0))
     drop_m = float(bcfg.get("drop_above_motion", 0) or 0)
@@ -235,6 +295,11 @@ def run(ctx, write=True):
     # คลิปที่ผู้ใช้ดึงกลับมาเองในขั้น 2 — ข้ามตัวกรองทุกตัว
     # ไม่ข้าม scan.exclude เพราะขั้น 1 พูดว่า "ไม่เอาคลิปนี้เลย" ซึ่งแรงกว่า
     force = set(ctx.get("prepare.keep", []) or []) - excl
+
+    # วัดเฉพาะคลิปที่ยังเอาไปใช้จริง — คลิปที่เอาออกตั้งแต่ขั้น 1 ไม่ต้องเสียเวลาวัด
+    used = [cl for cl in man["clips"] if cl["name"] not in excl]
+    loud_ref = (clip_loudness(ctx, used, write)
+                if bool(ctx.get("audio.match_clips", False)) else {})
 
     ch_title = {ch["id"]: ch["title"] for ch in (adv or {}).get("chapters", [])}
     pieces, trim_empty = [], []
@@ -275,6 +340,8 @@ def run(ctx, write=True):
             base["why"] = why
         if forced:
             base["forced"] = True
+        if cl["name"] in loud_ref:
+            base["loud_ref"] = loud_ref[cl["name"]]
         if adv:
             if hint.get("chapter"):
                 base["chapter"] = hint["chapter"]
@@ -347,6 +414,8 @@ def run(ctx, write=True):
             "forced": sum(1 for p in pieces if p.get("forced")),
             "jump_pieces": jump_pieces,
             "jump_saved": round(jump_saved, 1),
+            "loud_matched": len({p["name"] for p in ok if p.get("loud_ref")}),
+            "same_level": bool(ctx.get("audio.same_level", False)),
             "talk": sum(1 for p in ok if p["kind"] == "TALK"),
             "broll": sum(1 for p in ok if p["kind"] == "BROLL"),
             "duration_talk": round(sum(p["dur"] for p in ok if p["kind"] == "TALK"), 1),
@@ -377,6 +446,13 @@ def report(pool):
         note = f"(ประโยคถูกซอยเพิ่ม {s['jump_pieces']} ชิ้น — ตัดชนกัน)"
         info("─" * 62)
         info(f"  ตัดช่วงเงียบออก      {s['jump_saved'] / 60:>6.1f} นาที   {c(note, 'd')}")
+    if s.get("loud_matched") or s.get("same_level"):
+        info("─" * 62)
+        if s.get("loud_matched"):
+            info(f"  วัดเสียงทั้งคลิป     {s['loud_matched']:>4} คลิป  "
+                 f"{c('(ทุกท่อนในคลิปใช้ค่าปรับเดียวกัน)', 'd')}")
+        if s.get("same_level"):
+            info(f"  {c('ช่วงวิวดังเท่าช่วงพูด', 'd')}")
     if s["excluded"] or s.get("forced"):
         info("─" * 62)
     if s["excluded"]:

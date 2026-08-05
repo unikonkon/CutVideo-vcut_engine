@@ -224,6 +224,10 @@ achannels = 2            # mono -> stereo ให้เท่ากันทุ�
 [audio]
 target_lufs_talk  = -19.0
 target_lufs_broll = -26.0
+same_level  = false      # true = ช่วงวิวดังเท่าช่วงพูด (เลิกใช้ target_lufs_broll)
+match_clips = false      # true = วัดทั้งคลิปครั้งเดียว ทุกท่อนในคลิปใช้ gain เดียวกัน
+                         #        (ปกติวัดทีละท่อน ซึ่งทำให้เสียงเบา-ดังในคลิปเดียวกัน
+                         #         ถูกดันขึ้นเป้าเท่ากันหมด ไดนามิกในคลิปหายไป)
 tp_ceiling  = -4.0       # เพดาน true peak ต่อชิ้น (เผื่อ AAC overshoot)
 allow_limit = 12.0       # ยอมให้ limiter กดยอดคลื่นได้กี่ dB (0 = ไม่ให้ทำงานเลย)
 cap_up      = 32.0       # เร่งได้สูงสุดกี่ dB

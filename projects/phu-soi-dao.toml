@@ -32,6 +32,11 @@ min_silence = 0.35
 
 [prepare]
 min_piece = 1.6
+keep      = ["IMG_7075"]
 
 [talk]
 min_shot = 1.5
+
+[audio]
+match_clips = true
+same_level = false
