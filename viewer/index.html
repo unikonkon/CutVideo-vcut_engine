@@ -1004,6 +1004,43 @@ const stepOf = id => (D.steps || []).find(x => x.id === id) || {};
 const fieldOf = k => (D.fields || []).find(x => x.key === k);
 const putField = (parent, k) => { const f = fieldOf(k); if (f) parent.appendChild(field(f)); };
 
+// ── ยาวเท่าไรถึงเรียกว่าใช้ได้ ──────────────────────────────────
+//
+// พร้อมบอกทันทีว่าเกณฑ์ที่ตั้งอยู่จะคัดของออกกี่ชิ้น โดยนับจากคลังรอบล่าสุดที่
+// มีอยู่แล้ว — ตั้งตัวเลขแบบเดาแล้วรอตัดใหม่ทั้งกองถึงจะรู้ผล เป็นวิธีที่แพงมาก
+function minLen(){
+  const s = el('div', 'sect'); s.style.marginTop = '.9rem';
+  s.appendChild(el('h4', null, 'ยาวเท่าไรถึงเรียกว่าใช้ได้'));
+  putField(s, 'prepare.min_piece');
+  putField(s, 'prepare.min_clip');
+
+  const mp = +val('prepare.min_piece') || 0, mc = +val('prepare.min_clip') || 0;
+  const all = (POOL && POOL.pieces) || [];
+  if (all.length && (mp || mc)){
+    // นับแบบเดียวกับที่ prepare.drop_short ทำ: คัดต่อท่อนก่อน แล้วค่อยรวมต่อคลิป
+    const short = mp ? all.filter(p => p.dur < mp) : [];
+    const left = {};
+    all.forEach(p => { if (!mp || p.dur >= mp)
+      left[p.name] = (left[p.name] || 0) + p.dur; });
+    const thin = mc ? [...new Set(all.map(p => p.name))]
+      .filter(n => (left[n] || 0) < mc) : [];
+    const gone = all.filter(p => (mp && p.dur < mp) || (mc && thin.includes(p.name)));
+    const secs = gone.reduce((a, p) => a + p.dur, 0);
+    s.appendChild(el('p', 'note' + (gone.length ? ' warnnote' : ''),
+      gone.length
+        ? `เทียบกับคลังรอบล่าสุด (${all.length} ชิ้น): จะคัดออก ${gone.length} ชิ้น `
+          + `รวม ${mmss(secs)}`
+          + (short.length ? ` — ท่อนสั้น ${short.length} ชิ้น` : '')
+          + (thin.length ? ` · ทั้งคลิปไม่พอ ${thin.length} คลิป` : '')
+          + ' · กด ③ ตัดทีละคลิป ใหม่ถึงจะมีผลจริง'
+        : `เทียบกับคลังรอบล่าสุด (${all.length} ชิ้น): เกณฑ์นี้ไม่คัดอะไรออกเลย`));
+  }
+  s.appendChild(el('p', 'note',
+    'ของที่ไม่ผ่านยังอยู่ในคลัง ติดป้ายบอกเหตุผลไว้ ดึงกลับมาใส่เองได้ '
+    + '— เหมือนตัวกรองภาพสั่น/ภาพมืด · ตั้ง 0 = ไม่ใช้เกณฑ์นั้น'));
+  return s;
+}
+
 // ขั้นนี้ต้องทำใหม่ไหม — ยังไม่เคยทำ หรือทำไว้แล้วแต่ค่าที่ใช้ตอนนั้นเปลี่ยนไปแล้ว
 // (ตรรกะเดียวกับที่ serve.py ใช้เลือกขั้นให้ปุ่มหลัก จะได้ไม่บอกคนละอย่างกัน)
 const stepPending = id => {
@@ -1047,6 +1084,10 @@ function stepPrepare(box){
     basic.appendChild(el('p', 'note',
       'ป้ายข้างชื่อค่าบอกอยู่แล้วว่าแก้แล้วต้องทำอะไรใหม่'));
   }
+  // เกณฑ์ความยาวโผล่เสมอ ไม่ผูกกับสวิตช์ cut ชน — มันทำงานกับคลิปวิวด้วย และ
+  // ทำงานต่อแม้ปิด cut ชน ถ้าซ่อนตามสวิตช์จะกลายเป็นตัวกรองที่ยังคัดของอยู่
+  // แต่หาที่แก้ไม่เจอ
+  basic.appendChild(minLen());
   c.appendChild(basic);
 
   // ── กล่อง 2 · ปุ่มหลัก ──
@@ -3028,6 +3069,7 @@ function advanced(stages){
          'ai.apply.enabled','ai.apply.trim','ai.apply.drop',
          'compose.mode', 'jumpcut.enabled', 'jumpcut.noise_db',
          'jumpcut.min_silence', 'jumpcut.pad', 'jumpcut.min_piece',
+         'prepare.min_piece', 'prepare.min_clip',
          'order.mode', 'order.reverse']
         .includes(f.key)
     && !Object.values(MODE_FIELDS).flat().includes(f.key));

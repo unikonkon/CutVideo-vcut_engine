@@ -213,8 +213,19 @@ FIELDS = [
       help="สั้นกว่านี้คือจังหวะหายใจปกติ ตัดออกแล้วฟังกระชาก"),
     F("jumpcut.pad", "เผื่อไว้ข้างละ", "float", "edl", "prepare",
       min=0, max=0.5, step=0.01, unit="วิ", help="กันตัดโดนพยัญชนะต้น/ท้ายคำ"),
-    F("jumpcut.min_piece", "ชิ้นสั้นกว่านี้ทิ้ง", "float", "edl", "prepare",
-      min=0, max=3, step=0.05, unit="วิ"),
+    F("jumpcut.min_piece", "ซอยประโยคละเอียดได้ถึง", "float", "edl", "prepare",
+      min=0, max=3, step=0.05, unit="วิ",
+      help="ตอนคว้านช่วงเงียบ ถ้าซอยแล้วได้ท่อนสั้นกว่านี้ก็ไม่ซอยตรงนั้น "
+           "— ไม่ใช่ตัวคัดคลิปออก ถ้าซอยแล้วไม่เหลือสักท่อนจะคืนประโยคเดิมให้ทั้งดุ้น"),
+    # ── ยาวเท่าไรถึงเรียกว่าใช้ได้ — วัดที่ของที่จะเอาไปใช้จริง ──
+    F("prepare.min_piece", "ท่อนที่เอาไปใช้ ต้องยาวอย่างน้อย", "float", "edl", "prepare",
+      min=0, max=10, step=0.1, unit="วิ",
+      help="วัดหลังคว้านช่วงเงียบออกแล้ว ใช้กับทั้งคลิปพูดและคลิปวิว "
+           "· 0 = ไม่ใช้เกณฑ์นี้ · ของที่ไม่ผ่านยังอยู่ในคลัง ดึงกลับเองได้"),
+    F("prepare.min_clip", "คลิปที่เหลือรวมน้อยกว่านี้ ไม่เอาทั้งคลิป", "float", "edl", "prepare",
+      min=0, max=30, step=0.5, unit="วิ",
+      help="รวมทุกท่อนของคลิปนั้นแล้วเทียบ — จับคลิปที่เหลือแต่เศษกระจาย "
+           "ซึ่งเกณฑ์ต่อท่อนจับไม่ได้ · 0 = ไม่ใช้เกณฑ์นี้"),
     # ดึงกลับด้วยการติ๊กที่ตัวชิ้นในขั้น 2 ไม่ใช่กรอกในฟอร์ม (ดู type "clips")
     F("prepare.keep", "ชิ้นที่ดึงกลับมาเอง", "clips", "edl", "prepare"),
 
@@ -314,7 +325,8 @@ STEP_PARAMS = {
     # ai.apply.order/score_weight ไม่อยู่ตรงนี้ — สองตัวนั้นมีผลตอนรวมเป็นหนัง
     # (ขั้น 3) ไม่ใช่ตอนตัดคลิปเป็นชิ้น แก้แล้วไม่ต้องเตรียมคลังใหม่
     "prepare": ["talk", "broll", "classify.min_speech_total", "jumpcut",
-                "prepare.keep", "scan.exclude", "ai.enabled",
+                "prepare.keep", "prepare.min_piece", "prepare.min_clip",
+                "scan.exclude", "ai.enabled",
                 "ai.apply.drop", "ai.apply.trim",
                 "audio.target_lufs_talk", "audio.target_lufs_broll"],
 }

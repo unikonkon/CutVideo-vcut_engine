@@ -140,6 +140,51 @@ def ai_broll_window(clip_dur, length, mode, keeps):
     return round(st, 3), round(st + length, 3)
 
 
+# ─────────────────────────── เกณฑ์ความยาวขั้นต่ำ ───────────────────────────
+
+def drop_short(pieces, ctx, force):
+    """คัดของที่สั้นเกินกว่าจะเอาไปใช้จริง — ทำหลังสร้างชิ้นครบแล้วทั้งหมด
+
+    ทำไมต้องแยกออกมาทำทีหลัง ไม่ทำระหว่างสร้างชิ้น: เกณฑ์ "คลิปนี้เหลือรวม
+    เท่าไร" ต้องรู้ผลรวมของทุกท่อนในคลิปก่อนถึงตัดสินได้ และการคัดต้องเห็นทั้ง
+    คลิปพูดและคลิปวิวด้วยเกณฑ์เดียวกัน ซึ่งสองอย่างนี้สร้างคนละที่กัน
+
+    สองเกณฑ์ ตอบคนละคำถาม:
+      min_piece — ท่อนเดียวสั้นกว่านี้ = ท่อนนั้นเป็นเศษ ไม่ใช่ช็อต
+      min_clip  — ทุกท่อนรวมกันแล้วยังน้อยกว่านี้ = ทั้งคลิปให้อะไรไม่พอ
+                  (ตัดคลิปที่เหลือแต่เศษกระจาย ซึ่ง min_piece จับไม่ได้)
+
+    ไม่ลบทิ้ง — ติดป้าย ok=False + เหตุผล เหมือนตัวกรองภาพสั่น/ภาพมืด ของยัง
+    อยู่ในคลังให้เห็นและดึงกลับเองได้ · คลิปที่ดึงกลับมาแล้ว (prepare.keep)
+    ข้ามทุกเกณฑ์ ไม่งั้นดึงกลับเท่าไรก็โดนคัดออกซ้ำทุกรอบ
+    """
+    p_cfg = ctx.get("prepare", {}) or {}
+    min_piece = max(0.0, float(p_cfg.get("min_piece", 0) or 0))
+    min_clip = max(0.0, float(p_cfg.get("min_clip", 0) or 0))
+    if not min_piece and not min_clip:
+        return
+
+    for p in pieces:
+        if p["ok"] and min_piece and p["name"] not in force \
+                and p["dur"] < min_piece:
+            p["ok"] = False
+            p["why"] = f"ท่อนสั้นกว่า {min_piece:g} วิ"
+
+    if not min_clip:
+        return
+    left = {}
+    for p in pieces:
+        if p["ok"]:
+            left[p["name"]] = left.get(p["name"], 0.0) + p["dur"]
+    for p in pieces:
+        if not p["ok"] or p["name"] in force:
+            continue
+        got = left.get(p["name"], 0.0)
+        if got < min_clip:
+            p["ok"] = False
+            p["why"] = f"คลิปเหลือรวม {got:.1f} วิ (น้อยกว่า {min_clip:g} วิ)"
+
+
 # ─────────────────────────── main ───────────────────────────
 
 def run(ctx, write=True):
@@ -284,6 +329,8 @@ def run(ctx, write=True):
     if trim_empty and write:
         warn(f"ช่วงที่ AI แนะนำไม่ทับกับช่วงที่พูดจริงใน {len(trim_empty)} คลิป "
              f"— ใช้ช่วงจาก VAD ตามเดิม")
+
+    drop_short(pieces, ctx, force)
 
     ok = [p for p in pieces if p["ok"]]
     from .settings import params_of
