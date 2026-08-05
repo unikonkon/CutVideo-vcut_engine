@@ -67,6 +67,60 @@ def _whisper(ctx, wav, out_base):
     return Path(f"{out_base}.json").exists(), r.stderr
 
 
+# ─────────────────────────── เขียนบทพูดเป็นไฟล์ ───────────────────────────
+
+def _srt_clock(t):
+    """วินาที → HH:MM:SS,mmm
+
+    ปัดเป็นมิลลิวินาทีให้จบก่อนแล้วค่อยหารเป็นชั่วโมง/นาที/วินาที — ถ้าปัดเศษ
+    ทีหลัง 1.9996 วิ จะได้ 01,1000 ซึ่งเป็นสี่หลัก ไฟล์ srt เสียทั้งไฟล์
+    """
+    ms = int(round(max(0.0, t) * 1000))
+    h, ms = divmod(ms, 3_600_000)
+    m, ms = divmod(ms, 60_000)
+    s, ms = divmod(ms, 1000)
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+
+def text_dir(ctx):
+    return ctx.work / "text"
+
+
+def export_text(ctx, result):
+    """บทพูดเป็นไฟล์แยกต่อคลิป — txt ไว้อ่าน · srt มีเวลา เอาไปทำซับได้เลย
+
+    เขียนลง .vcut/text/ ไม่ไปแตะโฟลเดอร์ฟุตเทจต้นฉบับ โฟลเดอร์นั้นเป็นของผู้ใช้
+    ไม่ใช่ที่ทำงานของเรา — เครื่องมือที่แอบวางไฟล์ปนไว้กับของดิบ พอย้ายกองฟุตเทจ
+    ทีก็พาขยะไปด้วยทุกที และแยกไม่ออกว่าอันไหนใครทำ
+
+    คลิปที่ไม่มีคำพูดไม่เขียนไฟล์เปล่าทิ้งไว้ · ไฟล์เก่าของคลิปที่รอบนี้ถอดแล้ว
+    ไม่เหลือคำพูดจะถูกลบ ไม่งั้นมันค้างอยู่แล้วหลอกว่ายังมีบทพูดของคลิปนั้นอยู่
+    """
+    mode = str(ctx.get("listen.export", "off") or "off")
+    if mode not in ("txt", "srt", "both"):
+        return {}
+    out = text_dir(ctx)
+    out.mkdir(parents=True, exist_ok=True)
+    kinds = ["txt", "srt"] if mode == "both" else [mode]
+
+    made = {}
+    for name, segs in result.items():
+        for kind in kinds:
+            f = out / f"{name}.{kind}"
+            if not segs:
+                f.unlink(missing_ok=True)
+                continue
+            if kind == "txt":
+                f.write_text("\n".join(t for _, _, t in segs) + "\n", encoding="utf-8")
+            else:
+                f.write_text("".join(
+                    f"{i}\n{_srt_clock(a)} --> {_srt_clock(b)}\n{t}\n\n"
+                    for i, (a, b, t) in enumerate(segs, 1)), encoding="utf-8")
+            made.setdefault(kind, 0)
+            made[kind] += 1
+    return made
+
+
 def run(ctx, force=False):
     man = read_json(ctx.manifest)
     if not man:
@@ -138,11 +192,11 @@ def run(ctx, force=False):
     from .settings import params_of
     data = {"params": params_of(ctx.cfg, "listen"), "clips": result}
     write_json(ctx.transcript, data)
-    report(clips, result, ctx)
+    report(clips, result, ctx, export_text(ctx, result))
     return data
 
 
-def report(clips, tr, ctx):
+def report(clips, tr, ctx, made=None):
     thr = float(ctx.get("classify.min_speech_total", 1.0))
     talk = [cl for cl in clips
             if sum(b - a for a, b, _ in tr.get(cl["name"], [])) >= thr]
@@ -154,4 +208,8 @@ def report(clips, tr, ctx):
     info(f"  ไม่มีเสียงพูด    {len(broll):>4} คลิป   "
          f"{sum(x['duration'] for x in broll) / 60:>6.1f} นาที")
     info(f"  เวลาที่มีเสียงพูดจริง         {speech / 60:>6.1f} นาที")
+    if made:
+        info(f"  เขียนไฟล์บทพูด    "
+             + "  ".join(f"{n} ไฟล์ .{k}" for k, n in sorted(made.items()))
+             + f"   {c(f'({text_dir(ctx)})', 'd')}")
     info("─" * 62)

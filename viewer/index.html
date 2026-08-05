@@ -35,8 +35,8 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff;fo
 button.sm{padding:.25em .6em;font-size:12.5px}
 button.ghost{background:transparent;border-color:transparent;color:var(--dim);padding:.2em .5em}
 button.ghost:hover{color:var(--fg)}
-input[type=text],input[type=number],select,textarea{width:100%;padding:.38em .55em;
-  background:var(--bg);border:1px solid var(--line);border-radius:5px}
+input[type=text],input[type=number],input[type=search],select,textarea{width:100%;
+  padding:.38em .55em;background:var(--bg);border:1px solid var(--line);border-radius:5px}
 input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
 textarea{resize:vertical}
 
@@ -192,6 +192,27 @@ li.row.drag{opacity:.35} li.row.over{border-top:2px solid var(--accent)}
 video{width:100%;border-radius:5px;background:#000;display:block}
 .quote{font-size:12px;color:var(--dim);margin-top:.5rem;max-height:7em;overflow:auto;
   border-left:2px solid var(--line);padding-left:.6rem}
+/* บทพูด — แต่ละบรรทัดกดได้ กดแล้วกระโดดไปวินาทีนั้นในวิดีโอ */
+.trl{max-height:17em;overflow:auto;display:flex;flex-direction:column;gap:1px;
+  border:1px solid var(--line);border-radius:6px;padding:.25rem}
+.trl.tall{max-height:26em}
+.trl button{display:flex;gap:.55rem;align-items:baseline;width:100%;text-align:left;
+  background:none;border:0;border-radius:4px;padding:.2rem .35rem;color:inherit;
+  font-size:12.5px;line-height:1.5;cursor:pointer}
+.trl button:hover{background:var(--line)}
+.trl .t{font:11px ui-monospace,Menlo,monospace;color:var(--dim);flex:none;
+  font-variant-numeric:tabular-nums}
+.trl .x{flex:1;min-width:0}
+.trl .cn{font-size:11px;color:var(--dim);flex:none}
+.trl mark{background:#8a6d1a55;color:inherit;border-radius:2px}
+.trl .hd{font-size:11px;color:var(--dim);padding:.35rem .35rem .1rem;
+  position:sticky;top:0;background:var(--panel)}
+.trs{display:flex;gap:.4rem;align-items:center;margin:.5rem 0 .45rem}
+.trs input{flex:1;min-width:0}
+.trdl{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.5rem}
+.trdl a{font-size:11.5px;color:var(--dim);text-decoration:none;border:1px solid var(--line);
+  border-radius:5px;padding:.15rem .5rem}
+.trdl a:hover{color:var(--fg);border-color:var(--dim)}
 #log{font:11.5px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;max-height:15em;
   overflow:auto;color:var(--dim);word-break:break-word}
 /* กำลังทำงานอยู่ไหม ทำถึงไหนแล้ว — อยู่เหนือบันทึก จะได้เห็นก่อนตัวหนังสือ */
@@ -461,7 +482,10 @@ const $ = s => document.querySelector(s);
 const el = (t, cls, txt) => { const e = document.createElement(t);
   if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 
-let D = null, POOL = null, S = null, RV = null, RST = null, CL = null;
+let D = null, POOL = null, S = null, RV = null, RST = null, CL = null, TR = null;
+// คำที่พิมพ์ค้นในบทพูด + คลิป/วินาทีที่สั่งให้กระโดดไป — เก็บนอก render() เพราะ
+// การ์ดถูกวาดใหม่ทั้งใบทุกครั้งที่แตะอะไรก็ตาม ถ้าเก็บไว้ในนั้นคำค้นจะหายทุกคีย์
+let trQuery = '', trSeek = null;
 let clFilter = 'all', clOpen = -1, clDrag = null;
 // ตำแหน่งที่เลื่อนตารางคลิปไว้ — render() ล้าง #body ทั้งก้อนทุกครั้ง .grid จึงเกิด
 // ใหม่เสมอและกลับไปอยู่บนสุดถ้าไม่จำไว้เอง คนเลื่อนลงไปคลิกดูคลิปใบที่ 40 แล้ว
@@ -513,11 +537,13 @@ const post = (p, b) => api(p, {method:'POST', headers:{'Content-Type':'applicati
 // ── โหลดสถานะทั้งหมด ─────────────────────────────────────────────
 
 async function load(keepEdits){
-  const [d, pool, st, cl] = await Promise.all([
+  const [d, pool, st, cl, tr] = await Promise.all([
     api('/api/setup'), api('/api/pool').catch(() => ({has:false, pieces:[]})),
     api('/api/state').catch(() => null),
-    api('/api/clips').catch(() => ({clips:[], summary:{total:0}}))]);
-  D = d; POOL = pool; S = st; CL = cl;
+    api('/api/clips').catch(() => ({clips:[], summary:{total:0}})),
+    api('/api/transcript').catch(() => ({exists:false, clips:{}, order:[], files:{},
+                                         summary:{clips:0}}))]);
+  D = d; POOL = pool; S = st; CL = cl; TR = tr;
   if (!keepEdits){
     edits = {}; poolKeep = null; clEdits = {pick: {}, rot: {}, vmode: {}, order: null};
   }
@@ -900,6 +926,44 @@ function drawClip(){
       + ') — ลองเปิดด้วย Safari หรือดูจากตัวอย่างที่ ffmpeg ทำให้ข้างล่าง')); };
   w.append(v); b.append(w);
 
+  // ── บทพูดของคลิปนี้ ──
+  // อยู่บนสุดถัดจากภาพ เพราะเป็นของที่ตอบว่า "คลิปนี้คืออะไร" ได้เร็วที่สุด
+  // เร็วกว่านั่งดูวิดีโอทั้งใบ ส่วนหมุน/แนวตั้งเป็นการตั้งค่า ไม่ใช่การดู
+  const lines = trLines(x.name);
+  if (lines.length){
+    const st = el('div', 'sect');
+    st.append(el('h4', null, `บทพูดในคลิปนี้ · ${lines.length} ท่อน`));
+    st.append(trList(lines.map(([a, bb, t]) => ({name: x.name, a, b: bb, text: t})),
+                     r => { try { v.currentTime = r.a; } catch(e){}
+                            v.play().catch(() => {}); }));
+    const got = (TR && TR.files && TR.files[x.name]) || [];
+    if (got.length){
+      const dl = el('div', 'trdl');
+      got.forEach(kind => {
+        const a = el('a', null, `โหลด .${kind}`);
+        a.href = `/text/${x.name}.${kind}`;
+        a.download = `${x.name}.${kind}`;
+        dl.append(a);
+      });
+      st.append(dl);
+    }
+    st.append(el('p', 'note', 'กดที่บรรทัดไหน วิดีโอข้างบนกระโดดไปวินาทีนั้นแล้วเล่นต่อ'));
+    b.append(st);
+  } else if (trHas()){
+    b.append(el('p', 'note', 'ถอดเสียงแล้วแต่คลิปนี้ไม่มีคำพูด — ถูกจัดเป็นช่วงวิว'));
+  }
+
+  // มาจากการกดบรรทัดในกล่องค้นที่ขั้น 2 — เลื่อนไปวินาทีที่พูดประโยคนั้น
+  // (ตัว <video> อาจเพิ่งสร้างและยังไม่รู้ความยาวตัวเอง ตั้ง currentTime ตอนนั้น
+  //  ไม่มีผล ต้องรอ metadata ก่อน)
+  if (trSeek && trSeek.name === x.name){
+    const at = trSeek.t;
+    trSeek = null;
+    const go = () => { try { v.currentTime = at; } catch(e){} };
+    if (v.readyState >= 1) go();
+    else v.addEventListener('loadedmetadata', go, {once: true});
+  }
+
   const s1 = el('div', 'sect');
   s1.append(el('h4', null, 'หมุนคลิป'));
   const seg = el('div', 'seg');
@@ -1050,6 +1114,122 @@ function minLen(){
   return s;
 }
 
+// ── บทพูดที่ถอดได้ ──────────────────────────────────────────────
+//
+// ขั้น ① ถอดเสียงให้อยู่แล้วตั้งแต่แรก แต่ผลของมันไม่เคยโผล่ที่ไหนในหน้าเว็บเลย
+// — เห็นแค่เศษข้อความที่ติดมากับชิ้นในคลัง กดถอดเสียงไปแล้วจึงไม่มีทางรู้ว่ามัน
+// ได้ยินว่าอะไร ตรงไหมไหม ตรงนี้คือที่อ่านของจริง
+//
+// สองที่ที่อ่านได้ตอบคนละคำถาม: ในการ์ดคลิป (ขั้น 1) = "คลิปนี้พูดอะไร" ดูคู่กับ
+// ภาพได้เลย · กล่องในขั้น 2 = "ใครพูดคำนี้บ้าง" ค้นทั้งกองแล้วกระโดดไปหา
+
+const trLines = name => (TR && TR.clips && TR.clips[name]) || [];
+const trHas = () => !!(TR && TR.exists && TR.summary && TR.summary.segments);
+
+// เน้นคำที่ค้นเจอโดยไม่แตะ innerHTML — ข้อความมาจาก whisper ซึ่งเป็นข้อความที่
+// เราไม่ได้เขียนเอง ต่อเป็น HTML ตรง ๆ ไม่ได้
+function trMark(text, q){
+  const box = el('span', 'x');
+  if (!q) { box.textContent = text; return box; }
+  const low = text.toLowerCase(), needle = q.toLowerCase();
+  let i = 0, at;
+  while ((at = low.indexOf(needle, i)) >= 0){
+    if (at > i) box.append(text.slice(i, at));
+    box.append(el('mark', null, text.slice(at, at + needle.length)));
+    i = at + needle.length;
+  }
+  box.append(text.slice(i));
+  return box;
+}
+
+// กดบรรทัดในกล่องค้น → ไปขั้น 1 เปิดคลิปใบนั้น แล้วเลื่อนวิดีโอไปวินาทีที่พูด
+function trGo(name, t){
+  clFilter = 'all';                    // ใบที่จะเปิดอาจถูกกรองซ่อนอยู่
+  const i = clList().findIndex(x => x.name === name);
+  if (i < 0) return toast('ไม่พบคลิปนี้ในรายการ — อาจถูกเอาออกไปแล้ว', true);
+  trSeek = {name, t};
+  step = 1; clOpen = i;
+  renderSteps(); render();
+}
+
+// รายการบรรทัดบทพูด — ใช้ทั้งในการ์ดคลิปและในกล่องค้น ต่างกันแค่ทำอะไรตอนกด
+function trList(rows, onPick, opt){
+  const box = el('div', 'trl' + ((opt && opt.tall) ? ' tall' : ''));
+  let last = null;
+  rows.forEach(r => {
+    if (opt && opt.showClip && r.name !== last){
+      last = r.name;
+      box.append(el('div', 'hd', r.name));
+    }
+    const b = el('button');
+    b.type = 'button';
+    b.title = `ไปที่ ${mmss(r.a)} ของ ${r.name}`;
+    b.append(el('span', 't', mmss(r.a)), trMark(r.text, opt && opt.mark));
+    b.onclick = () => onPick(r);
+    box.append(b);
+  });
+  return box;
+}
+
+// กล่องค้นบทพูดทั้งกอง — ใต้ ① ในขั้น 2
+function trBox(){
+  const s = el('div', 'sect'); s.style.marginTop = '.9rem';
+  s.appendChild(el('h4', null, 'บทพูดที่ถอดได้'));
+
+  if (!trHas()){
+    s.appendChild(el('p', 'note', TR && TR.exists
+      ? 'ถอดแล้วแต่ไม่พบคำพูดเลยสักคลิป — ถ้าคลิปมีคนพูดจริง ลองเช็คภาษาที่ตั้งไว้'
+      : 'ยังไม่เคยถอดเสียง — กด ① ก่อน แล้วบทพูดของทุกคลิปจะมาอยู่ตรงนี้'));
+    return s;
+  }
+
+  const sum = TR.summary;
+  s.appendChild(el('p', 'note',
+    `${sum.clips} คลิป · มีคำพูด ${sum.with_speech} คลิป · ${sum.segments} ท่อน · `
+    + `${sum.chars.toLocaleString()} ตัวอักษร · พูดจริงรวม ${mmss(sum.speech)}`));
+
+  const bar = el('div', 'trs');
+  const q = el('input');
+  q.type = 'search'; q.placeholder = 'ค้นคำในบทพูด…'; q.value = trQuery;
+  const cnt = el('span', 'note'); cnt.style.margin = '0';
+  const holder = el('div');
+
+  const fill = () => {
+    const query = trQuery.trim();
+    const rows = [];
+    (TR.order || Object.keys(TR.clips)).forEach(name => {
+      trLines(name).forEach(([a, b, t]) => {
+        if (!query || t.toLowerCase().includes(query.toLowerCase()))
+          rows.push({name, a, b, text: t});
+      });
+    });
+    holder.innerHTML = '';
+    cnt.textContent = query
+      ? `เจอ ${rows.length} ท่อน ใน ${new Set(rows.map(r => r.name)).size} คลิป`
+      : `ทั้งหมด ${rows.length} ท่อน`;
+    if (!rows.length){
+      holder.appendChild(el('p', 'note warnnote', `ไม่เจอ "${query}" ในบทพูดของคลิปไหนเลย`));
+      return;
+    }
+    // จำกัดที่ 400 บรรทัด — วาดทั้งพันบรรทัดทุกครั้งที่พิมพ์ทีละตัวทำให้หน่วง
+    // และบอกตรง ๆ ว่าตัดไว้ ไม่ใช่เงียบ ๆ แล้วให้เข้าใจว่าเจอเท่านี้จริง
+    const show = rows.slice(0, 400);
+    holder.appendChild(trList(show, r => trGo(r.name, r.a),
+                              {showClip: true, tall: true, mark: query}));
+    if (rows.length > show.length)
+      holder.appendChild(el('p', 'note',
+        `แสดง ${show.length} ท่อนแรกจาก ${rows.length} — พิมพ์คำค้นให้แคบลงเพื่อดูที่เหลือ`));
+  };
+
+  q.oninput = () => { trQuery = q.value; fill(); };
+  bar.append(q, cnt);
+  s.append(bar, holder);
+  fill();
+  s.appendChild(el('p', 'note', 'กดที่บรรทัดไหนก็ได้ → เปิดคลิปนั้นในขั้น 1 '
+    + 'พร้อมเลื่อนวิดีโอไปวินาทีที่พูดประโยคนั้นให้เลย'));
+  return s;
+}
+
 // ── ระดับเสียง ──────────────────────────────────────────────────
 //
 // เครื่องปรับความดังให้อยู่แล้วโดยไม่ต้องตั้งอะไร สองสวิตช์นี้ไม่ได้เปิด/ปิดการปรับ
@@ -1125,8 +1305,21 @@ function stepPrepare(box){
   // ── กล่อง 1 · ไม่ใช้ AI ──
   const basic = el('div', 'sect');
   basic.appendChild(el('h4', null, 'พื้นฐาน · ทำในเครื่อง ไม่เสียโควตา'));
+  // ① มีสวิตช์ของตัวเองเหมือนที่ ② มี — เดิมสวิตช์นี้มีอยู่แล้วแต่ไปซ่อนอยู่ใน
+  // "ตั้งค่าเพิ่มเติม" ที่พับไว้ มองจากหน้านี้จึงไม่รู้เลยว่าปิดได้ และไม่รู้ว่า
+  // ขั้นนี้ถอดเสียงในเครื่อง ไม่ได้ส่งอะไรออกไปให้ AI
+  putField(basic, 'listen.enabled');
   basic.appendChild(stepRow('listen', '①', 'ดึงบทพูด',
                             'ถอดเสียงทุกคลิปด้วย whisper.cpp ในเครื่อง'));
+  if (val('listen.enabled')){
+    ['listen.language', 'listen.model', 'listen.threads',
+     'listen.export', 'listen.import_dir'].forEach(k => putField(basic, k));
+    basic.appendChild(trBox());
+  } else {
+    basic.appendChild(el('p', 'note warnnote',
+      'ปิดอยู่ — จะไม่มีบทพูดเลย ทุกคลิปถูกจัดเป็นช่วงวิวหมด และ "ตัดช่วงเงียบ" '
+      + 'กับความเห็นจาก AI ที่อ่านจากบทพูดจะไม่มีอะไรให้ทำงานด้วย'));
+  }
   putField(basic, 'jumpcut.enabled');
   if (val('jumpcut.enabled')){
     basic.appendChild(stepRow('silence', '②', 'หาช่วงเงียบ',
@@ -3171,6 +3364,8 @@ function advanced(stages){
     && !['project.source','project.name','project.out','ai.enabled','ai.goal',
          'ai.tasks','ai.model','ai.apply.order',
          'ai.apply.enabled','ai.apply.trim','ai.apply.drop',
+         'listen.enabled', 'listen.language', 'listen.model', 'listen.threads',
+         'listen.export', 'listen.import_dir',
          'compose.mode', 'jumpcut.enabled', 'jumpcut.noise_db',
          'jumpcut.min_silence', 'jumpcut.pad', 'jumpcut.min_piece',
          'prepare.min_piece', 'prepare.min_clip',
@@ -3186,7 +3381,7 @@ function advanced(stages){
 // สวิตช์ที่เปลี่ยน "หน้าตาของการ์ด" ไม่ใช่แค่ค่าในช่องตัวเอง — ต้องวาดการ์ดใหม่
 // ทั้งใบ ไม่งั้นสวิตช์ติดแล้วแต่ของรอบข้างยังเป็นของเดิม: ปิด cut ชน แล้วปุ่ม
 // ② หาช่วงเงียบ ยังอยู่ · เปิดโหมดเสียงแล้วคำอธิบายใต้สวิตช์ยังบอกของโหมดเก่า
-const RERENDER = new Set(['ai.enabled', 'jumpcut.enabled',
+const RERENDER = new Set(['ai.enabled', 'jumpcut.enabled', 'listen.enabled',
                           'audio.same_level', 'audio.match_clips']);
 
 function setKey(key, orig, v){

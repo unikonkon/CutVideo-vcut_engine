@@ -125,11 +125,24 @@ FIELDS = [
     F("video.vertical_overrides", "โหมดแนวตั้งรายคลิป", "clips", "render", "render"),
 
     # ── ถอดเสียง ──
-    F("listen.enabled", "ถอดเสียง", "bool", "listen", "listen",
-      help="ปิด = ทุกคลิปกลายเป็นช่วงวิวหมด ไม่มีช่วงพูดเลย"),
-    F("listen.language", "ภาษา", "str", "listen", "listen"),
+    F("listen.enabled", "ถอดเสียงเป็นข้อความ", "bool", "listen", "listen",
+      help="ทำในเครื่องด้วย whisper.cpp ไม่ส่งอะไรออกเน็ตและไม่เสียโควตา "
+           "· ปิด = ทุกคลิปกลายเป็นช่วงวิวหมด ไม่มีช่วงพูดเลย"),
+    F("listen.language", "ภาษา", "str", "listen", "listen",
+      placeholder="th", help="รหัสภาษาสองตัว เช่น th · en · ja — auto = ให้เดาเอง"),
+    F("listen.model", "โมเดล whisper", "path", "listen", "listen",
+      help="ไฟล์ ggml-*.bin ในเครื่อง · large-v3-turbo แม่นสุดแต่ช้ากว่า "
+           "small/medium หลายเท่า เปลี่ยนแล้วต้องถอดใหม่ทั้งกอง"),
+    F("listen.threads", "ใช้กี่เธรด", "int", "free", "listen", min=1, max=16, step=1,
+      help="ไม่มีผลต่อผลลัพธ์ มีผลแค่ความเร็ว — M3 8GB: 6 กำลังดี"),
     F("listen.import_dir", "ดึง transcript จากที่อื่น", "path", "listen", "listen",
       help="มีผลถอดเสียงจากรอบก่อนอยู่แล้ว ชี้มาที่นี่เพื่อข้ามขั้นนี้ทั้งหมด"),
+    F("listen.export", "เขียนไฟล์บทพูดแยกต่อคลิป", "select", "listen", "listen",
+      options=["off", "txt", "srt", "both"],
+      labels={"off": "ไม่เขียน", "txt": "ข้อความล้วน (.txt)",
+              "srt": "มีเวลา ทำซับได้ (.srt)", "both": "เขียนทั้งสองแบบ"},
+      help="เก็บไว้ที่ .vcut/text/ ไม่ไปแตะโฟลเดอร์ฟุตเทจต้นฉบับ · เปลี่ยนแล้วกด ① "
+           "อีกครั้ง ซึ่งไม่ได้ถอดเสียงใหม่ — ของเดิมอยู่ในแคช เขียนไฟล์อย่างเดียว"),
     F("classify.min_speech_total", "พูดรวมกี่วิถึงนับเป็นคลิปพูด", "float", "edl", "listen",
       min=0, max=10, step=0.5, unit="วิ"),
 
@@ -326,8 +339,11 @@ STEP_PARAMS = {
     "scan": ["project.source", "scan.extensions", "scan.motion_window",
              "scan.motion_fps", "scan.bright_fps", "scan.rotation_overrides",
              "scan.color"],
+    # listen.export อยู่ตรงนี้ทั้งที่ไม่ได้เปลี่ยนบทพูดสักตัว — เพราะไฟล์ที่เขียนไว้
+    # เป็นผลลัพธ์ของขั้นนี้เหมือนกัน เปลี่ยนแล้วต้องกด ① อีกทีถึงจะได้ไฟล์ตามที่สั่ง
+    # (รอบนั้นไม่ถอดเสียงใหม่ ทุกคลิปยังอยู่ในแคช)
     "listen": ["listen.enabled", "listen.model", "listen.language",
-               "listen.import_dir", "listen.filter"],
+               "listen.import_dir", "listen.filter", "listen.export"],
     "thumbs": ["thumbs.width", "thumbs.sheet_cols", "thumbs.sheet_rows"],
     "ai": ["ai.model", "ai.tasks", "ai.sheets", "ai.transcript_chars",
            "ai.batch_clips", "ai.goal"],

@@ -52,6 +52,10 @@ language = "th"
 threads  = 6
 keep_wav = false         # true = เก็บ wav 16k ไว้ (กินดิสก์ ~30MB/ชม.)
 
+# เขียนบทพูดเป็นไฟล์แยกต่อคลิปไว้ที่ .vcut/text/ — off | txt | srt | both
+# (txt = ข้อความล้วน · srt = มีเวลาให้เอาไปทำซับได้เลย)
+export = "off"
+
 # ถ้ามี transcript จากรอบก่อนอยู่แล้ว ชี้มาที่นี่เพื่อข้ามขั้นถอดเสียง
 # รองรับรูปแบบ output ของ whisper.cpp (-oj) : <ชื่อคลิป>.wav.json หรือ <ชื่อคลิป>.json
 import_dir = ""

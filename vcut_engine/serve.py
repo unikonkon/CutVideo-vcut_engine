@@ -560,6 +560,49 @@ def build_pool(ctx):
     return pool
 
 
+def build_transcript(ctx):
+    """บทพูดที่ถอดไว้ ทั้งกอง — เรียงตามลำดับที่คนจัดไว้ในขั้น 1
+
+    แยกออกมาเป็นเส้นทางของตัวเอง ไม่ยัดใส่ /api/state ที่หน้าเว็บถามซ้ำทุกวินาที
+    ตอนมีงานรันอยู่ — ข้อความทั้งกองไม่ได้เปลี่ยนบ่อยขนาดนั้น โหลดตอนเปิดหน้า
+    ครั้งเดียวพอ
+
+    ส่ง `files` มาด้วยว่าคลิปไหนมีไฟล์ .txt/.srt เขียนไว้แล้ว หน้าเว็บจะได้ทำลิงก์
+    ให้กดโหลดได้เฉพาะอันที่มีจริง ไม่ใช่โชว์ลิงก์ตายไว้ทุกคลิป
+    """
+    from . import listen as listen_mod
+    data = read_json(ctx.transcript, {}) or {}
+    tr = data.get("clips", {}) or {}
+    man = read_json(ctx.manifest, {}) or {}
+    names = [c["name"] for c in man.get("clips", [])]
+    seq = clips.seq_index(ctx, names) if names else {}
+    order = sorted(tr, key=lambda n: (seq.get(n, 10 ** 6), n))
+
+    tdir = listen_mod.text_dir(ctx)
+    files = {}
+    if tdir.is_dir():
+        for f in tdir.iterdir():
+            if f.suffix in (".txt", ".srt") and f.stem in tr:
+                files.setdefault(f.stem, []).append(f.suffix[1:])
+
+    segs = sum(len(v) for v in tr.values())
+    return {
+        "exists": ctx.transcript.exists(),
+        "enabled": bool(ctx.get("listen.enabled", True)),
+        "export": str(ctx.get("listen.export", "off") or "off"),
+        "order": order,
+        "clips": tr,
+        "files": {k: sorted(v) for k, v in files.items()},
+        "summary": {
+            "clips": len(tr),
+            "with_speech": sum(1 for v in tr.values() if v),
+            "segments": segs,
+            "chars": sum(len(t) for v in tr.values() for _, _, t in v),
+            "speech": round(sum(b - a for v in tr.values() for a, b, _ in v), 1),
+        },
+    }
+
+
 def build_review(ctx):
     """ข้อเสนอล่าสุดของ AI ที่ดูหนังตัดแล้ว + บอกว่ามันเก่าไปหรือยัง
 
@@ -763,6 +806,25 @@ def make_handler(ctx, job):
 
             if p == "/api/clips":
                 return self._json(clips.view(ctx))
+
+            if p == "/api/transcript":
+                return self._json(build_transcript(ctx))
+
+            # ไฟล์บทพูดที่ขั้น ① เขียนไว้ — ให้กดโหลดจากหน้าเว็บได้เลย
+            if p.startswith("/text/"):
+                name = p[len("/text/"):]
+                if not SAFE_NAME.match(name) or not name.endswith((".txt", ".srt")):
+                    return self._send(400, b"bad name", "text/plain")
+                from . import listen as listen_mod
+                f = listen_mod.text_dir(ctx) / name
+                # ห้ามให้ชื่อไฟล์พาออกนอกโฟลเดอร์ที่ตั้งใจเปิด
+                try:
+                    f.resolve().relative_to(listen_mod.text_dir(ctx).resolve())
+                except (ValueError, OSError):
+                    return self._send(400, b"bad name", "text/plain")
+                if not f.exists():
+                    return self._send(404, b"not found", "text/plain")
+                return self._send(200, f.read_bytes(), "text/plain; charset=utf-8")
 
             if p.startswith("/clip/"):
                 name = p[len("/clip/"):]
