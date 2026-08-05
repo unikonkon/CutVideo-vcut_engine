@@ -200,6 +200,9 @@ video{width:100%;border-radius:5px;background:#000;display:block}
   background:none;border:0;border-radius:4px;padding:.2rem .35rem;color:inherit;
   font-size:12.5px;line-height:1.5;cursor:pointer}
 .trl button:hover{background:var(--line)}
+/* ท่อนที่กำลังเล่นถึง — ขีดข้างซ้ายไว้ให้ตาจับได้โดยไม่ต้องอ่านเวลาเทียบเอง */
+.trl button.on{background:var(--off);box-shadow:inset 2px 0 0 var(--accent)}
+.trl button.on .t{color:var(--accent)}
 .trl .t{font:11px ui-monospace,Menlo,monospace;color:var(--dim);flex:none;
   font-variant-numeric:tabular-nums}
 .trl .x{flex:1;min-width:0}
@@ -209,6 +212,16 @@ video{width:100%;border-radius:5px;background:#000;display:block}
   position:sticky;top:0;background:var(--panel)}
 .trs{display:flex;gap:.4rem;align-items:center;margin:.5rem 0 .45rem}
 .trs input{flex:1;min-width:0}
+/* หัวการ์ดบทพูด — ทั้งแถวกดพับ/กางได้ ไม่ใช่แค่ลูกศรเล็ก ๆ */
+.trhead{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+.trtog{display:flex;gap:.45rem;align-items:center;background:none;border:0;padding:0;
+  cursor:pointer;color:inherit}
+.trtog h3{margin:0}
+.trtog .caret{color:var(--dim);font-size:11px;width:.8em}
+.trtog:hover .caret{color:var(--fg)}
+/* ปุ่มที่อ่านเหมือนลิงก์ — ใช้ในประโยค ไม่ใช่ปุ่มสั่งงานเต็มตัว */
+.linky{background:none;border:0;padding:0;color:var(--accent);cursor:pointer;
+  font:inherit;text-decoration:underline;text-underline-offset:2px}
 .trdl{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.5rem}
 .trdl a{font-size:11.5px;color:var(--dim);text-decoration:none;border:1px solid var(--line);
   border-radius:5px;padding:.15rem .5rem}
@@ -429,21 +442,6 @@ dialog .df{padding:.7rem 1rem;border-top:1px solid var(--line);display:flex;gap:
   </div>
 </header>
 
-<dialog id="piece">
-  <div class="dh">
-    <h2 id="pc-title">ชิ้น</h2>
-    <div class="m" id="pc-sub"></div>
-  </div>
-  <div class="db" id="pc-body"></div>
-  <div class="df">
-    <label class="ck"><input type="checkbox" id="pc-only" checked> เล่นเฉพาะช่วงที่ตัด</label>
-    <span class="spacer"></span>
-    <button id="pc-prev">← ก่อนหน้า</button>
-    <button id="pc-next">ถัดไป →</button>
-    <button id="pc-close">ปิด</button>
-  </div>
-</dialog>
-
 <dialog id="rst">
   <div class="dh">
     <h2 id="rst-title">รีเซ็ต</h2>
@@ -461,6 +459,8 @@ dialog .df{padding:.7rem 1rem;border-top:1px solid var(--line);display:flex;gap:
   <section id="body"></section>
   <aside>
     <div class="card clipcard" id="side-clip" hidden></div>
+    <div class="card clipcard" id="side-piece" hidden></div>
+    <div class="card clipcard" id="side-talk" hidden></div>
     <div class="card" id="side-est" hidden>
       <h3>ถ้าสร้างไฟล์ตอนนี้</h3>
       <div id="est"></div>
@@ -483,9 +483,10 @@ const el = (t, cls, txt) => { const e = document.createElement(t);
   if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 
 let D = null, POOL = null, S = null, RV = null, RST = null, CL = null, TR = null;
-// คำที่พิมพ์ค้นในบทพูด + คลิป/วินาทีที่สั่งให้กระโดดไป — เก็บนอก render() เพราะ
-// การ์ดถูกวาดใหม่ทั้งใบทุกครั้งที่แตะอะไรก็ตาม ถ้าเก็บไว้ในนั้นคำค้นจะหายทุกคีย์
-let trQuery = '', trSeek = null;
+// คำที่พิมพ์ค้นในบทพูด · กางกล่องอยู่ไหม · คลิปที่เปิดฟังอยู่ในแถบข้าง —
+// เก็บนอก render() เพราะการ์ดถูกวาดใหม่ทั้งใบทุกครั้งที่แตะอะไรก็ตาม ถ้าเก็บ
+// ไว้ในนั้นคำค้นจะหายทุกคีย์ที่พิมพ์ และกล่องจะพับกลับเองทุกครั้งที่กดอะไร
+let trQuery = '', trShow = true, tkOpen = null;
 let clFilter = 'all', clOpen = -1, clDrag = null;
 // ตำแหน่งที่เลื่อนตารางคลิปไว้ — render() ล้าง #body ทั้งก้อนทุกครั้ง .grid จึงเกิด
 // ใหม่เสมอและกลับไปอยู่บนสุดถ้าไม่จำไว้เอง คนเลื่อนลงไปคลิกดูคลิปใบที่ 40 แล้ว
@@ -493,6 +494,9 @@ let clFilter = 'all', clOpen = -1, clDrag = null;
 let clScroll = 0;
 let clEdits = {pick: {}, rot: {}, vmode: {}, order: null};
 let poolFilter = 'all', poolKeep = null, pcOpen = null;
+// "เล่นเฉพาะช่วงที่ตัด" — ต้องอยู่นอกการ์ด เพราะการ์ดถูกวาดใหม่ทั้งใบทุกครั้งที่
+// แตะอะไรก็ตาม ถ้าอ่านจากช่องติ๊กในนั้น ค่าจะกลับไปเป็นค่าตั้งต้นเองเรื่อย ๆ
+let pcOnly = true;
 let step = 1, edits = {}, items = [], sel = -1, dragFrom = -1;
 let logSince = 0, polling = null, estTimer = null, taken = new Set();
 
@@ -620,18 +624,22 @@ function render(){
   if (step === 2) stepPrepare(b);
   if (step === 3) stepCompose(b);
   if (step === 3) scheduleEstimate();
-  // การ์ดดูคลิปอยู่ในแถบข้าง จึงต้องวาดหลังตารางคลิปเสมอ (ต้องรู้ว่ากรองอยู่ไหม
-  // ลำดับเปลี่ยนไหม) และหายไปเองเมื่อออกจากขั้น 1 พร้อมหยุดวิดีโอที่ค้างเล่นอยู่
-  if (step === 1 && clOpen >= 0) drawClip();
-  else {
-    const p = $('#side-clip');
-    if (!p.hidden){
-      p.querySelectorAll('video').forEach(v => { v.pause(); v.removeAttribute('src'); });
-      p.innerHTML = ''; p.hidden = true;
-    }
-    document.body.classList.remove('wideside');
-    if (step !== 1) clOpen = -1;
-  }
+  // การ์ดดูของอยู่ในแถบข้าง — ขั้น 1 ดูคลิป · ขั้น 2 ดูชิ้นในคลัง ต้องวาดหลัง
+  // #body เสมอ เพราะทั้งคู่ต้องรู้ก่อนว่ารายการถูกกรอง/เรียงยังไง ถึงจะบอก
+  // "ใบที่เท่าไรจากทั้งหมด" และเปิดใบก่อนหน้า/ถัดไปได้ถูกใบ
+  //
+  // ทั้งสองใบใช้ที่เดียวกัน เปิดพร้อมกันไม่ได้อยู่แล้วเพราะอยู่คนละขั้น — ใบที่
+  // ไม่ได้ใช้ต้องถูกรื้อทิ้งจริง ๆ ไม่ใช่แค่ซ่อน ไม่งั้น <video> ที่ค้างอยู่ข้างใน
+  // ยังเล่นเสียงต่อทั้งที่มองไม่เห็นแล้ว
+  const clipOn = step === 1 && clOpen >= 0 && drawClip();
+  const pieceOn = step === 2 && pcOpen != null && drawPiece();
+  const talkOn = step === 2 && tkOpen != null && drawTalk();
+  if (!clipOn) shutSide('#side-clip');
+  if (!pieceOn) shutSide('#side-piece');
+  if (!talkOn) shutSide('#side-talk');
+  if (step !== 1) clOpen = -1;
+  if (step !== 2){ pcOpen = null; tkOpen = null; }
+  document.body.classList.toggle('wideside', clipOn || pieceOn || talkOn);
   // วางกลับที่เดิม ทั้งรอบนี้และรอบหน้าจอวาด (รูปที่โหลดทีหลังดันความสูงได้อีก)
   if (window.scrollY !== y){
     window.scrollTo(0, y);
@@ -881,12 +889,22 @@ function closeClip(){
   render();
 }
 
+// รื้อการ์ดข้างที่ไม่ได้ใช้ — หยุดวิดีโอก่อนเสมอ เอา <video> ออกจากหน้าเฉย ๆ
+// ไม่ได้ทำให้มันหยุดเล่น มันเล่นเสียงต่อจากที่ที่มองไม่เห็นแล้ว
+function shutSide(sel){
+  const p = $(sel);
+  if (p.hidden && !p.firstChild) return;
+  p.querySelectorAll('video').forEach(v => { v.pause(); v.removeAttribute('src'); });
+  p.innerHTML = ''; p.hidden = true;
+  delete p.dataset.clip; delete p.dataset.piece;
+  delete p.dataset.talk; delete p.dataset.at;
+}
+
 function drawClip(){
   const list = clList(), x = list[clOpen];
+  if (!x) return false;
   const p = $('#side-clip');
-  if (!x){ p.hidden = true; document.body.classList.remove('wideside'); return; }
   p.hidden = false;
-  document.body.classList.add('wideside');
   const or = clOrient(x), rot = clRot(x);
 
   // ยังเป็นคลิปใบเดิม = ย้ายตัว <video> เดิมไปใช้ต่อ ไม่สร้างใหม่
@@ -953,17 +971,6 @@ function drawClip(){
     b.append(el('p', 'note', 'ถอดเสียงแล้วแต่คลิปนี้ไม่มีคำพูด — ถูกจัดเป็นช่วงวิว'));
   }
 
-  // มาจากการกดบรรทัดในกล่องค้นที่ขั้น 2 — เลื่อนไปวินาทีที่พูดประโยคนั้น
-  // (ตัว <video> อาจเพิ่งสร้างและยังไม่รู้ความยาวตัวเอง ตั้ง currentTime ตอนนั้น
-  //  ไม่มีผล ต้องรอ metadata ก่อน)
-  if (trSeek && trSeek.name === x.name){
-    const at = trSeek.t;
-    trSeek = null;
-    const go = () => { try { v.currentTime = at; } catch(e){} };
-    if (v.readyState >= 1) go();
-    else v.addEventListener('loadedmetadata', go, {once: true});
-  }
-
   const s1 = el('div', 'sect');
   s1.append(el('h4', null, 'หมุนคลิป'));
   const seg = el('div', 'seg');
@@ -1024,6 +1031,7 @@ function drawClip(){
   f.append(lab, el('span', 'spacer'),
            el('span', 'note', `${clOpen + 1}/${list.length}`), prev, next);
   p.append(f);
+  return true;
 }
 
 // ปิดด้วย Esc · เลื่อนดูใบก่อนหน้า/ถัดไปด้วยลูกศรซ้าย-ขวา
@@ -1121,7 +1129,11 @@ function minLen(){
 // ได้ยินว่าอะไร ตรงไหมไหม ตรงนี้คือที่อ่านของจริง
 //
 // สองที่ที่อ่านได้ตอบคนละคำถาม: ในการ์ดคลิป (ขั้น 1) = "คลิปนี้พูดอะไร" ดูคู่กับ
-// ภาพได้เลย · กล่องในขั้น 2 = "ใครพูดคำนี้บ้าง" ค้นทั้งกองแล้วกระโดดไปหา
+// ภาพได้เลย · การ์ดในขั้น 2 = "ใครพูดคำนี้บ้าง" ค้นทั้งกองแล้วเปิดดูได้ทันที
+//
+// การ์ดในขั้น 2 อยู่เหนือคลังชิ้นและพับเก็บได้ เพราะสองกล่องนี้ใช้ตอนเดียวกัน:
+// อ่านว่าคลิปไหนพูดอะไร แล้วตัดสินว่าจะเอาชิ้นไหนเข้าคลัง — กางไว้ก็เห็นบทพูด
+// พับไว้ก็เห็นคลังเต็มจอ ไม่ต้องเลือกอย่างใดอย่างหนึ่งไปตลอด
 
 const trLines = name => (TR && TR.clips && TR.clips[name]) || [];
 const trHas = () => !!(TR && TR.exists && TR.summary && TR.summary.segments);
@@ -1142,51 +1154,80 @@ function trMark(text, q){
   return box;
 }
 
-// กดบรรทัดในกล่องค้น → ไปขั้น 1 เปิดคลิปใบนั้น แล้วเลื่อนวิดีโอไปวินาทีที่พูด
-function trGo(name, t){
-  clFilter = 'all';                    // ใบที่จะเปิดอาจถูกกรองซ่อนอยู่
-  const i = clList().findIndex(x => x.name === name);
-  if (i < 0) return toast('ไม่พบคลิปนี้ในรายการ — อาจถูกเอาออกไปแล้ว', true);
-  trSeek = {name, t};
-  step = 1; clOpen = i;
-  renderSteps(); render();
+// กดบรรทัดแล้วเปิดคลิปนั้นในแถบข้าง — อยู่ที่ขั้น 2 ต่อ ไม่ต้องเด้งไปขั้น 1
+//
+// ตอนแรกทำเป็นกระโดดไปขั้น 1 ซึ่งพาออกจากงานที่กำลังทำอยู่ทุกครั้ง: คนกำลังไล่
+// อ่านบทพูดเพื่อตัดสินว่าจะเอาชิ้นไหน พอกดฟังทีก็หลุดไปอีกหน้า ต้องกดกลับมาเอง
+// แล้วหาที่เดิมให้เจอใหม่ · เปิดในแถบข้างแทน รายการยังอยู่ที่เดิมทุกบรรทัด
+function trOpen(name, t){
+  if (!trLines(name).length)
+    return toast('คลิปนี้ไม่มีบทพูดแล้ว — อาจถอดเสียงใหม่ไปหลังจากนี้', true);
+  pcOpen = null;                 // แถบข้างมีที่เดียว เปิดใบนี้ = ปิดใบดูชิ้น
+  tkOpen = {name, t};
+  render();
 }
 
-// รายการบรรทัดบทพูด — ใช้ทั้งในการ์ดคลิปและในกล่องค้น ต่างกันแค่ทำอะไรตอนกด
+// รายการบรรทัดบทพูด — ใช้ทั้งในการ์ดคลิป การ์ดค้น และแถบข้าง ต่างกันแค่ตอนกด
 function trList(rows, onPick, opt){
   const box = el('div', 'trl' + ((opt && opt.tall) ? ' tall' : ''));
   let last = null;
-  rows.forEach(r => {
+  rows.forEach((r, i) => {
     if (opt && opt.showClip && r.name !== last){
       last = r.name;
       box.append(el('div', 'hd', r.name));
     }
     const b = el('button');
     b.type = 'button';
+    b.dataset.at = r.a;
     b.title = `ไปที่ ${mmss(r.a)} ของ ${r.name}`;
     b.append(el('span', 't', mmss(r.a)), trMark(r.text, opt && opt.mark));
-    b.onclick = () => onPick(r);
+    b.onclick = () => onPick(r, i);
     box.append(b);
   });
   return box;
 }
 
 // กล่องค้นบทพูดทั้งกอง — ใต้ ① ในขั้น 2
-function trBox(){
-  const s = el('div', 'sect'); s.style.marginTop = '.9rem';
-  s.appendChild(el('h4', null, 'บทพูดที่ถอดได้'));
-
-  if (!trHas()){
-    s.appendChild(el('p', 'note', TR && TR.exists
+// บรรทัดสั้น ๆ ใต้ปุ่ม ① — บอกผลกับชี้ทางไปการ์ดเต็ม ไม่ยัดรายการทั้งกองไว้
+// ตรงนี้ เพราะที่นี่คือที่ *ตั้งค่าแล้วกดถอด* ไม่ใช่ที่นั่งอ่าน
+function trHint(){
+  if (!trHas())
+    return el('p', 'note', TR && TR.exists
       ? 'ถอดแล้วแต่ไม่พบคำพูดเลยสักคลิป — ถ้าคลิปมีคนพูดจริง ลองเช็คภาษาที่ตั้งไว้'
-      : 'ยังไม่เคยถอดเสียง — กด ① ก่อน แล้วบทพูดของทุกคลิปจะมาอยู่ตรงนี้'));
-    return s;
-  }
+      : 'ยังไม่เคยถอดเสียง — กด ① ก่อน แล้วบทพูดของทุกคลิปจะมาอยู่ในการ์ดเหนือคลังชิ้น');
+  const s = TR.summary;
+  const p = el('p', 'note',
+    `ถอดได้ ${s.segments} ท่อน จาก ${s.with_speech} คลิป · พูดจริงรวม ${mmss(s.speech)} — `);
+  const go = el('button', 'linky', 'ดูบทพูดทั้งหมด');
+  go.onclick = () => {
+    trShow = true; render();
+    requestAnimationFrame(() =>
+      $('#trcard') && $('#trcard').scrollIntoView({block: 'start', behavior: 'smooth'}));
+  };
+  p.append(go);
+  return p;
+}
+
+// การ์ดบทพูดเต็ม — อยู่เหนือคลังชิ้น พับเก็บได้
+function trCard(){
+  const c = el('div', 'card');
+  c.id = 'trcard';
+
+  const head = el('div', 'trhead');
+  const tog = el('button', 'trtog');
+  tog.type = 'button';
+  tog.setAttribute('aria-expanded', String(trShow));
+  tog.append(el('span', 'caret', trShow ? '▾' : '▸'),
+             el('h3', null, 'บทพูดที่ถอดได้'));
+  tog.onclick = () => { trShow = !trShow; render(); };
+  head.append(tog, el('span', 'spacer'));
 
   const sum = TR.summary;
-  s.appendChild(el('p', 'note',
-    `${sum.clips} คลิป · มีคำพูด ${sum.with_speech} คลิป · ${sum.segments} ท่อน · `
-    + `${sum.chars.toLocaleString()} ตัวอักษร · พูดจริงรวม ${mmss(sum.speech)}`));
+  head.append(el('span', 'note', trShow
+    ? `${sum.with_speech} คลิป · ${sum.segments} ท่อน · พูดจริงรวม ${mmss(sum.speech)}`
+    : `${sum.segments} ท่อน — กางเพื่ออ่านและค้นคำ`));
+  c.append(head);
+  if (!trShow) return c;
 
   const bar = el('div', 'trs');
   const q = el('input');
@@ -1211,10 +1252,10 @@ function trBox(){
       holder.appendChild(el('p', 'note warnnote', `ไม่เจอ "${query}" ในบทพูดของคลิปไหนเลย`));
       return;
     }
-    // จำกัดที่ 400 บรรทัด — วาดทั้งพันบรรทัดทุกครั้งที่พิมพ์ทีละตัวทำให้หน่วง
-    // และบอกตรง ๆ ว่าตัดไว้ ไม่ใช่เงียบ ๆ แล้วให้เข้าใจว่าเจอเท่านี้จริง
-    const show = rows.slice(0, 400);
-    holder.appendChild(trList(show, r => trGo(r.name, r.a),
+    // เพดานกันหน่วงตอนพิมพ์ทีละตัวในกองที่ใหญ่กว่านี้มาก ๆ — ตั้งไว้สูงพอที่
+    // โปรเจกต์ปกติจะได้ครบทุกท่อน และถ้าตัดจริงก็บอกตรง ๆ ว่าตัดไว้เท่าไร
+    const show = rows.slice(0, 2000);
+    holder.appendChild(trList(show, r => trOpen(r.name, r.a),
                               {showClip: true, tall: true, mark: query}));
     if (rows.length > show.length)
       holder.appendChild(el('p', 'note',
@@ -1223,12 +1264,147 @@ function trBox(){
 
   q.oninput = () => { trQuery = q.value; fill(); };
   bar.append(q, cnt);
-  s.append(bar, holder);
+  c.append(bar, holder);
   fill();
-  s.appendChild(el('p', 'note', 'กดที่บรรทัดไหนก็ได้ → เปิดคลิปนั้นในขั้น 1 '
-    + 'พร้อมเลื่อนวิดีโอไปวินาทีที่พูดประโยคนั้นให้เลย'));
-  return s;
+  c.appendChild(el('p', 'note', 'กดที่บรรทัดไหนก็ได้ → คลิปนั้นเปิดในแถบข้างขวา '
+    + 'เล่นจากวินาทีที่พูดประโยคนั้น พร้อมบทพูดทั้งคลิป · ยังอยู่ที่ขั้น 2 เหมือนเดิม'));
+  return c;
 }
+
+// ── แถบข้าง · ดูคลิปจากบทพูด ────────────────────────────────────
+//
+// ใช้ที่เดียวกับการ์ดดูชิ้น เปิดพร้อมกันไม่ได้ — เป็นของสองอย่างที่ตอบคำถาม
+// เดียวกัน ("ตรงนี้จริง ๆ แล้วมีอะไร") แค่มาจากคนละทาง จึงไม่ควรแย่งที่กันเอง
+function drawTalk(){
+  const {name, t} = tkOpen;
+  const lines = trLines(name);
+  if (!lines.length) return false;
+
+  const box = $('#side-talk');
+  const wasAt = box.dataset.at;
+  const keep = box.dataset.talk === name ? box.querySelector('.vwrap video') : null;
+  box.innerHTML = '';
+  box.hidden = false;
+  box.dataset.talk = name;
+  box.dataset.at = String(t);
+
+  const cl = (CL && CL.clips || []).find(x => x.name === name);
+  const head = el('div', 'ch');
+  const ttl = el('div');
+  ttl.append(el('h3', null, name),
+             el('div', 'm', `${lines.length} ท่อน`
+               + (cl ? ` · ${cl.dur.toFixed(1)} วิ · ${cl.w}×${cl.h}` : '')));
+  const cls = el('button', 'ghost', '✕');
+  cls.title = 'ปิด (Esc)';
+  cls.onclick = closeTalk;
+  head.append(ttl, el('span', 'spacer'), cls);
+  box.append(head);
+
+  const b = el('div', 'cb');
+  box.append(b);
+
+  const rot = (cl && clRot(cl)) || '';
+  const spin = rot === 'transpose=1' ? ' r90' : rot === 'transpose=2' ? ' r270'
+             : rot === 'transpose=1,transpose=1' ? ' r180' : '';
+  const w = el('div', 'vwrap' + spin);
+  let v = keep;
+  if (!v){
+    v = el('video');
+    v.controls = true; v.preload = 'metadata'; v.playsInline = true;
+    v.src = `/clip/${name}`;
+    v.addEventListener('loadedmetadata', () => { v.currentTime = +box.dataset.at || 0; });
+  } else if (wasAt !== String(t)){
+    // คลิปเดิมแต่กดคนละบรรทัด — เลื่อนไปที่ใหม่ ไม่ต้องโหลดวิดีโอใหม่ทั้งไฟล์
+    try { v.currentTime = t; } catch(e){}
+    v.play().catch(() => {});
+  }
+  v.onerror = () => { w.innerHTML = '';
+    w.append(el('p', 'note', 'เบราว์เซอร์เล่นไฟล์นี้ไม่ได้ — ลองเปิดด้วย Safari')); };
+  w.append(v); b.append(w);
+
+  // บทพูดทั้งคลิป · ไฮไลต์ท่อนที่กำลังเล่นถึง แล้วเลื่อนตามให้เอง
+  const list = trList(lines.map(([a, bb, tx]) => ({name, a, b: bb, text: tx})),
+                      r => { try { v.currentTime = r.a; } catch(e){}
+                             v.play().catch(() => {}); });
+  b.append(list);
+
+  const btns = [...list.querySelectorAll('button')];
+  let cur = -1;
+  const follow = () => {
+    const now = v.currentTime;
+    let i = -1;
+    for (let k = 0; k < lines.length; k++)
+      if (now >= lines[k][0] - 0.05 && now < lines[k][1]) { i = k; break; }
+    if (i === cur) return;
+    if (btns[cur]) btns[cur].classList.remove('on');
+    cur = i;
+    if (btns[cur]){
+      btns[cur].classList.add('on');
+      // เลื่อนเฉพาะตอนที่ท่อนนั้นหลุดออกนอกกล่องแล้วจริง ๆ — เลื่อนทุกท่อนทำให้
+      // รายการกระตุกตลอดเวลาแม้ท่อนที่กำลังเล่นยังเห็นอยู่เต็มตา
+      const r = btns[cur].getBoundingClientRect(), lr = list.getBoundingClientRect();
+      if (r.top < lr.top || r.bottom > lr.bottom)
+        btns[cur].scrollIntoView({block: 'nearest'});
+    }
+  };
+  v.addEventListener('timeupdate', follow);
+  follow();
+
+  const got = (TR && TR.files && TR.files[name]) || [];
+  if (got.length){
+    const dl = el('div', 'trdl');
+    got.forEach(kind => {
+      const a = el('a', null, `โหลด .${kind}`);
+      a.href = `/text/${name}.${kind}`; a.download = `${name}.${kind}`;
+      dl.append(a);
+    });
+    b.append(dl);
+  }
+
+  // ข้ามไปคลิปที่มีคำพูดใบก่อนหน้า/ถัดไป — ไล่ฟังทั้งกองได้โดยไม่ต้องกลับไปหา
+  // ในรายการทีละครั้ง (รายการอาจถูกกรองด้วยคำค้นอยู่ ก็เดินตามที่กรองไว้นั่นแหละ)
+  const talk = trClips();
+  const i = talk.indexOf(name);
+  const f = el('div', 'cf');
+  const prev = el('button', 'sm', '←'), next = el('button', 'sm', '→');
+  prev.title = 'คลิปก่อนหน้า (←)'; next.title = 'คลิปถัดไป (→)';
+  prev.disabled = i <= 0;
+  next.disabled = i < 0 || i >= talk.length - 1;
+  prev.onclick = () => talkStep(-1);
+  next.onclick = () => talkStep(1);
+  f.append(el('span', 'note', 'กดบรรทัดเพื่อเลื่อนไปวินาทีนั้น'),
+           el('span', 'spacer'),
+           el('span', 'note', `${i + 1}/${talk.length}`), prev, next);
+  box.append(f);
+  return true;
+}
+
+// คลิปที่มีคำพูด เรียงตามลำดับหนัง — ใช้เดินหน้า/ถอยหลังในแถบข้าง
+//
+// จงใจไม่ผูกกับคำค้นที่พิมพ์อยู่: ปุ่ม ← → จะเปลี่ยนความหมายเงียบ ๆ ทุกครั้งที่
+// พิมพ์เพิ่มอีกตัว ("ถัดไป" ของเมื่อกี้กับของตอนนี้คนละใบ) และตัวเลข n/m ในแถบ
+// ข้างก็จะค้างไม่ตรงจนกว่าจะมีอะไรสั่งวาดใหม่ — ค้นคือค้น เดินคือเดิน คนละงาน
+function trClips(){
+  return (TR.order || Object.keys(TR.clips || {})).filter(n => trLines(n).length);
+}
+
+function closeTalk(){ tkOpen = null; render(); }
+
+function talkStep(d){
+  const talk = trClips();
+  const i = talk.indexOf(tkOpen.name) + d;
+  if (!talk[i]) return;
+  tkOpen = {name: talk[i], t: (trLines(talk[i])[0] || [0])[0]};
+  render();
+}
+
+// Esc ปิด · ลูกศรข้ามคลิป — ชุดเดียวกับการ์ดคลิป (ขั้น 1) และการ์ดชิ้น
+document.addEventListener('keydown', e => {
+  if (step !== 2 || !tkOpen || !keyFree(e)) return;
+  if (e.key === 'Escape'){ e.preventDefault(); return closeTalk(); }
+  if (e.key === 'ArrowLeft'){ e.preventDefault(); talkStep(-1); }
+  if (e.key === 'ArrowRight'){ e.preventDefault(); talkStep(1); }
+});
 
 // ── ระดับเสียง ──────────────────────────────────────────────────
 //
@@ -1314,7 +1490,7 @@ function stepPrepare(box){
   if (val('listen.enabled')){
     ['listen.language', 'listen.model', 'listen.threads',
      'listen.export', 'listen.import_dir'].forEach(k => putField(basic, k));
-    basic.appendChild(trBox());
+    basic.appendChild(trHint());
   } else {
     basic.appendChild(el('p', 'note warnnote',
       'ปิดอยู่ — จะไม่มีบทพูดเลย ทุกคลิปถูกจัดเป็นช่วงวิวหมด และ "ตัดช่วงเงียบ" '
@@ -1404,6 +1580,9 @@ function stepPrepare(box){
   c.appendChild(advanced(['listen', 'prepare', 'ai']));
   box.appendChild(c);
 
+  // บทพูดอยู่เหนือคลังชิ้น เพราะมันคือ "ของที่ใช้ตัดสิน" ส่วนคลังคือ "ผลของการ
+  // ตัดสิน" — อ่านก่อนแล้วค่อยเลือก ไม่ใช่เลือกไปแล้วค่อยเลื่อนลงไปหาว่าพูดอะไร
+  if (trHas()) box.appendChild(trCard());
   if (POOL.has) box.appendChild(poolView());
 }
 
@@ -1476,13 +1655,16 @@ function poolView(){
   });
   c.appendChild(two);
   c.appendChild(el('p', 'note',
-    'กดที่ชิ้นเพื่อดูช่วงที่จะตัดจริง · ติ๊กช่องเขียวเพื่อดึงชิ้นที่ตัวกรองคัดออกกลับเข้าคลัง'));
+    'กดที่ชิ้นเพื่อดูช่วงที่จะตัดจริงในแถบข้าง (Esc ปิด · ← → ข้ามชิ้น) · '
+    + 'ติ๊กช่องเขียวเพื่อดึงชิ้นที่ตัวกรองคัดออกกลับเข้าคลัง'));
   return c;
 }
 
 function poolRow(p){
   const back = poolKeep.has(p.name);
-  const li = el('li', 'row' + (p.ok ? '' : ' bad') + (back && poolTouched(p) ? ' kept' : ''));
+  // ขีดกรอบใบที่เปิดค้างอยู่ — การ์ดไม่ได้บังรายการแล้ว ต้องบอกได้ว่ากำลังดูใบไหน
+  const li = el('li', 'row' + (p.ok ? '' : ' bad') + (back && poolTouched(p) ? ' kept' : '')
+                     + (p.id === pcOpen ? ' sel' : ''));
   if (poolTouched(p)){
     const cb = el('input'); cb.type = 'checkbox'; cb.className = 'back'; cb.checked = back;
     cb.title = 'ดึงกลับเข้าคลัง — ข้ามตัวกรองให้ชิ้นนี้';
@@ -1520,28 +1702,64 @@ async function savePool(){
 
 // ── ดูชิ้นทีละชิ้น · เล่นเฉพาะช่วงที่จะตัดจริง ────────────────────
 
-function openPiece(id){ pcOpen = id; drawPiece(); $('#piece').showModal(); }
+// เคยเป็น <dialog> แบบ modal เหมือนที่การ์ดคลิปในขั้น 1 เคยเป็น แล้วเจอปัญหา
+// เดียวกันเป๊ะ: งานจริงตรงนี้คือ *ไล่ดูทีละชิ้นแล้วตัดสินว่าจะดึงกลับไหม* ซึ่ง
+// ต้องเห็นชิ้นที่กำลังดูพร้อมกับรายการที่เหลือ กล่อง modal บังรายการทั้งกองไว้
+// ข้างหลัง เทียบกับชิ้นอื่นไม่ได้เลย และต้องปิดก่อนถึงจะกดชิ้นถัดไปได้
+//
+// ย้ายมาอยู่แถบข้างที่เดียวกับขั้น 1 แล้วกดชิ้นอื่นในรายการได้เลยโดยไม่ต้องปิดก่อน
+// แถบข้างปักหมุดอยู่แล้วจึงเลื่อนตามไปด้วย
+
+// แถบข้างมีที่เดียว เปิดใบนี้ = ปิดใบดูคลิปจากบทพูด (และในทางกลับกันที่ trOpen)
+function openPiece(id){ pcOpen = id; tkOpen = null; render(); }
+function closePiece(){ pcOpen = null; render(); }
 
 function drawPiece(){
   const list = poolVisible();
   const i = list.findIndex(x => x.id === pcOpen), p = list[i];
-  if (!p) return $('#piece').close();
-  $('#pc-title').textContent = p.id || p.name;
-  $('#pc-sub').textContent = `${p.kind === 'TALK' ? 'ช่วงพูด' : 'ช่วงวิว'} · `
-    + `${p.start.toFixed(2)}–${p.end.toFixed(2)} วิ ของคลิปยาว ${p.clip_duration.toFixed(1)} วิ`;
-  const b = $('#pc-body'); b.innerHTML = '';
+  if (!p) return false;              // เปลี่ยนตัวกรองจนชิ้นที่เปิดค้างไว้หายไป
 
-  const w = el('div', 'vwrap');
-  const v = el('video');
-  v.controls = true; v.preload = 'metadata'; v.playsInline = true;
-  v.src = `/clip/${p.name}`;
-  v.addEventListener('loadedmetadata', () => { v.currentTime = p.start; });
-  v.addEventListener('timeupdate', () => {
-    // หยุดที่ปลายช่วง แล้วถอยกลับไปต้นช่วง — กดเล่นซ้ำได้เลยโดยไม่ต้องลากเอง
-    if ($('#pc-only').checked && v.currentTime >= p.end){
-      v.pause(); v.currentTime = p.start;
-    }
-  });
+  const box = $('#side-piece');
+  // ยังเป็นชิ้นเดิม = ย้ายตัว <video> เดิมมาใช้ต่อ ไม่สร้างใหม่ — เหตุผลเดียวกับ
+  // การ์ดคลิป: ติ๊กดึงกลับหรือสลับตัวกรองที การ์ดถูกวาดใหม่ทั้งใบ ถ้าสร้าง
+  // <video> ใหม่ทุกรอบ วิดีโอจะเด้งกลับต้นช่วงแล้วหยุด ทุกครั้งที่แตะอะไรก็ตาม
+  const keep = box.dataset.piece === p.id ? box.querySelector('.vwrap video') : null;
+  box.innerHTML = '';
+  box.hidden = false;
+  box.dataset.piece = p.id;
+
+  const head = el('div', 'ch');
+  const ttl = el('div');
+  ttl.append(el('h3', null, p.id || p.name),
+             el('div', 'm', `${p.kind === 'TALK' ? 'ช่วงพูด' : 'ช่วงวิว'} · `
+               + `${p.start.toFixed(2)}–${p.end.toFixed(2)} วิ `
+               + `ของคลิปยาว ${p.clip_duration.toFixed(1)} วิ`));
+  const cls = el('button', 'ghost', '✕');
+  cls.title = 'ปิด (Esc)';
+  cls.onclick = closePiece;
+  head.append(ttl, el('span', 'spacer'), cls);
+  box.append(head);
+
+  const b = el('div', 'cb');
+  box.append(b);
+
+  // หมุนตามที่ตั้งไว้ในขั้น 1 — ชิ้นพกค่าหมุนของคลิปตัวเองมาด้วยอยู่แล้ว สอง
+  // การ์ดนี้อยู่ที่เดียวกันแล้ว ใบหนึ่งหมุนอีกใบไม่หมุนจะอ่านว่าเป็นคนละคลิป
+  const rot = p.rot_override || '';
+  const spin = rot === 'transpose=1' ? ' r90' : rot === 'transpose=2' ? ' r270'
+             : rot === 'transpose=1,transpose=1' ? ' r180' : '';
+  const w = el('div', 'vwrap' + spin);
+  let v = keep;
+  if (!v){
+    v = el('video');
+    v.controls = true; v.preload = 'metadata'; v.playsInline = true;
+    v.src = `/clip/${p.name}`;
+    v.addEventListener('loadedmetadata', () => { v.currentTime = p.start; });
+    v.addEventListener('timeupdate', () => {
+      // หยุดที่ปลายช่วง แล้วถอยกลับไปต้นช่วง — กดเล่นซ้ำได้เลยโดยไม่ต้องลากเอง
+      if (pcOnly && v.currentTime >= p.end){ v.pause(); v.currentTime = p.start; }
+    });
+  }
   v.onerror = () => { w.innerHTML = '';
     w.append(el('p', 'note', 'เบราว์เซอร์เล่นไฟล์นี้ไม่ได้ — ลองเปิดด้วย Safari')); };
   w.append(v); b.append(w);
@@ -1562,7 +1780,7 @@ function drawPiece(){
     const l = el('label', 'ck');
     const cb = el('input'); cb.type = 'checkbox'; cb.checked = poolKeep.has(p.name);
     cb.onchange = () => { cb.checked ? poolKeep.add(p.name) : poolKeep.delete(p.name);
-                          drawPiece(); render(); };
+                          render(); };
     l.append(cb, document.createTextNode('ดึงกลับเข้าคลัง — ข้ามตัวกรองให้คลิปนี้'));
     s.append(l);
     s.append(el('p', 'note', 'ติ๊กแล้วกด "บันทึก + เตรียมคลังใหม่" ที่หัวคลัง '
@@ -1584,15 +1802,41 @@ function drawPiece(){
   b.append(dl);
   if (p.text) b.append(el('div', 'quote', p.text));
 
-  $('#pc-prev').disabled = i <= 0;
-  $('#pc-next').disabled = i >= list.length - 1;
+  // แถวล่างติดขอบการ์ดไว้เสมอ — เลื่อนอ่านรายละเอียดอยู่ก็ยังข้ามชิ้นได้
+  const f = el('div', 'cf');
+  const lab = el('label', 'ck');
+  const only = el('input'); only.type = 'checkbox'; only.checked = pcOnly;
+  only.onchange = () => { pcOnly = only.checked; };
+  lab.append(only, document.createTextNode('เล่นเฉพาะช่วงที่ตัด'));
+  const prev = el('button', 'sm', '←'), next = el('button', 'sm', '→');
+  prev.title = 'ชิ้นก่อนหน้า (←)'; next.title = 'ชิ้นถัดไป (→)';
+  prev.disabled = i <= 0;
+  next.disabled = i >= list.length - 1;
+  prev.onclick = () => pieceStep(-1);
+  next.onclick = () => pieceStep(1);
+  f.append(lab, el('span', 'spacer'),
+           el('span', 'note', `${i + 1}/${list.length}`), prev, next);
+  box.append(f);
+  return true;
 }
 
 function pieceStep(d){
   const list = poolVisible();
   const i = list.findIndex(x => x.id === pcOpen) + d;
-  if (list[i]){ pcOpen = list[i].id; drawPiece(); }
+  if (list[i]){ pcOpen = list[i].id; render(); }
 }
+
+// ปิดด้วย Esc · ข้ามชิ้นด้วยลูกศรซ้าย-ขวา — คู่กับที่การ์ดคลิปในขั้น 1 ทำ
+// (ตอนเป็น <dialog> Esc ทำงานให้ฟรี ย้ายมาเป็นการ์ดแล้วต้องทำเอง)
+document.addEventListener('keydown', e => {
+  if (step !== 2 || pcOpen == null || !keyFree(e)) return;
+  const list = poolVisible();
+  const i = list.findIndex(x => x.id === pcOpen);
+  if (e.key === 'Escape'){ e.preventDefault(); return closePiece(); }
+  if (e.key === 'ArrowLeft' && i > 0){ e.preventDefault(); pieceStep(-1); }
+  if (e.key === 'ArrowRight' && i >= 0 && i < list.length - 1){
+    e.preventDefault(); pieceStep(1); }
+});
 
 // ── ขั้น 3 · รวมเป็นหนัง ─────────────────────────────────────────
 
@@ -3839,16 +4083,6 @@ async function doRestore(id){
     await load();
   } catch(e){ toast(e.message, true); }
 }
-
-$('#pc-close').onclick = () => $('#piece').close();
-$('#pc-prev').onclick = () => pieceStep(-1);
-$('#pc-next').onclick = () => pieceStep(1);
-$('#piece').addEventListener('click', e => {
-  if (e.target === $('#piece')) $('#piece').close(); });
-$('#piece').addEventListener('close', () => {
-  $('#pc-body').querySelectorAll('video').forEach(v => { v.pause(); v.removeAttribute('src'); });
-  pcOpen = null;
-});
 
 $('#stop').onclick = async () => {
   $('#stop').disabled = true;
