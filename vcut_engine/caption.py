@@ -42,11 +42,28 @@ STYLE = {
     "align": 2,          # เลขแป้นตัวเลข: 1-3 ล่าง · 4-6 กลาง · 7-9 บน
     "margin_v": 60,
     "margin_h": 60,
+    # ตรึงตำแหน่งเอง — สัดส่วน 0–1 ของกรอบภาพ ไม่ใช่พิกเซล เพราะตำแหน่งต้องอยู่
+    # ที่เดิมเมื่อเปลี่ยนความละเอียดหนัง (ขนาดตัวอักษรเป็นพิกเซลได้ แต่ตำแหน่ง
+    # ที่ผูกกับพิกเซลจะหลุดออกนอกจอทันทีที่ย่อจาก 4K เป็น 1080p)
+    # None = ไม่ตรึง ใช้ align + margin ตามเดิม
+    "pos_x": None,
+    "pos_y": None,
+    "spacing": 0.0,      # ระยะห่างตัวอักษร (\fsp)
+    "angle": 0.0,        # หมุนทวนเข็ม องศา (\frz)
 }
 
-# ค่าที่ทับได้เป็นราย ๆ — จงใจไม่ให้ทับ margin/align ของสไตล์กลางจากซับอัตโนมัติ
-# เพราะซับที่วางไม่ตรงกันเป็นบรรทัด ๆ อ่านแล้วเหมือนหนังพัง ไม่ใช่เหมือนตั้งใจ
-CUE_KEYS = ("font", "size", "color", "outline", "border", "shadow", "bold", "italic")
+# ค่าที่ทับได้เป็นราย ๆ
+CUE_KEYS = ("font", "size", "color", "outline", "border", "shadow", "bold",
+            "italic", "spacing", "angle")
+
+# ตำแหน่งก็ทับรายบรรทัดได้ แต่เป็นของที่ต้องตั้งใจสั่ง ไม่ใช่ผลพลอยได้
+#
+# เดิมกันไว้ไม่ให้ทับเลย เพราะซับที่วางไม่ตรงกันเป็นบรรทัด ๆ อ่านแล้วเหมือนหนัง
+# พังมากกว่าเหมือนตั้งใจ ข้อกังวลนั้นยังจริงอยู่ — แต่แก้ด้วยการทำให้มันเป็น
+# opt-in รายบรรทัด (หน้าเว็บต้องติ๊ก "ย้ายเฉพาะบรรทัดนี้" ก่อน) ดีกว่าห้ามขาด
+# แล้วคนที่ต้องหลบป้ายในภาพจริง ๆ ทำไม่ได้เลย
+POS_KEYS = ("align", "margin_v", "margin_h", "pos_x", "pos_y")
+
 BOX_KEYS = CUE_KEYS + ("align",)
 
 
@@ -207,7 +224,7 @@ def cues(ctx, data=None):
                     continue
                 st = dict(base)
                 st.update({k: v for k, v in (auto["styles"].get(cid) or {}).items()
-                           if k in CUE_KEYS})
+                           if k in CUE_KEYS + POS_KEYS})
                 out.append({"id": cid, "kind": "auto", "a": round(got[0], 3),
                             "b": round(got[1], 3), "text": str(txt),
                             "name": seg["name"], "clip_a": a, "style": st})
@@ -315,7 +332,48 @@ def _tags(cue, base):
         t.append(r"\b" + ("1" if st.get("bold") else "0"))
     if bool(st.get("italic")) != bool(base.get("italic")):
         t.append(r"\i" + ("1" if st.get("italic") else "0"))
+    if float(st.get("spacing", 0) or 0) != float(base.get("spacing", 0) or 0):
+        t.append(r"\fsp" + f"{float(st.get('spacing') or 0):g}")
+    if float(st.get("angle", 0) or 0) != float(base.get("angle", 0) or 0):
+        t.append(r"\frz" + f"{float(st.get('angle') or 0):g}")
     return t
+
+
+def _place(cue, base, W, H):
+    """ตำแหน่งของชิ้นนี้ — คืน (แท็กที่ต้องนำหน้า, margin ของบรรทัด)
+
+    ASS วางข้อความได้สองทางที่ใช้ร่วมกันไม่ได้: \\pos ตรึงพิกัด กับ align+margin
+    ที่ให้ตัวเรนเดอร์จัดให้เอง เมื่อมี \\pos แล้ว margin ทั้งสามช่องไม่มีผลเลย
+    จึงต้องส่งศูนย์กลับไป (ศูนย์ = ใช้ค่าของ [V4+ Styles] ซึ่งก็ไม่ถูกใช้อยู่ดี)
+
+    margin เป็น *ช่องของบรรทัด Dialogue* ไม่ใช่แท็ก — ASS ไม่มี \\marginv ให้สั่ง
+    ทับเป็นราย ๆ ตำแหน่งรายบรรทัดจึงต้องเขียนลงช่องพวกนี้ ไม่ใช่ในวงเล็บปีกกา
+    """
+    st = cue["style"]
+    if cue["kind"] == "box":
+        al = int(st.get("align", 5) or 5)
+        x = float(cue.get("x") if cue.get("x") is not None else 0.5)
+        y = float(cue.get("y") if cue.get("y") is not None else 0.5)
+        return [rf"\an{al}", rf"\pos({x * W:.0f},{y * H:.0f})"], (0, 0, 0)
+
+    b_al = int(base.get("align", 2) or 2)
+    al = int(st.get("align", b_al) or b_al)
+    tags = [rf"\an{al}"] if al != b_al else []
+
+    px, py = st.get("pos_x"), st.get("pos_y")
+    if px is not None and py is not None:
+        # \pos ต้องมี \an กำกับเสมอ ไม่งั้นจุดที่พิกัดหมายถึงคือมุมของสไตล์กลาง
+        # ซึ่งอาจคนละมุมกับที่หน้าเว็บวาดพรีวิวไว้ แล้วสองที่จะไม่ตรงกัน
+        if not tags:
+            tags = [rf"\an{al}"]
+        tags.append(rf"\pos({float(px) * W:.0f},{float(py) * H:.0f})")
+        return tags, (0, 0, 0)
+
+    mh = int(st.get("margin_h", base.get("margin_h", 60)) or 0)
+    mv = int(st.get("margin_v", base.get("margin_v", 60)) or 0)
+    if mh == int(base.get("margin_h", 60) or 0) and mv == int(base.get("margin_v", 60) or 0):
+        return tags, (0, 0, 0)          # เท่าสไตล์กลาง ปล่อยให้ใช้ของสไตล์
+    return tags, (mh, mh, mv)
 
 
 def build_ass(ctx, data, W, H):
@@ -344,7 +402,9 @@ def build_ass(ctx, data, W, H):
             _colour(base.get("outline")), _colour("#000000", alpha=0x80),
             "-1" if base.get("bold") else "0",
             "-1" if base.get("italic") else "0", "0", "0",
-            "100", "100", "0", "0", "1",
+            "100", "100",
+            f"{float(base.get('spacing', 0) or 0):g}",
+            f"{float(base.get('angle', 0) or 0):g}", "1",
             f"{float(base.get('border', 3)):g}", f"{float(base.get('shadow', 0)):g}",
             str(int(base.get("align", 2))),
             str(int(base.get("margin_h", 60))), str(int(base.get("margin_h", 60))),
@@ -363,17 +423,14 @@ def build_ass(ctx, data, W, H):
         text = _esc(cue["text"])
         if not text:
             continue
-        tags = _tags(cue, base)
-        if cue["kind"] == "box":
-            al = int(cue["style"].get("align", 5))
-            x = float(cue.get("x") if cue.get("x") is not None else 0.5) * W
-            y = float(cue.get("y") if cue.get("y") is not None else 0.5) * H
-            tags = [rf"\an{al}", rf"\pos({x:.0f},{y:.0f})"] + tags
+        place, (ml, mr, mv) = _place(cue, base, W, H)
+        tags = place + _tags(cue, base)
         pre = "{" + "".join(tags) + "}" if tags else ""
         # ต้องมี 9 ช่องก่อนข้อความเสมอ — ขาดคอมมาตัวเดียว แท็กจะถูกอ่านเป็นช่อง
         # Effect แล้วโผล่ออกมาเป็นตัวหนังสือให้คนดูเห็นทั้งบรรทัด
         body.append(f"Dialogue: {0 if cue['kind'] == 'auto' else 1},"
-                    f"{_clock(cue['a'])},{_clock(cue['b'])},sub,,0,0,0,,{pre}{text}")
+                    f"{_clock(cue['a'])},{_clock(cue['b'])},sub,,"
+                    f"{ml},{mr},{mv},,{pre}{text}")
         n += 1
     return "\n".join(head + body) + "\n", n
 

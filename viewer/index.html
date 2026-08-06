@@ -116,6 +116,9 @@ aside{position:sticky;top:calc(var(--headh, 33px) + .5rem);
 .rng input[type=range]{flex:1;min-width:0}
 .rng output{font-size:12px;font-variant-numeric:tabular-nums;min-width:3.6em;
   text-align:right;color:var(--dim)}
+.rng input.nudge{width:5.4em;flex:none;font:12px ui-monospace,Menlo,monospace;
+  text-align:right;padding:.18rem .3rem}
+.rng .unit{font-size:11px;color:var(--dim);flex:none;min-width:1.6em}
 label.ck{display:flex;gap:.4rem;align-items:center;cursor:pointer;font-size:12.5px}
 .multi{display:flex;flex-direction:column;gap:.2rem}
 details.adv{border-top:1px solid var(--off);margin-top:.7rem}
@@ -218,7 +221,15 @@ video{width:100%;border-radius:5px;background:#000;display:block}
 .pvcap .cp{position:absolute;line-height:1.25;white-space:pre-wrap;
   -webkit-font-smoothing:antialiased}
 .pvcap .cp.bx{pointer-events:auto;cursor:move;max-width:80%}
+.pvcap .cp.sub{pointer-events:auto;cursor:move}
 .pvcap .cp.on{outline:1px dashed var(--accent);outline-offset:3px}
+/* ปุ่มเพิ่มข้อความบนตัวเล่น — อยู่นอก .pvcap เพราะชั้นนั้นไม่รับคลิกทั้งชั้น */
+.pvadd{position:absolute;top:.5rem;right:.5rem;z-index:4;font-size:12px;
+  padding:.25rem .55rem;border-radius:6px;border:1px solid rgba(255,255,255,.35);
+  background:rgba(0,0,0,.55);color:#fff;cursor:pointer;backdrop-filter:blur(2px)}
+.pvadd:hover{background:var(--accent);border-color:var(--accent)}
+.caph{font-size:12.5px;margin:.9rem 0 .1rem;padding-top:.6rem;
+  border-top:1px solid var(--off)}
 .capgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
   gap:.5rem .9rem;margin:.2rem 0 .6rem}
 .capf{display:flex;flex-direction:column;gap:.2rem;min-width:0}
@@ -234,7 +245,14 @@ video{width:100%;border-radius:5px;background:#000;display:block}
 .capal button[aria-pressed=true]{background:var(--accent);border-color:var(--accent)}
 .caplines{display:flex;flex-direction:column;gap:2px;max-height:24em;overflow:auto;
   border:1px solid var(--line);border-radius:6px;padding:.3rem}
+.caplw{display:flex;flex-direction:column;gap:.15rem}
 .capline{display:flex;gap:.4rem;align-items:center}
+.capline .sm.hot{color:var(--accent);border-color:var(--accent)}
+.capline .sm[aria-pressed=true]{background:var(--accent);border-color:var(--accent);
+  color:#fff}
+.capsub{border:1px solid var(--accent);border-radius:6px;padding:.45rem .6rem;
+  margin:.1rem 0 .35rem}
+.capsub .capgrid{margin:.35rem 0 .2rem}
 .capline input[type=text]{flex:1;min-width:0;font-size:12.5px}
 .capline.off input{opacity:.4;text-decoration:line-through}
 .capline.on input{border-color:var(--accent)}
@@ -528,6 +546,22 @@ let clFilter = 'all', clOpen = -1, clDrag = null;
 // ตารางเด้งกลับไปใบแรกทันที
 let clScroll = 0;
 let clEdits = {pick: {}, rot: {}, vmode: {}, order: null};
+
+// ที่เลื่อนของกล่องที่เลื่อนอยู่ข้างใน — เหตุผลเดียวกับ clScroll ข้างบนเป๊ะ
+//
+// ตารางคลิปกับแถบไทม์ไลน์แก้เรื่องนี้ด้วยตัวแปรของตัวเองมาก่อนแล้ว ตัวนี้เป็น
+// ตัวกลางให้กล่องที่เหลือใช้ได้ด้วยบรรทัดเดียว ไม่ต้องตั้งตัวแปรใหม่ทุกกล่อง
+// (รายการซับมี 291 บรรทัด แก้บรรทัดที่ 120 ทีแล้วเด้งกลับบรรทัดแรก = หาที่เดิม
+//  ใหม่ทุกครั้ง ซึ่งแพงกว่าการแก้เองหลายเท่า)
+const SCROLLED = {};
+function keepScroll(node, key, axis){
+  const prop = axis === 'x' ? 'scrollLeft' : 'scrollTop';
+  node.addEventListener('scroll', () => { SCROLLED[key] = node[prop]; });
+  // ตั้งค่าได้หลังกล่องเข้าไปอยู่ในหน้าจริงแล้วเท่านั้น ก่อนหน้านั้นยังไม่มีความสูง
+  // ให้เลื่อน — ตอนนี้ยังเป็นแค่ก้อน DOM ที่ยังไม่ได้แปะ
+  requestAnimationFrame(() => { node[prop] = SCROLLED[key] || 0; });
+  return node;
+}
 let poolFilter = 'all', poolKeep = null, pcOpen = null;
 // "เล่นเฉพาะช่วงที่ตัด" — ต้องอยู่นอกการ์ด เพราะการ์ดถูกวาดใหม่ทั้งใบทุกครั้งที่
 // แตะอะไรก็ตาม ถ้าอ่านจากช่องติ๊กในนั้น ค่าจะกลับไปเป็นค่าตั้งต้นเองเรื่อย ๆ
@@ -680,7 +714,9 @@ function render(){
   if (step !== 2){ pcOpen = null; tkOpen = null; }
   // แก้ไทม์ไลน์ตอนหยุดนิ่ง ไม่มี timeupdate มาเรียกวาดข้อความใหม่ — เวลาของซับ
   // เพิ่งเปลี่ยนไปพร้อมกับชิ้นที่เพิ่งลาก ต้องวาดทับตัวเล่นใหม่ตรงนี้เอง
-  if (step === 4) capPaint();
+  // (เรียกในขั้น 3 ด้วย เพราะตัวเล่นเป็นตัวเดียวกัน — ต้องเก็บกวาดชั้นข้อความ
+  //  กับปุ่ม + Text ให้หายไปตอนออกจากขั้น 4 ไม่ใช่ค้างอยู่จนกว่าจะกดเล่น)
+  if (tlStep()) capPaint();
   document.body.classList.toggle('wideside', clipOn || pieceOn || talkOn);
   // วางกลับที่เดิม ทั้งรอบนี้และรอบหน้าจอวาด (รูปที่โหลดทีหลังดันความสูงได้อีก)
   if (window.scrollY !== y){
@@ -2115,6 +2151,7 @@ let CAP = null;                 // ชั้นข้อความจากเ
 let capSel = null;              // ข้อความชิ้นที่กำลังแก้อยู่
 let capDirty = false;           // มีที่แก้ยังไม่บันทึกไหม
 let capTab = 'style';           // style | lines | boxes
+let capPosOpen = null;          // บรรทัดซับที่กางแผงตำแหน่งอยู่
 
 const capCue = id => capRows().find(c => c.id === id);
 const capStyle = () => (CAP && CAP.style) || {};
@@ -2253,6 +2290,10 @@ function capEditor(){
     seg.append(b);
   });
   bar.append(seg, el('span', 'spacer'));
+  const plus = el('button', 'sm', '+ Text');
+  plus.title = 'เพิ่มกล่องข้อความตรงวินาทีที่ตัวเล่นค้างอยู่';
+  plus.onclick = capAddBox;
+  bar.append(plus);
   if (capDirty){
     const sv = el('button', 'primary', 'บันทึกข้อความ');
     sv.onclick = () => capSave();
@@ -2306,15 +2347,31 @@ function capColour(get, set){
   return w;
 }
 
+// แถบเลื่อน + ช่องพิมพ์เลข
+//
+// แถบเลื่อนหาค่าคร่าว ๆ ได้เร็วแต่ละเอียดได้เท่าที่นิ้วลากไหว ซึ่งไม่พอสำหรับ
+// ตำแหน่งกับระยะขอบ — ขยับ 1 พิกเซลบนแถบยาว 200 พิกเซลที่ช่วง 0–500 เป็นไปไม่ได้
+// พิมพ์เลขตรง ๆ ได้ด้วยจึงจำเป็น ไม่ใช่ของแถม
 function capNum(get, set, min, max, stepv, unit){
   const w = el('div', 'rng');
   const i = el('input'); i.type = 'range'; i.min = min; i.max = max; i.step = stepv;
-  i.value = get();
-  const o = el('output'); const show = v => o.textContent = v + (unit ? ' ' + unit : '');
-  show(i.value);
-  i.oninput = () => show(i.value);
-  i.onchange = () => { set(+i.value); capTouch(); };
-  w.append(i, o);
+  const n = el('input', 'nudge'); n.type = 'number';
+  n.min = min; n.max = max; n.step = stepv;
+  const show = v => { i.value = v; n.value = v; };
+  show(+(+get()).toFixed(3));
+  // พิมพ์เกินช่วงหรือพิมพ์อะไรที่ไม่ใช่เลข → หนีบกลับเข้าช่วง ไม่ใช่ปล่อยเป็น NaN
+  // แล้วให้ค่าไปโผล่เป็น "ตำแหน่ง NaN" ในไฟล์ .ass ซึ่ง libass จะทิ้งทั้งบรรทัด
+  const put = v => {
+    v = parseFloat(v);
+    if (!isFinite(v)) return show(+(+get()).toFixed(3));
+    v = +Math.max(min, Math.min(max, v)).toFixed(3);
+    show(v); set(v); capTouch();
+  };
+  i.oninput = () => { n.value = i.value; };
+  i.onchange = () => put(i.value);
+  n.onchange = () => put(n.value);
+  w.append(i, n);
+  if (unit) w.append(el('span', 'unit', unit));
   return w;
 }
 
@@ -2340,6 +2397,57 @@ function capAlign(get, set){
   return g;
 }
 
+// ── ตำแหน่ง · ใช้ซ้ำทั้งสไตล์กลางและตำแหน่งรายบรรทัด ─────────────────
+//
+// ASS วางข้อความได้สองทางที่ใช้ร่วมกันไม่ได้: ตรึงพิกัดด้วย \pos กับปล่อยให้
+// ตัวเรนเดอร์จัดเองตามจุดยึด+ระยะขอบ · เมื่อมี \pos แล้วระยะขอบไม่มีผลเลย
+// ฟอร์มจึงสลับกันแสดง ไม่โชว์พร้อมกันให้เข้าใจผิดว่าปรับได้ทั้งคู่แล้วงงว่า
+// ทำไมเลื่อนแล้วไม่ขยับ
+const CAP_POS_KEYS = ['align', 'margin_v', 'margin_h', 'pos_x', 'pos_y'];
+
+const capPinned = t => t && t.pos_x != null && t.pos_y != null;
+
+// บรรทัดนี้ตั้งตำแหน่งของตัวเองไว้หรือยัง
+const capLineOwn = id => {
+  const o = (CAP.auto.styles || {})[id];
+  return !!o && CAP_POS_KEYS.some(k => k in o);
+};
+
+// จุดที่ข้อความ *อยู่ตอนนี้* คิดจากจุดยึด+ระยะขอบ — ใช้ตอนเปลี่ยนมาตรึงพิกัด
+// เพื่อให้มันอยู่ที่เดิม ไม่ใช่กระโดดไปกลางจอแล้วต้องลากกลับมาเอง
+function capPinNow(t, fb){
+  const gv = k => (t[k] != null ? t[k] : fb[k]);
+  const W = +val('video.width') || 1920, H = +val('video.height') || 1080;
+  const al = +gv('align') || 2, mv = +gv('margin_v') || 0, mh = +gv('margin_h') || 0;
+  const col = (al - 1) % 3, row = Math.floor((al - 1) / 3);   // 0 ล่าง · 2 บน
+  const x = col === 0 ? mh / W : col === 2 ? 1 - mh / W : 0.5;
+  const y = row === 0 ? 1 - mv / H : row === 2 ? mv / H : 0.5;
+  return [+x.toFixed(4), +y.toFixed(4)];
+}
+
+function capPosForm(t, fb){
+  const g = el('div', 'capgrid');
+  const gv = k => (t[k] != null ? t[k] : fb[k]);
+  const set = k => v => { t[k] = v; };
+  g.append(capField('จุดยึด', capAlign(() => gv('align'), set('align'))));
+  g.append(capField('วิธีวาง', capBool(() => capPinned(t), on => {
+    if (on){ const p = capPinNow(t, fb); t.pos_x = p[0]; t.pos_y = p[1]; }
+    else { t.pos_x = null; t.pos_y = null; }
+  }, 'ตรึงพิกัดเอง')));
+  if (capPinned(t)){
+    g.append(capField('แนวนอน', capNum(() => +(t.pos_x * 100).toFixed(2),
+      v => { t.pos_x = +(v / 100).toFixed(4); }, 0, 100, 0.05, '%')));
+    g.append(capField('แนวตั้ง', capNum(() => +(t.pos_y * 100).toFixed(2),
+      v => { t.pos_y = +(v / 100).toFixed(4); }, 0, 100, 0.05, '%')));
+  } else {
+    g.append(capField('ระยะขอบบน-ล่าง',
+                      capNum(() => gv('margin_v'), set('margin_v'), 0, 600, 1, 'px')));
+    g.append(capField('ระยะขอบซ้าย-ขวา',
+                      capNum(() => gv('margin_h'), set('margin_h'), 0, 600, 1, 'px')));
+  }
+  return g;
+}
+
 function capStyleForm(){
   const s = el('div', 'sect');
   const S = CAP.style;
@@ -2351,20 +2459,29 @@ function capStyleForm(){
   g.append(capField('สีขอบ', capColour(() => S.outline, set('outline'))));
   g.append(capField('ความหนาขอบ', capNum(() => S.border, set('border'), 0, 12, 0.5, 'px')));
   g.append(capField('เงา', capNum(() => S.shadow, set('shadow'), 0, 12, 0.5, 'px')));
-  g.append(capField('ตำแหน่งซับ', capAlign(() => S.align, set('align'))));
-  g.append(capField('ระยะห่างขอบบน-ล่าง',
-                    capNum(() => S.margin_v, set('margin_v'), 0, 400, 5, 'px')));
-  g.append(capField('ระยะห่างขอบซ้าย-ขวา',
-                    capNum(() => S.margin_h, set('margin_h'), 0, 400, 5, 'px')));
+  g.append(capField('ระยะห่างตัวอักษร',
+                    capNum(() => S.spacing || 0, set('spacing'), -10, 30, 0.1, 'px')));
+  g.append(capField('หมุน', capNum(() => S.angle || 0, set('angle'), -180, 180, 0.5, '°')));
   const bb = el('div');
   bb.append(capBool(() => S.bold, set('bold'), 'หนา'),
             capBool(() => S.italic, set('italic'), 'เอียง'));
   g.append(capField('แบบตัวอักษร', bb));
   s.append(g);
+
+  s.append(el('h4', 'caph', 'ตำแหน่งซับ'));
+  s.append(capPosForm(S, CAP.defaults || S));
+  s.append(el('p', 'note', capPinned(S)
+    ? 'ตรึงพิกัดไว้ — ลากตัวหนังสือบนตัวเล่นได้เลย จุดยึดคือมุมที่พิกัดหมายถึง '
+      + '(เช่นจุดยึดล่างกลาง = พิกัดคือจุดกึ่งกลางขอบล่างของข้อความ) · '
+      + 'ระยะขอบไม่มีผลตอนตรึงพิกัด'
+    : 'ลากตัวหนังสือบนตัวเล่นได้เลย — พอเริ่มลากจะเปลี่ยนเป็นตรึงพิกัดให้เอง '
+      + 'โดยเริ่มจากจุดที่มันอยู่ตอนนี้ ไม่กระโดด'));
+
   s.append(el('p', 'note',
     'ขนาดกับระยะห่างเป็นพิกเซลของหนังจริง '
     + `(${val('video.width')}×${val('video.height')}) — เลขที่เห็นคือเลขที่ออกมาในไฟล์ · `
-    + 'ตัวอย่างบนตัวเล่นย่อตามกรอบให้แล้ว'));
+    + 'ตัวอย่างบนตัวเล่นย่อตามกรอบให้แล้ว · ตำแหน่งเป็น % ของกรอบภาพ '
+    + 'จะได้อยู่ที่เดิมถ้าเปลี่ยนความละเอียดหนัง'));
   s.append(el('p', 'note',
     'ฟอนต์ในรายการอ่านมาจากที่ติดตั้งจริงในเครื่อง — กลุ่มบนคือกลุ่มที่วางสระ'
     + 'กับวรรณยุกต์ไทยได้ถูกตำแหน่ง เลือกจากกลุ่มล่างแล้วข้อความไทยอาจเพี้ยน'));
@@ -2385,7 +2502,7 @@ function capLines(){
   const off = [...drop].map(id => ({id, kind: 'auto', a: null, off: true,
                                     text: CAP.auto.edits[id] || capOrigText(id)}));
 
-  const list = el('div', 'caplines');
+  const list = keepScroll(el('div', 'caplines'), 'caplines');
   [...rows, ...off].forEach(r => list.append(capLineRow(r, drop.has(r.id))));
   if (!rows.length && !off.length)
     list.append(el('p', 'note', 'ไม่มีบทพูดในช่วงที่อยู่ในหนังตอนนี้'));
@@ -2403,6 +2520,7 @@ const capOrigText = id => {
 };
 
 function capLineRow(r, isOff){
+  const wrap = el('div', 'caplw');
   const row = el('div', 'capline' + (isOff ? ' off' : '') + (capSel === r.id ? ' on' : ''));
   const t = el('button', 'capt', r.a != null ? mmss(r.a) : '—');
   t.type = 'button';
@@ -2433,24 +2551,69 @@ function capLineRow(r, isOff){
                           : [...CAP.auto.drop, r.id];
     capTouch();
   };
-  row.append(undo, kill);
-  return row;
+  const own = capLineOwn(r.id);
+  const mv = el('button', 'sm' + (own ? ' hot' : ''), '⤢');
+  mv.type = 'button';
+  mv.title = own ? 'บรรทัดนี้ตั้งตำแหน่งของตัวเองไว้ — กดเพื่อแก้หรือเลิกใช้'
+                 : 'ตั้งตำแหน่งเฉพาะบรรทัดนี้';
+  mv.setAttribute('aria-pressed', capPosOpen === r.id);
+  mv.onclick = () => { capPosOpen = capPosOpen === r.id ? null : r.id;
+                       capSel = r.id; render(); };
+
+  row.append(mv, undo, kill);
+  wrap.append(row);
+  if (capPosOpen === r.id) wrap.append(capLinePos(r));
+  return wrap;
+}
+
+// ตำแหน่งเฉพาะบรรทัดเดียว — ต้องติ๊กเปิดก่อน ไม่ใช่แก้ได้เลย
+//
+// ซับที่วางไม่ตรงกันเป็นบรรทัด ๆ อ่านแล้วเหมือนหนังพังมากกว่าเหมือนตั้งใจ การ
+// ให้ต้องติ๊กก่อนจึงไม่ใช่ขั้นตอนส่วนเกิน แต่คือเส้นแบ่งระหว่าง "ตั้งใจย้าย"
+// กับ "เผลอลากโดนแล้วบรรทัดเดียวหลุดไปอยู่คนละที่โดยไม่รู้ตัว"
+function capLinePos(r){
+  const box = el('div', 'capsub');
+  const st = CAP.auto.styles = CAP.auto.styles || {};
+  const own = capLineOwn(r.id);
+  box.append(capBool(() => own, on => {
+    if (on){
+      const o = st[r.id] = st[r.id] || {};
+      // เริ่มจากค่าของสไตล์กลาง เพื่อให้ติ๊กแล้วยังอยู่ที่เดิม แล้วค่อยขยับ
+      CAP_POS_KEYS.forEach(k => { o[k] = CAP.style[k]; });
+    } else if (st[r.id]){
+      CAP_POS_KEYS.forEach(k => delete st[r.id][k]);
+      if (!Object.keys(st[r.id]).length) delete st[r.id];
+    }
+  }, 'ตั้งตำแหน่งเฉพาะบรรทัดนี้'));
+
+  if (own){
+    box.append(capPosForm(st[r.id], CAP.style));
+    box.append(el('p', 'note',
+      'ลากตัวหนังสือบนตัวเล่นตอนบรรทัดนี้ขึ้นอยู่ ก็ย้ายได้เหมือนกัน '
+      + '— จะย้ายเฉพาะบรรทัดนี้ ไม่กระทบบรรทัดอื่น'));
+  } else {
+    box.append(el('p', 'note',
+      'ตอนนี้ใช้ตำแหน่งของสไตล์กลาง · ติ๊กข้างบนถ้าบรรทัดนี้ต้องหลบอะไรในภาพ '
+      + 'เช่นป้ายชื่อหรือหน้าคนพูด'));
+  }
+  return box;
 }
 
 // ── กล่องข้อความใส่เอง ──
 function capBoxes(){
   const s = el('div', 'sect');
   const add = el('div', 'acts');
-  const b = el('button', 'primary', '+ เพิ่มกล่องข้อความตรงหัวอ่าน');
+  const b = el('button', 'primary', '+ Text ตรงหัวอ่าน');
   b.onclick = capAddBox;
   add.append(b);
   add.append(el('span', 'note',
-    'วางที่วินาทีที่ตัวเล่นค้างอยู่ · ลากตัวหนังสือบนตัวเล่นเพื่อจัดตำแหน่ง'));
+    'กดกี่ใบก็ได้ — ใบที่ขึ้นพร้อมกันจะเยื้องกันเองไม่ให้ทับ · '
+    + 'ลากตัวหนังสือบนตัวเล่นเพื่อจัดตำแหน่ง'));
   s.append(add);
 
   if (!(CAP.boxes || []).length){
     s.append(el('p', 'note', 'ยังไม่มีกล่องข้อความ — เลื่อนตัวเล่นไปจุดที่อยากใส่ '
-      + 'แล้วกดปุ่มข้างบน'));
+      + 'แล้วกดปุ่มข้างบน หรือปุ่ม + Text บนตัวเล่น'));
     return s;
   }
   (CAP.boxes || []).forEach((bx, i) => s.append(capBoxRow(bx, i)));
@@ -2468,15 +2631,29 @@ function capWhere(t){
   return last ? {name: last.name, at: +last.c0.toFixed(3)} : null;
 }
 
+// ใบใหม่ต้องไม่เกิดทับใบที่ขึ้นอยู่แล้ว — เกิดที่กลางจอทุกใบแปลว่ากดเพิ่มใบที่
+// สองแล้วดูเหมือนไม่มีอะไรเกิดขึ้น ทั้งที่มีสองใบซ้อนกันสนิท
+const CAP_STACK = [0, 0.12, -0.12, 0.24, -0.24, 0.36, -0.36];
+
 function capAddBox(){
   const w = capWhere((PV && PV.gt) || 0);
   if (!w) return toast('ยังไม่มีไทม์ไลน์ให้วางข้อความ', true);
-  const id = 'b' + Date.now().toString(36);
+  const t = (PV && PV.gt) || 0;
+  const busy = capRows().filter(c => c.kind === 'box' && c.a != null
+                                     && t >= c.a - 0.01 && t < c.b).length;
+  const dy = CAP_STACK[busy % CAP_STACK.length];
+  // สองใบที่กดในมิลลิวินาทีเดียวกันต้องไม่ได้ id เท่ากัน — id ซ้ำแปลว่าแก้ใบหนึ่ง
+  // แล้วอีกใบเปลี่ยนตาม และ capCue จะหาเจอแต่ใบแรกเสมอ
+  const id = 'b' + Date.now().toString(36)
+           + Math.floor(Math.random() * 1679616).toString(36);
   CAP.boxes = [...(CAP.boxes || []),
                {id, name: w.name, at: w.at, dur: 3, text: 'ข้อความใหม่',
-                x: 0.5, y: 0.5, style: {align: 5}}];
+                x: 0.5, y: +Math.min(0.94, Math.max(0.06, 0.5 + dy)).toFixed(4),
+                style: {align: 5}}];
   capSel = id;
+  capTab = 'boxes';
   capTouch();
+  toast(`เพิ่ม Text แล้ว — ใบที่ ${busy + 1} ตรงหัวอ่าน · ลากบนตัวเล่นเพื่อจัดตำแหน่ง`);
 }
 
 function capBoxRow(bx, i){
@@ -2716,7 +2893,14 @@ function pvBuild(){
   // ชั้นข้อความของขั้น 4 — วาดด้วย HTML ทับตัวเล่น ไม่ได้ผ่าน ffmpeg เลย
   // แก้สี/ขนาด/ตำแหน่งแล้วเห็นผลทันทีโดยไม่ต้อง render (render รอบละหลายนาที)
   const cap = el('div', 'pvcap');
-  stage.append(va, vb, vf, vs, cap, badge);
+  // ปุ่มเพิ่มข้อความอยู่บนตัวเล่น เพราะจังหวะที่คนอยากใส่ข้อความคือตอนกำลังดู
+  // แล้วเห็นว่า "ตรงนี้ควรมีอะไรสักอย่าง" ไม่ใช่ตอนไล่แก้ฟอร์มอยู่ข้างล่าง
+  const addtx = el('button', 'pvadd', '+ Text');
+  addtx.type = 'button';
+  addtx.title = 'เพิ่มกล่องข้อความตรงวินาทีนี้ (กดซ้ำได้ ใบใหม่จะไม่ทับใบเดิม)';
+  addtx.onclick = capAddBox;
+  addtx.hidden = true;
+  stage.append(va, vb, vf, vs, cap, addtx, badge);
   c.appendChild(stage);
 
   const bar = el('div', 'pvbar');
@@ -2750,8 +2934,8 @@ function pvBuild(){
   c.appendChild(foot);
 
   PV.node = c;
-  PV.el = {tabs, stage, va, vb, vf, vs, cap, badge, play, prev, next, scrub, fill, ticks,
-           time, rate, full, foot};
+  PV.el = {tabs, stage, va, vb, vf, vs, cap, addtx, badge, play, prev, next, scrub,
+           fill, ticks, time, rate, full, foot};
 
   // ตัวจับเวลาของโหมดที่ต่อชิ้นเอง — ท่อนหนึ่งอาจไม่ได้จบที่ท้ายไฟล์ (โหมดตรวจ
   // รอยต่อเล่นแค่ 1.5 วิแรก) จึงต้องเฝ้าเองว่าถึง `to` แล้วหรือยัง
@@ -3055,6 +3239,7 @@ function capRows(){
 // กว่าหนังจริงหลายเท่า ถ้าใช้พิกเซลตรง ๆ ตัวหนังสือจะล้นจอทันที
 function capPaint(){
   if (!PV || !PV.el || !PV.el.cap) return;
+  if (PV.el.addtx) PV.el.addtx.hidden = step !== 4;
   const box = PV.el.cap;
   if (step !== 4 || !CAP){ if (box.firstChild) box.innerHTML = ''; return; }
   const t = PV.gt || 0;
@@ -3096,46 +3281,70 @@ function capNode(c, k){
   d.style.font = `${s.italic ? 'italic ' : ''}${s.bold ? '700' : '400'} `
                + `${Math.max(7, (+s.size || 54) * k)}px "${s.font || 'sans-serif'}", sans-serif`;
   d.style.color = s.color || '#fff';
+  if (+s.spacing) d.style.letterSpacing = ((+s.spacing) * k).toFixed(2) + 'px';
+  // ASS หมุนทวนเข็ม (\frz) ส่วน CSS หมุนตามเข็ม — กลับเครื่องหมาย ไม่งั้นพรีวิว
+  // เอียงคนละทางกับไฟล์จริง · จุดหมุนต้องเป็นจุดยึดเดียวกับที่ libass ใช้ด้วย
+  const rot = +s.angle ? ` rotate(${-(+s.angle)}deg)` : '';
   if (bord > 0.4)
     d.style.textShadow = [[-1,-1],[1,-1],[-1,1],[1,1],[0,-1],[0,1],[-1,0],[1,0]]
       .map(([x, y]) => `${x * bord}px ${y * bord}px 0 ${s.outline || '#000'}`).join(',');
+  // เลขแป้นตัวเลข 1-9: หลักคือแนวนอน (1,4,7 ซ้าย) แถวคือแนวตั้ง (1-3 ล่าง)
+  const anchor = al => {
+    const col = (al - 1) % 3, row = Math.floor((al - 1) / 3);
+    return {hx: [0, 50, 100][col], vy: [100, 50, 0][row],
+            ta: ['left', 'center', 'right'][col], row};
+  };
+
   if (c.kind === 'box'){
-    const al = +s.align || 5;
+    const a = anchor(+s.align || 5);
     d.style.left = ((c.x != null ? c.x : 0.5) * 100) + '%';
     d.style.top = ((c.y != null ? c.y : 0.5) * 100) + '%';
-    // เลขแป้นตัวเลข 1-9: หลักคือแนวนอน (1,4,7 ซ้าย) แถวคือแนวตั้ง (1-3 ล่าง)
-    const hx = [0, 0, 50, 100][((al - 1) % 3) + 1];
-    const vy = [0, 100, 50, 0][Math.floor((al - 1) / 3) + 1];
-    d.style.transform = `translate(${-hx}%, ${-vy}%)`;
-    d.style.textAlign = hx === 0 ? 'left' : hx === 100 ? 'right' : 'center';
-    d.onpointerdown = e => capDrag(e, c.id);
+    d.style.transform = `translate(${-a.hx}%, ${-a.vy}%)` + rot;
+    d.style.transformOrigin = `${a.hx}% ${a.vy}%`;
+    d.style.textAlign = a.ta;
+    d.onpointerdown = e => capDragBox(e, c.id);
   } else {
-    const al = +CAP.style.align || 2;
-    const mv = (+CAP.style.margin_v || 60) * k;
-    const mh = (+CAP.style.margin_h || 60) * k;
-    d.style.left = mh + 'px'; d.style.right = mh + 'px';
-    d.style.textAlign = 'center';
-    if (al <= 3) d.style.bottom = mv + 'px';
-    else if (al >= 7) d.style.top = mv + 'px';
-    else { d.style.top = '50%'; d.style.transform = 'translateY(-50%)'; }
+    const a = anchor(+s.align || 2);
+    d.classList.add('sub');
+    d.style.textAlign = a.ta;
+    d.style.transformOrigin = `${a.hx}% ${a.vy}%`;
+    if (capPinned(s)){
+      // ตรึงพิกัด — จุดยึดคือมุมที่พิกัดหมายถึง ตรงกับที่ \pos + \an ทำในไฟล์จริง
+      d.style.left = (s.pos_x * 100) + '%';
+      d.style.top = (s.pos_y * 100) + '%';
+      d.style.transform = `translate(${-a.hx}%, ${-a.vy}%)` + rot;
+      d.style.maxWidth = '94%';
+    } else {
+      const mv = (+s.margin_v || 0) * k, mh = (+s.margin_h || 0) * k;
+      d.style.left = mh + 'px'; d.style.right = mh + 'px';
+      if (a.row === 0){ d.style.bottom = mv + 'px'; d.style.transform = rot.trim(); }
+      else if (a.row === 2){ d.style.top = mv + 'px'; d.style.transform = rot.trim(); }
+      else { d.style.top = '50%'; d.style.transform = 'translateY(-50%)' + rot; }
+    }
+    d.title = capLineOwn(c.id) ? 'ลากเพื่อย้าย — เฉพาะบรรทัดนี้'
+                               : 'ลากเพื่อย้ายซับทั้งเรื่อง (ตั้งรายบรรทัดได้ที่แท็บบรรทัดซับ)';
+    d.onpointerdown = e => capDragSub(e, c);
   }
   return d;
 }
 
-// ลากกล่องข้อความบนตัวเล่นเพื่อจัดตำแหน่ง — เก็บเป็นสัดส่วน 0–1 ของกรอบภาพ
-// จะได้ไม่ผูกกับขนาดจอของใครคนใดคนหนึ่ง
-function capDrag(e, id){
-  const b = (CAP.boxes || []).find(x => (x.id || '') === id);
-  if (!b) return;
+// ── ลากบนตัวเล่น ────────────────────────────────────────────────
+//
+// เก็บเป็นสัดส่วน 0–1 ของกรอบภาพ จะได้ไม่ผูกกับขนาดจอของใครคนใดคนหนึ่ง และ
+// ขยับ DOM ตรง ๆ ระหว่างลาก ไม่วาดหน้าใหม่ทุกครั้งที่เมาส์ขยับ (จะกระตุกทั้งหน้า)
+function capDragTo(e, id, put){
   const stage = PV.el.cap;
   e.preventDefault();
-  capSel = id;
   const move = ev => {
     const r = stage.getBoundingClientRect();
-    b.x = +Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)).toFixed(4);
-    b.y = +Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height)).toFixed(4);
+    const x = +Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)).toFixed(4);
+    const y = +Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height)).toFixed(4);
+    put(x, y);
     const node = stage.querySelector(`.cp[data-id="${id}"]`);
-    if (node){ node.style.left = (b.x * 100) + '%'; node.style.top = (b.y * 100) + '%'; }
+    if (node){
+      node.style.left = (x * 100) + '%'; node.style.top = (y * 100) + '%';
+      node.style.right = 'auto'; node.style.bottom = 'auto';
+    }
   };
   const up = () => {
     document.removeEventListener('pointermove', move);
@@ -3144,6 +3353,33 @@ function capDrag(e, id){
   };
   document.addEventListener('pointermove', move);
   document.addEventListener('pointerup', up);
+}
+
+function capDragBox(e, id){
+  const b = (CAP.boxes || []).find(x => (x.id || '') === id);
+  if (!b) return;
+  capSel = id;
+  capDragTo(e, id, (x, y) => { b.x = x; b.y = y; });
+}
+
+// ลากซับ = ย้ายทั้งเรื่อง เว้นแต่บรรทัดนั้นตั้งตำแหน่งของตัวเองไว้แล้ว
+//
+// ค่าตั้งต้นเป็น "ทั้งเรื่อง" เพราะนั่นคือสิ่งที่คนตั้งใจเกือบทุกครั้ง — ซับควรอยู่
+// ที่เดียวกันทั้งเรื่อง การย้ายบรรทัดเดียวเป็นข้อยกเว้นที่ต้องสั่งไว้ก่อน
+function capDragSub(e, c){
+  const t = capLineOwn(c.id)
+    ? ((CAP.auto.styles = CAP.auto.styles || {})[c.id] =
+        CAP.auto.styles[c.id] || {})
+    : CAP.style;
+  capSel = c.id;
+  if (!capPinned(t)){
+    // ยังวางด้วยระยะขอบอยู่ — ตรึงจากจุดที่มันอยู่ตอนนี้ก่อน ไม่งั้นพอเริ่มลาก
+    // ตัวหนังสือจะกระโดดไปมุมซ้ายบนแล้วค่อยตามเมาส์ ซึ่งอ่านว่าลากพลาด
+    const p = capPinNow(t, CAP.style);
+    t.pos_x = p[0]; t.pos_y = p[1];
+    capPaint();
+  }
+  capDragTo(e, c.id, (x, y) => { t.pos_x = x; t.pos_y = y; });
 }
 
 function pvSeek(t){
