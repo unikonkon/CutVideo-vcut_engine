@@ -40,7 +40,7 @@ JOB_STEPS = {
     "scan": ["scan"], "listen": ["listen"], "thumbs": ["thumbs"], "ai": ["ai"],
     "silence": ["silence"], "prepare": ["prepare"],
     "compose": ["compose"], "decide": ["decide"],
-    "render": ["render"], "assemble": ["assemble"],
+    "render": ["render"], "assemble": ["assemble"], "caption": ["caption"],
     "plan": ["run"],          # ทำตามแผนใน [run] — ปุ่ม "ทำทุกขั้น" ใช้ตัวนี้
 }
 # ปุ่ม "รัน Phase นี้" — รันทุกขั้นใน Phase เดียว โดยไม่แตะ Phase อื่น
@@ -62,6 +62,10 @@ PREPARE_JOBS = {
 # ถอดเสียงใหม่ ถาม AI ใหม่ เตรียมคลังใหม่ รวมใหม่ ก่อนจะถึงการต่อไฟล์ คนกดเห็น
 # claude รันอยู่ครึ่งชั่วโมงทั้งที่เลือกโหมด "ไม่ใช้ AI" ไว้ ตอนนี้ทำแค่สองขั้นท้าย
 PHASE_JOBS["build"] = ["render", "assemble"]
+
+# ปุ่ม "สร้างไฟล์มีข้อความ" ในขั้น 4 — ต้องมี segment ครบก่อนถึงเขียนข้อความได้
+# เติม render ให้เองเหมือนปุ่มขั้น 3 จะได้ไม่ต้องเด้งกลับไปกดอีกขั้นก่อน
+PHASE_JOBS["build_text"] = ["render", "caption"]
 
 
 def reload_ctx(ctx):
@@ -603,6 +607,56 @@ def build_transcript(ctx):
     }
 
 
+def build_captions(ctx):
+    """ชั้นข้อความ + เวลาที่คำนวณแล้ว + ของที่หน้าเว็บต้องใช้วาดพรีวิว
+
+    ส่ง cues ที่ผ่านการคำนวณจากเอนจินมาให้เลย ไม่ให้หน้าเว็บคิดเอง — พรีวิวใน
+    เบราว์เซอร์กับไฟล์ที่ ffmpeg เขียนต้องมาจากตัวเลขชุดเดียวกัน ไม่งั้นวันหนึ่ง
+    สองที่จะคิดไม่ตรงกันแล้วไม่มีใครรู้จนกว่าจะ render เสร็จ
+    """
+    from . import caption
+    data = caption.load(ctx)
+    rows, total = caption.cues(ctx, data)
+    exe = caption.text_ffmpeg(ctx, quiet=True)
+    out = caption.out_path(ctx)
+    return {
+        "style": data["style"], "auto": data["auto"], "boxes": data["boxes"],
+        "cues": rows,
+        "total": round(total, 3),
+        "defaults": caption.STYLE,
+        "fonts": caption.fonts(),
+        "ffmpeg": {"ok": bool(exe), "path": exe or "",
+                   "how": "brew install ffmpeg-full"},
+        "out": {"path": str(out), "name": out.name, "exists": out.exists(),
+                "size": out.stat().st_size if out.exists() else 0,
+                "mtime": int(out.stat().st_mtime) if out.exists() else 0},
+        "segments": [{"name": s["name"], "start": s["start"], "dur": s["dur"],
+                      "at": round(s["at"], 3), "len": round(s["len"], 3)}
+                     for s in caption.segments(ctx)[0]],
+    }
+
+
+def save_captions(ctx, payload):
+    from . import caption
+    data = caption.load(ctx)
+    if isinstance(payload.get("style"), dict):
+        data["style"].update({k: v for k, v in payload["style"].items()
+                              if k in caption.STYLE})
+    if isinstance(payload.get("auto"), dict):
+        a = payload["auto"]
+        if "enabled" in a:
+            data["auto"]["enabled"] = bool(a["enabled"])
+        for k in ("edits", "styles"):
+            if isinstance(a.get(k), dict):
+                data["auto"][k] = a[k]
+        if isinstance(a.get("drop"), list):
+            data["auto"]["drop"] = [str(x) for x in a["drop"]]
+    if isinstance(payload.get("boxes"), list):
+        data["boxes"] = [b for b in payload["boxes"] if isinstance(b, dict)]
+    caption.save(ctx, data)
+    return build_captions(ctx)
+
+
 def build_review(ctx):
     """ข้อเสนอล่าสุดของ AI ที่ดูหนังตัดแล้ว + บอกว่ามันเก่าไปหรือยัง
 
@@ -810,6 +864,9 @@ def make_handler(ctx, job):
             if p == "/api/transcript":
                 return self._json(build_transcript(ctx))
 
+            if p == "/api/captions":
+                return self._json(build_captions(ctx))
+
             # ไฟล์บทพูดที่ขั้น ① เขียนไว้ — ให้กดโหลดจากหน้าเว็บได้เลย
             if p.startswith("/text/"):
                 name = p[len("/text/"):]
@@ -1014,6 +1071,9 @@ def make_handler(ctx, job):
                 if err:
                     return self._json({"error": err}, 400)
                 return self._json({"ok": True, **out, "pool": build_pool(ctx)})
+
+            if p == "/api/captions":
+                return self._json({"ok": True, "captions": save_captions(ctx, payload)})
 
             if p == "/api/estimate":
                 try:

@@ -212,6 +212,41 @@ video{width:100%;border-radius:5px;background:#000;display:block}
   position:sticky;top:0;background:var(--panel)}
 .trs{display:flex;gap:.4rem;align-items:center;margin:.5rem 0 .45rem}
 .trs input{flex:1;min-width:0}
+/* ── ขั้น 4 · ชั้นข้อความ ── */
+/* ชั้นพรีวิวทับตัวเล่น — ไม่รับคลิก ยกเว้นตัวกล่องข้อความที่ลากได้ */
+.pvcap{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.pvcap .cp{position:absolute;line-height:1.25;white-space:pre-wrap;
+  -webkit-font-smoothing:antialiased}
+.pvcap .cp.bx{pointer-events:auto;cursor:move;max-width:80%}
+.pvcap .cp.on{outline:1px dashed var(--accent);outline-offset:3px}
+.capgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+  gap:.5rem .9rem;margin:.2rem 0 .6rem}
+.capf{display:flex;flex-direction:column;gap:.2rem;min-width:0}
+.capf > label{font-size:11.5px;color:var(--dim)}
+.capc{display:flex;gap:.35rem;align-items:center}
+.capc input[type=color]{width:34px;height:28px;padding:0;border:1px solid var(--line);
+  border-radius:5px;background:none;flex:none;cursor:pointer}
+.capc input[type=text]{font:11.5px ui-monospace,Menlo,monospace}
+/* ตาราง 3×3 เลือกตำแหน่ง — จุดในช่องบอกมุมที่ข้อความจะไปเกาะ */
+.capal{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;width:74px}
+.capal button{height:20px;border:1px solid var(--line);border-radius:3px;
+  background:var(--bg);cursor:pointer;padding:0}
+.capal button[aria-pressed=true]{background:var(--accent);border-color:var(--accent)}
+.caplines{display:flex;flex-direction:column;gap:2px;max-height:24em;overflow:auto;
+  border:1px solid var(--line);border-radius:6px;padding:.3rem}
+.capline{display:flex;gap:.4rem;align-items:center}
+.capline input[type=text]{flex:1;min-width:0;font-size:12.5px}
+.capline.off input{opacity:.4;text-decoration:line-through}
+.capline.on input{border-color:var(--accent)}
+.capt{font:11px ui-monospace,Menlo,monospace;color:var(--dim);background:none;
+  border:0;padding:.1rem .3rem;cursor:pointer;flex:none;width:3.6em;text-align:right}
+.capt:hover:not(:disabled){color:var(--accent)}
+.capbox{border:1px solid var(--line);border-radius:6px;padding:.5rem .6rem;
+  margin-bottom:.5rem}
+.capbox.on{border-color:var(--accent)}
+.capbh{display:flex;gap:.5rem;align-items:center;margin-bottom:.35rem}
+.cmd{font:12px ui-monospace,Menlo,monospace;background:var(--bg);border:1px solid var(--line);
+  border-radius:5px;padding:.45rem .6rem;margin:.4rem 0;overflow-x:auto}
 /* หัวการ์ดบทพูด — ทั้งแถวกดพับ/กางได้ ไม่ใช่แค่ลูกศรเล็ก ๆ */
 .trhead{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
 .trtog{display:flex;gap:.45rem;align-items:center;background:none;border:0;padding:0;
@@ -541,13 +576,16 @@ const post = (p, b) => api(p, {method:'POST', headers:{'Content-Type':'applicati
 // ── โหลดสถานะทั้งหมด ─────────────────────────────────────────────
 
 async function load(keepEdits){
-  const [d, pool, st, cl, tr] = await Promise.all([
+  const [d, pool, st, cl, tr, cap] = await Promise.all([
     api('/api/setup'), api('/api/pool').catch(() => ({has:false, pieces:[]})),
     api('/api/state').catch(() => null),
     api('/api/clips').catch(() => ({clips:[], summary:{total:0}})),
     api('/api/transcript').catch(() => ({exists:false, clips:{}, order:[], files:{},
-                                         summary:{clips:0}}))]);
+                                         summary:{clips:0}})),
+    api('/api/captions').catch(() => null)]);
   D = d; POOL = pool; S = st; CL = cl; TR = tr;
+  // ของที่แก้ค้างไว้ยังไม่บันทึก อย่าให้ของจากดิสก์มาทับหาย
+  if (cap && !capDirty) CAP = cap;
   if (!keepEdits){
     edits = {}; poolKeep = null; clEdits = {pick: {}, rot: {}, vmode: {}, order: null};
   }
@@ -623,6 +661,7 @@ function render(){
   if (step === 1) stepSource(b);
   if (step === 2) stepPrepare(b);
   if (step === 3) stepCompose(b);
+  if (step === 4) stepText(b);
   if (step === 3) scheduleEstimate();
   // การ์ดดูของอยู่ในแถบข้าง — ขั้น 1 ดูคลิป · ขั้น 2 ดูชิ้นในคลัง ต้องวาดหลัง
   // #body เสมอ เพราะทั้งคู่ต้องรู้ก่อนว่ารายการถูกกรอง/เรียงยังไง ถึงจะบอก
@@ -639,6 +678,9 @@ function render(){
   if (!talkOn) shutSide('#side-talk');
   if (step !== 1) clOpen = -1;
   if (step !== 2){ pcOpen = null; tkOpen = null; }
+  // แก้ไทม์ไลน์ตอนหยุดนิ่ง ไม่มี timeupdate มาเรียกวาดข้อความใหม่ — เวลาของซับ
+  // เพิ่งเปลี่ยนไปพร้อมกับชิ้นที่เพิ่งลาก ต้องวาดทับตัวเล่นใหม่ตรงนี้เอง
+  if (step === 4) capPaint();
   document.body.classList.toggle('wideside', clipOn || pieceOn || talkOn);
   // วางกลับที่เดิม ทั้งรอบนี้และรอบหน้าจอวาด (รูปที่โหลดทีหลังดันความสูงได้อีก)
   if (window.scrollY !== y){
@@ -2060,6 +2102,427 @@ function stepCompose(box){
   box.appendChild(reviewCard());
 }
 
+// ── ขั้น 4 · รวมเป็นหนังแบบมีText ────────────────────────────────
+//
+// ขั้นนี้ **ไม่ตัดอะไรใหม่เลย** ใช้ไทม์ไลน์กับ segment ชุดเดียวกับขั้น 3 ทั้งหมด
+// เพิ่มแค่ชั้นข้อความแล้วต่อเป็นไฟล์ตัวที่สอง — final.mp4 ของขั้น 3 ไม่ถูกแตะ
+// ตัวเล่นกับแถบไทม์ไลน์จึงเป็นตัวเดียวกันเป๊ะ ไม่ได้ทำใหม่คู่ขนาน แก้ที่ขั้นไหน
+// อีกขั้นก็เห็นทันที (ถ้าทำคนละตัว วันหนึ่งสองที่จะเพี้ยนจากกันแล้วไม่มีใครรู้)
+
+const tlStep = () => step === 3 || step === 4;      // ขั้นที่มีตัวเล่น+ไทม์ไลน์
+
+let CAP = null;                 // ชั้นข้อความจากเซิร์ฟเวอร์ (พร้อมเวลาที่คิดแล้ว)
+let capSel = null;              // ข้อความชิ้นที่กำลังแก้อยู่
+let capDirty = false;           // มีที่แก้ยังไม่บันทึกไหม
+let capTab = 'style';           // style | lines | boxes
+
+const capCue = id => capRows().find(c => c.id === id);
+const capStyle = () => (CAP && CAP.style) || {};
+
+async function capLoad(){
+  try { CAP = await api('/api/captions'); } catch(e){ CAP = null; }
+}
+
+// บันทึกแล้วรับของที่คำนวณใหม่กลับมา — เวลาของทุกชิ้นมาจากเอนจินเสมอ ไม่ให้
+// หน้าเว็บคิดเอง ไม่งั้นพรีวิวกับไฟล์จริงจะค่อย ๆ เพี้ยนจากกันโดยไม่มีใครรู้
+async function capSave(quiet){
+  try {
+    const r = await post('/api/captions',
+                         {style: CAP.style, auto: CAP.auto, boxes: CAP.boxes});
+    CAP = r.captions; capDirty = false;
+    if (!quiet) toast('บันทึกชั้นข้อความแล้ว');
+    render();
+  } catch(e){ toast(e.message, true); }
+}
+
+// แก้อะไรก็ตามในชั้นข้อความ → วาดฟอร์มใหม่ + วาดพรีวิวใหม่ทันที
+// (pvProgress เรียก capPaint ให้อยู่แล้วตอนเล่น แต่ตอนหยุดนิ่งไม่มีอะไรมาเรียก)
+function capTouch(){ capDirty = true; render(); capPaint(); }
+
+function stepText(box){
+  const c = el('div', 'card');
+  c.appendChild(head(4));
+
+  if (!CAP){
+    c.appendChild(el('p', 'note warnnote', 'อ่านชั้นข้อความไม่ได้ — ลองรีเฟรชหน้า'));
+    box.appendChild(c);
+    return;
+  }
+
+  // ── ffmpeg ที่เขียนตัวหนังสือได้ไหม ──
+  // เช็คตั้งแต่ยังไม่กด เพราะ ffmpeg ปกติของ homebrew ไม่มีฟิลเตอร์ ass และ
+  // ไม่มีอะไรบอกจนกว่าจะสั่ง render แล้วพังตอนจบ
+  if (!CAP.ffmpeg.ok){
+    const w = el('div', 'sect');
+    w.append(el('p', 'note warnnote',
+      'ffmpeg ในเครื่องเขียนตัวหนังสือลงภาพไม่ได้ (ไม่มีฟิลเตอร์ ass) '
+      + '— แก้ข้อความและดูพรีวิวได้ตามปกติ แต่ยังสร้างไฟล์ไม่ได้'));
+    const pre = el('pre', 'cmd', CAP.ffmpeg.how);
+    w.append(pre, el('p', 'note',
+      'เป็น keg-only ติดตั้งแล้วไม่ทับ ffmpeg เดิม · ติดตั้งเสร็จรีเฟรชหน้านี้'));
+    c.appendChild(w);
+  }
+
+  const lock = composeLock();
+  if (lock){
+    c.appendChild(el('p', 'note warnnote', `ยังทำไม่ได้ — ${lock}`));
+    c.appendChild(el('p', 'note',
+      'ขั้นนี้ใช้ไทม์ไลน์เดียวกับขั้น 3 · กลับไปกด "จัดใหม่" ที่ขั้น 3 ก่อน'));
+    box.appendChild(c);
+    return;
+  }
+
+  // ── สวิตช์ซับจากบทพูด ──
+  const sw = el('div', 'sect');
+  const lab = el('label', 'ck');
+  const cb = el('input'); cb.type = 'checkbox'; cb.checked = !!CAP.auto.enabled;
+  cb.onchange = () => { CAP.auto.enabled = cb.checked; capTouch(); };
+  lab.append(cb, document.createTextNode('ใส่ซับจากบทพูดที่ถอดไว้'));
+  sw.append(lab);
+  const cues = capRows();
+  const nAuto = cues.filter(x => x.kind === 'auto').length;
+  const nBox = cues.filter(x => x.kind === 'box').length;
+  sw.append(el('p', 'note', CAP.auto.enabled
+    ? `ได้ซับ ${nAuto} ชิ้นจากบทพูด (ขั้น 2 ถอดไว้ ไม่ใช้ AI) `
+      + (CAP.auto.drop.length ? `· ปิดไว้ ${CAP.auto.drop.length} บรรทัด ` : '')
+      + (Object.keys(CAP.auto.edits).length
+         ? `· แก้เอง ${Object.keys(CAP.auto.edits).length} บรรทัด` : '')
+    : 'ปิดอยู่ — ในหนังจะมีเฉพาะกล่องข้อความที่ใส่เอง'));
+  c.appendChild(sw);
+
+  // ── ปุ่มสร้างไฟล์ ──
+  const a = el('div', 'acts');
+  const go = el('button', 'primary runbtn', 'สร้างไฟล์แบบมีข้อความ');
+  go.dataset.step = 'build_text';
+  go.disabled = !CAP.ffmpeg.ok;
+  go.title = CAP.ffmpeg.ok ? 'ตัดชิ้นที่ยังไม่มี แล้วต่อเป็นไฟล์พร้อมเขียนข้อความลงภาพ'
+                           : 'ยังไม่มี ffmpeg ที่เขียนตัวหนังสือได้';
+  // ไทม์ไลน์ที่ยังไม่บันทึกต้องกันไว้เหมือนขั้น 3 — ไฟล์ผลิตจากฉบับที่บันทึกไว้
+  // ส่วนพรีวิวบนตัวเล่นเดินตามฉบับที่กำลังแก้ ปล่อยผ่านแล้วซับในไฟล์จะไม่ตรงกับ
+  // ที่เพิ่งเห็นบนจอ ทั้งที่ทุกอย่างดูเหมือนถูกต้อง
+  go.onclick = async () => {
+    if (tlDirty()) return toast('ยังไม่ได้บันทึกไทม์ไลน์ — กดบันทึกก่อน', true);
+    if (capDirty) await capSave(true);
+    runStep('build_text');
+  };
+  a.append(go);
+  if (capDirty){
+    const sv = el('button', 'runbtn', 'บันทึกข้อความ');
+    sv.onclick = () => capSave();
+    a.append(sv);
+  }
+  a.append(el('span', 'note', `ข้อความทั้งหมด ${cues.length} ชิ้น`
+    + (nBox ? ` (ซับ ${nAuto} + กล่อง ${nBox})` : '')));
+  c.appendChild(a);
+
+  const o = CAP.out;
+  c.appendChild(el('p', 'note' + (capDirty ? ' warnnote' : ''), capDirty
+    ? 'มีที่แก้ยังไม่บันทึก — กดสร้างไฟล์จะบันทึกให้ก่อนอัตโนมัติ'
+    : o.exists
+      ? `ไฟล์ล่าสุด ${o.name} · ${(o.size / 1e9).toFixed(2)} GB`
+      : 'ยังไม่เคยสร้างไฟล์แบบมีข้อความ'));
+  c.appendChild(el('p', 'note',
+    'ขั้นนี้ไม่ตัดอะไรใหม่ — ใช้ชิ้นชุดเดียวกับขั้น 3 แล้วเขียนข้อความลงภาพ '
+    + `ได้ไฟล์ตัวที่สอง (${o.name}) ส่วนไฟล์ของขั้น 3 ยังอยู่ครบ · `
+    + 'เขียนข้อความต้องเข้ารหัสภาพใหม่หนึ่งรอบ จึงช้ากว่า "สร้างไฟล์" ของขั้น 3'));
+  box.appendChild(c);
+
+  if (items.length) box.appendChild(playerCard());
+  if (items.length) box.appendChild(capEditor());
+  if (items.length) box.appendChild(timeline());
+}
+
+// ── ตัวแก้ข้อความ ───────────────────────────────────────────────
+//
+// สามแท็บตอบคนละคำถาม: สไตล์กลาง = "หนังเรื่องนี้หน้าตายังไง" · บรรทัดซับ =
+// "whisper ได้ยินผิดตรงไหน" · กล่อง = "อยากเขียนอะไรเพิ่มเอง"  รวมไว้การ์ดเดียว
+// แต่ไม่ปนกัน เพราะสามงานนี้ทำคนละเวลา
+
+const CAP_TABS = [['style', 'สไตล์กลาง'], ['lines', 'บรรทัดซับ'], ['boxes', 'กล่องข้อความ']];
+
+function capEditor(){
+  const c = el('div', 'card');
+  const bar = el('div', 'bar');
+  const seg = el('div', 'seg');
+  CAP_TABS.forEach(([k, lab]) => {
+    const n = k === 'lines' ? capRows().filter(x => x.kind === 'auto').length
+            : k === 'boxes' ? (CAP.boxes || []).length : 0;
+    const b = el('button', null, lab + (k === 'style' ? '' : ` ${n}`));
+    b.setAttribute('aria-pressed', capTab === k);
+    b.onclick = () => { capTab = k; render(); };
+    seg.append(b);
+  });
+  bar.append(seg, el('span', 'spacer'));
+  if (capDirty){
+    const sv = el('button', 'primary', 'บันทึกข้อความ');
+    sv.onclick = () => capSave();
+    bar.append(sv);
+  }
+  c.append(bar);
+
+  if (capTab === 'style') c.append(capStyleForm());
+  if (capTab === 'lines') c.append(capLines());
+  if (capTab === 'boxes') c.append(capBoxes());
+  return c;
+}
+
+// ── ตัวคุมสไตล์ · ใช้ซ้ำทั้งสไตล์กลางและสไตล์รายชิ้น ──
+// รับ get/set มา ตัวเดียวกันจึงคุมได้ทั้งของกลางและของราย ๆ โดยไม่ต้องเขียนสองชุด
+function capField(label, node){
+  const r = el('div', 'capf');
+  r.append(el('label', null, label), node);
+  return r;
+}
+
+function capFontPick(get, set){
+  const s = el('select');
+  const add = (list, group) => {
+    if (!list.length) return;
+    const g = el('optgroup'); g.label = group;
+    list.forEach(f => { const o = el('option', null, f); o.value = f; g.append(o); });
+    s.append(g);
+  };
+  add((CAP.fonts || {}).thai || [], 'รองรับภาษาไทย');
+  add((CAP.fonts || {}).other || [], 'อื่น ๆ');
+  s.value = get() || '';
+  if (s.value !== (get() || '')){          // ฟอนต์ที่ตั้งไว้หายไปจากเครื่องแล้ว
+    const o = el('option', null, `${get()} (ไม่พบในเครื่อง)`); o.value = get();
+    s.insertBefore(o, s.firstChild); s.value = get();
+  }
+  s.onchange = () => { set(s.value); capTouch(); };
+  return s;
+}
+
+function capColour(get, set){
+  const w = el('div', 'capc');
+  const i = el('input'); i.type = 'color'; i.value = get() || '#ffffff';
+  const t = el('input'); t.type = 'text'; t.value = get() || '#ffffff';
+  i.oninput = () => { t.value = i.value; };
+  i.onchange = () => { set(i.value.toUpperCase()); capTouch(); };
+  t.onchange = () => { const v = t.value.trim();
+    if (/^#?[0-9a-fA-F]{6}$/.test(v)){ set(('#' + v.replace('#', '')).toUpperCase()); capTouch(); }
+    else { t.value = get(); toast('สีต้องเป็นแบบ #RRGGBB', true); } };
+  w.append(i, t);
+  return w;
+}
+
+function capNum(get, set, min, max, stepv, unit){
+  const w = el('div', 'rng');
+  const i = el('input'); i.type = 'range'; i.min = min; i.max = max; i.step = stepv;
+  i.value = get();
+  const o = el('output'); const show = v => o.textContent = v + (unit ? ' ' + unit : '');
+  show(i.value);
+  i.oninput = () => show(i.value);
+  i.onchange = () => { set(+i.value); capTouch(); };
+  w.append(i, o);
+  return w;
+}
+
+function capBool(get, set, label){
+  const l = el('label', 'ck');
+  const i = el('input'); i.type = 'checkbox'; i.checked = !!get();
+  i.onchange = () => { set(i.checked); capTouch(); };
+  l.append(i, document.createTextNode(label));
+  return l;
+}
+
+// ตำแหน่งแบบตาราง 3×3 — เลือกด้วยการกดช่อง เข้าใจกว่ากรอกเลขแป้นตัวเลข 1–9
+function capAlign(get, set){
+  const g = el('div', 'capal');
+  [7, 8, 9, 4, 5, 6, 1, 2, 3].forEach(n => {
+    const b = el('button', null, '');
+    b.type = 'button';
+    b.setAttribute('aria-pressed', +get() === n);
+    b.title = `ตำแหน่ง ${n}`;
+    b.onclick = () => { set(n); capTouch(); };
+    g.append(b);
+  });
+  return g;
+}
+
+function capStyleForm(){
+  const s = el('div', 'sect');
+  const S = CAP.style;
+  const set = k => v => { S[k] = v; };
+  const g = el('div', 'capgrid');
+  g.append(capField('ฟอนต์', capFontPick(() => S.font, set('font'))));
+  g.append(capField('ขนาด', capNum(() => S.size, set('size'), 16, 160, 1, 'px')));
+  g.append(capField('สีตัวอักษร', capColour(() => S.color, set('color'))));
+  g.append(capField('สีขอบ', capColour(() => S.outline, set('outline'))));
+  g.append(capField('ความหนาขอบ', capNum(() => S.border, set('border'), 0, 12, 0.5, 'px')));
+  g.append(capField('เงา', capNum(() => S.shadow, set('shadow'), 0, 12, 0.5, 'px')));
+  g.append(capField('ตำแหน่งซับ', capAlign(() => S.align, set('align'))));
+  g.append(capField('ระยะห่างขอบบน-ล่าง',
+                    capNum(() => S.margin_v, set('margin_v'), 0, 400, 5, 'px')));
+  g.append(capField('ระยะห่างขอบซ้าย-ขวา',
+                    capNum(() => S.margin_h, set('margin_h'), 0, 400, 5, 'px')));
+  const bb = el('div');
+  bb.append(capBool(() => S.bold, set('bold'), 'หนา'),
+            capBool(() => S.italic, set('italic'), 'เอียง'));
+  g.append(capField('แบบตัวอักษร', bb));
+  s.append(g);
+  s.append(el('p', 'note',
+    'ขนาดกับระยะห่างเป็นพิกเซลของหนังจริง '
+    + `(${val('video.width')}×${val('video.height')}) — เลขที่เห็นคือเลขที่ออกมาในไฟล์ · `
+    + 'ตัวอย่างบนตัวเล่นย่อตามกรอบให้แล้ว'));
+  s.append(el('p', 'note',
+    'ฟอนต์ในรายการอ่านมาจากที่ติดตั้งจริงในเครื่อง — กลุ่มบนคือกลุ่มที่วางสระ'
+    + 'กับวรรณยุกต์ไทยได้ถูกตำแหน่ง เลือกจากกลุ่มล่างแล้วข้อความไทยอาจเพี้ยน'));
+  return s;
+}
+
+// ── บรรทัดซับ ──
+function capLines(){
+  const s = el('div', 'sect');
+  if (!CAP.auto.enabled)
+    return (s.append(el('p', 'note warnnote',
+      'ปิดซับจากบทพูดไว้ — เปิดสวิตช์ข้างบนก่อนถึงจะมีบรรทัดให้แก้')), s);
+
+  const rows = capRows().filter(x => x.kind === 'auto');
+  const drop = new Set(CAP.auto.drop);
+  // บรรทัดที่ปิดไว้ไม่โผล่ใน cues (เอนจินกรองออกไปแล้ว) — ดึงกลับมาให้เห็นด้วย
+  // ไม่งั้นปิดแล้วหาย ไม่มีทางกดคืน
+  const off = [...drop].map(id => ({id, kind: 'auto', a: null, off: true,
+                                    text: CAP.auto.edits[id] || capOrigText(id)}));
+
+  const list = el('div', 'caplines');
+  [...rows, ...off].forEach(r => list.append(capLineRow(r, drop.has(r.id))));
+  if (!rows.length && !off.length)
+    list.append(el('p', 'note', 'ไม่มีบทพูดในช่วงที่อยู่ในหนังตอนนี้'));
+  s.append(list);
+  s.append(el('p', 'note',
+    'แก้ข้อความในช่องได้เลย · ปุ่ม ✕ ปิดบรรทัดนั้นไม่ให้ขึ้นในหนัง · ปุ่ม ⟲ คืนคำเดิม'
+    + 'ที่ whisper ถอดมา · กดเวลาเพื่อเลื่อนตัวเล่นไปดูจุดนั้น'));
+  return s;
+}
+
+const capOrigText = id => {
+  const at = id.lastIndexOf('#');
+  const line = (trLines(id.slice(0, at)) || [])[+id.slice(at + 1)];
+  return line ? line[2] : '';
+};
+
+function capLineRow(r, isOff){
+  const row = el('div', 'capline' + (isOff ? ' off' : '') + (capSel === r.id ? ' on' : ''));
+  const t = el('button', 'capt', r.a != null ? mmss(r.a) : '—');
+  t.type = 'button';
+  t.title = r.a != null ? 'เลื่อนตัวเล่นไปตรงนี้' : 'ปิดอยู่ ไม่ขึ้นในหนัง';
+  t.disabled = r.a == null;
+  t.onclick = () => { capSel = r.id; pvSeek(r.a + 0.05); render(); };
+  row.append(t);
+
+  const inp = el('input'); inp.type = 'text'; inp.value = r.text;
+  inp.onfocus = () => { capSel = r.id; };
+  inp.onchange = () => {
+    const v = inp.value;
+    if (v === capOrigText(r.id)) delete CAP.auto.edits[r.id];
+    else CAP.auto.edits[r.id] = v;
+    capTouch();
+  };
+  row.append(inp);
+
+  const has = CAP.auto.edits[r.id] != null;
+  const undo = el('button', 'sm', '⟲');
+  undo.type = 'button'; undo.title = 'คืนคำเดิมที่ถอดมา'; undo.disabled = !has;
+  undo.onclick = () => { delete CAP.auto.edits[r.id]; capTouch(); };
+  const kill = el('button', 'sm', isOff ? '↩' : '✕');
+  kill.type = 'button';
+  kill.title = isOff ? 'เอากลับมาแสดง' : 'ไม่ให้บรรทัดนี้ขึ้นในหนัง';
+  kill.onclick = () => {
+    CAP.auto.drop = isOff ? CAP.auto.drop.filter(x => x !== r.id)
+                          : [...CAP.auto.drop, r.id];
+    capTouch();
+  };
+  row.append(undo, kill);
+  return row;
+}
+
+// ── กล่องข้อความใส่เอง ──
+function capBoxes(){
+  const s = el('div', 'sect');
+  const add = el('div', 'acts');
+  const b = el('button', 'primary', '+ เพิ่มกล่องข้อความตรงหัวอ่าน');
+  b.onclick = capAddBox;
+  add.append(b);
+  add.append(el('span', 'note',
+    'วางที่วินาทีที่ตัวเล่นค้างอยู่ · ลากตัวหนังสือบนตัวเล่นเพื่อจัดตำแหน่ง'));
+  s.append(add);
+
+  if (!(CAP.boxes || []).length){
+    s.append(el('p', 'note', 'ยังไม่มีกล่องข้อความ — เลื่อนตัวเล่นไปจุดที่อยากใส่ '
+      + 'แล้วกดปุ่มข้างบน'));
+    return s;
+  }
+  (CAP.boxes || []).forEach((bx, i) => s.append(capBoxRow(bx, i)));
+  return s;
+}
+
+// หัวอ่านอยู่วินาทีไหนของหนัง = คลิปไหน วินาทีที่เท่าไรของคลิปนั้น
+// (ข้อความผูกกับคลิป ไม่ใช่กับวินาทีในหนัง — ลากไทม์ไลน์แล้วจะได้ตามไปเอง)
+function capWhere(t){
+  const segs = capSegs();          // ไทม์ไลน์ตรงหน้า ไม่ใช่ลำดับตอนต่อไฟล์ครั้งก่อน
+  for (const s of segs)
+    if (t >= s.at && t < s.at + (s.c1 - s.c0))
+      return {name: s.name, at: +(s.c0 + (t - s.at)).toFixed(3)};
+  const last = segs[segs.length - 1];
+  return last ? {name: last.name, at: +last.c0.toFixed(3)} : null;
+}
+
+function capAddBox(){
+  const w = capWhere((PV && PV.gt) || 0);
+  if (!w) return toast('ยังไม่มีไทม์ไลน์ให้วางข้อความ', true);
+  const id = 'b' + Date.now().toString(36);
+  CAP.boxes = [...(CAP.boxes || []),
+               {id, name: w.name, at: w.at, dur: 3, text: 'ข้อความใหม่',
+                x: 0.5, y: 0.5, style: {align: 5}}];
+  capSel = id;
+  capTouch();
+}
+
+function capBoxRow(bx, i){
+  const cue = capCue(bx.id);
+  const wrap = el('div', 'capbox' + (capSel === bx.id ? ' on' : ''));
+  const hd = el('div', 'capbh');
+  hd.append(el('span', 'capt', cue && cue.a != null ? mmss(cue.a) : '—'));
+  hd.append(el('span', 'note', `${bx.name} @ ${(+bx.at).toFixed(2)} วิ`));
+  hd.append(el('span', 'spacer'));
+  const del = el('button', 'sm', '✕');
+  del.type = 'button'; del.title = 'ลบกล่องนี้';
+  del.onclick = () => { CAP.boxes = CAP.boxes.filter(x => x !== bx);
+                        if (capSel === bx.id) capSel = null; capTouch(); };
+  hd.append(del);
+  wrap.append(hd);
+
+  if (cue && cue.orphan)
+    wrap.append(el('p', 'note warnnote',
+      'ช่วงที่กล่องนี้เกาะอยู่ถูกตัดออกจากหนังไปแล้ว — จะไม่โผล่ในไฟล์'));
+
+  const ta = el('textarea'); ta.rows = 2; ta.value = bx.text || '';
+  ta.onfocus = () => { capSel = bx.id; };
+  ta.onchange = () => { bx.text = ta.value; capTouch(); };
+  wrap.append(ta);
+
+  const st = bx.style = bx.style || {};
+  const set = k => v => { st[k] = v; };
+  const g = el('div', 'capgrid');
+  g.append(capField('ยาว', capNum(() => bx.dur, v => { bx.dur = v; }, 0.5, 30, 0.5, 'วิ')));
+  g.append(capField('ขนาด', capNum(() => st.size != null ? st.size : CAP.style.size,
+                                   set('size'), 16, 200, 1, 'px')));
+  g.append(capField('ฟอนต์', capFontPick(() => st.font || CAP.style.font, set('font'))));
+  g.append(capField('สีตัวอักษร', capColour(() => st.color || CAP.style.color, set('color'))));
+  g.append(capField('สีขอบ', capColour(() => st.outline || CAP.style.outline, set('outline'))));
+  g.append(capField('ความหนาขอบ',
+                    capNum(() => st.border != null ? st.border : CAP.style.border,
+                           set('border'), 0, 16, 0.5, 'px')));
+  g.append(capField('จุดยึด', capAlign(() => st.align || 5, set('align'))));
+  const bb = el('div');
+  bb.append(capBool(() => st.bold, set('bold'), 'หนา'),
+            capBool(() => st.italic, set('italic'), 'เอียง'));
+  g.append(capField('แบบตัวอักษร', bb));
+  wrap.append(g);
+  return wrap;
+}
+
 // การ์ดแทนที่ "ดูผลงาน" ตอนที่ยังจัดไทม์ไลน์ไม่ตรงกับค่าปัจจุบัน
 //
 // เขียนให้ชัดว่า *ทำไม* ถึงเล่นไม่ได้ และให้กดจัดใหม่ได้จากตรงนี้เลย ไม่ต้อง
@@ -2250,7 +2713,10 @@ function pvBuild(){
   const va = mk('pv-a'), vb = mk('pv-b'), vf = mk('pv-f'), vs = mk('pv-s');
   vf.controls = true;
   const badge = el('div', 'pvbadge');
-  stage.append(va, vb, vf, vs, badge);
+  // ชั้นข้อความของขั้น 4 — วาดด้วย HTML ทับตัวเล่น ไม่ได้ผ่าน ffmpeg เลย
+  // แก้สี/ขนาด/ตำแหน่งแล้วเห็นผลทันทีโดยไม่ต้อง render (render รอบละหลายนาที)
+  const cap = el('div', 'pvcap');
+  stage.append(va, vb, vf, vs, cap, badge);
   c.appendChild(stage);
 
   const bar = el('div', 'pvbar');
@@ -2284,7 +2750,7 @@ function pvBuild(){
   c.appendChild(foot);
 
   PV.node = c;
-  PV.el = {tabs, stage, va, vb, vf, vs, badge, play, prev, next, scrub, fill, ticks,
+  PV.el = {tabs, stage, va, vb, vf, vs, cap, badge, play, prev, next, scrub, fill, ticks,
            time, rate, full, foot};
 
   // ตัวจับเวลาของโหมดที่ต่อชิ้นเอง — ท่อนหนึ่งอาจไม่ได้จบที่ท้ายไฟล์ (โหมดตรวจ
@@ -2481,6 +2947,203 @@ function pvProgress(frac, cur, tot){
   const h = document.getElementById('tl-head');
   if (h) h.style.left = (PV.gt * tlZoom) + 'px';
   tlFollow();
+  capPaint();
+}
+
+// ── เวลาของข้อความ = คิดจากไทม์ไลน์ที่กำลังเล่นอยู่จริง ─────────────────
+//
+// เคยใช้เวลาที่เซิร์ฟเวอร์คิดมาจาก render.json ซึ่งคือ "ลำดับตอนที่ต่อไฟล์ครั้ง
+// ล่าสุด" ไม่ใช่ลำดับที่อยู่ตรงหน้า พอลากขอบ/สลับ/ปิดชิ้นเดียว ข้อความทุกชิ้น
+// หลังจุดนั้นเลื่อนหลุดพร้อมกันหมด และในโหมดตรวจรอยต่อซึ่งตัดเอาเฉพาะ ±1.2 วิ
+// รอบรอยต่อ ฐานเวลาเป็นคนละเรื่องกันตั้งแต่ต้น ซับจึงขึ้นมั่วทั้งเรื่อง
+//
+// จึงคิดจาก chunk ชุดเดียวกับที่ตัวเล่นใช้เดินเวลา — ตรงกับภาพที่เห็นทุกโหมด
+// และขยับตามทันทีที่แก้ไทม์ไลน์ โดยไม่ต้องบันทึกหรือต่อไฟล์ใหม่ก่อน
+//
+// กฎการตัดช่วง (ทับกันตรงไหน · เศษสั้นกว่า 0.20 วิทิ้ง · ชิ้นติดกันเชื่อมเป็น
+// ชิ้นเดียว) เป็นกฎเดียวกับ caption.cues() ฝั่งเอนจินที่เขียนไฟล์จริง แก้ที่นี่
+// ต้องแก้ที่นั่นด้วยเสมอ
+const CAP_MIN = 0.20;
+
+function capSegs(){
+  // โหมด "ไฟล์ที่ต่อแล้ว" เล่นไฟล์ที่ต่อไว้ ฐานเวลาจึงเป็นของ render.json
+  // ไม่ใช่ของไทม์ไลน์ตรงหน้า (ถ้าสองอย่างไม่ตรงกัน pvFileWhy เตือนไว้แล้ว)
+  if (PV && PV.mode === 'file')
+    return (CAP.segments || []).map(s => ({name: s.name, c0: s.start,
+                                           c1: s.start + s.dur, at: s.at}));
+  const cs = (PV && PV.mode)
+    ? pvChunks()
+    : pvPieces().map(x => ({p: x, from: pvOff(x), to: pvOff(x) + x.dur}));
+  const base = pvBase(cs);
+  return cs.map((ch, i) => ({name: ch.p.name,
+                             c0: ch.p.start + (ch.from - pvOff(ch.p)),
+                             c1: ch.p.start + (ch.to - pvOff(ch.p)),
+                             at: base[i]}));
+}
+
+// ช่วง [a,b] ของคลิป ตกอยู่ในชิ้นนี้ตรงไหนของหนัง — null ถ้าไม่ทับเลย
+function capHit(s, a, b){
+  const x = Math.max(a, s.c0), y = Math.min(b, s.c1);
+  return y - x <= 0 ? null : [s.at + (x - s.c0), s.at + (y - s.c0)];
+}
+
+function capBuild(){
+  const segs = capSegs(), out = [];
+  if (CAP.auto.enabled){
+    const drop = new Set(CAP.auto.drop);
+    segs.forEach(s => trLines(s.name).forEach((ln, i) => {
+      const id = s.name + '#' + i;
+      if (drop.has(id)) return;
+      const g = capHit(s, ln[0], ln[1]);
+      // เศษที่โผล่แค่แวบเดียวตรงรอยตัด อ่านไม่ทันแต่กะพริบกวนตา
+      if (!g || g[1] - g[0] < CAP_MIN) return;
+      const txt = CAP.auto.edits[id] != null ? CAP.auto.edits[id] : ln[2];
+      if (!String(txt).trim()) return;
+      out.push({id, kind: 'auto', a: g[0], b: g[1], text: String(txt),
+                name: s.name, clip_a: ln[0]});
+    }));
+  }
+  (CAP.boxes || []).forEach((bx, k) => {
+    const id = bx.id || ('box' + k);
+    const at = +bx.at || 0, dur = Math.max(0.1, +bx.dur || 3);
+    let placed = false;
+    segs.forEach(s => {
+      if (s.name !== bx.name) return;
+      const g = capHit(s, at, at + dur);
+      if (!g) return;
+      placed = true;
+      out.push({id, kind: 'box', a: g[0], b: g[1], text: String(bx.text || ''),
+                name: bx.name, clip_a: at, x: bx.x, y: bx.y});
+    });
+    // ไม่หายเงียบ ๆ — ช่วงที่กล่องนี้เกาะอยู่ถูกตัดออกจากหนังไปแล้ว คนเขียนควรรู้
+    if (!placed)
+      out.push({id, kind: 'box', a: null, b: null, text: String(bx.text || ''),
+                name: bx.name, clip_a: at, x: bx.x, y: bx.y, orphan: true});
+  });
+  out.sort((p, q) => (p.a == null) - (q.a == null) || (p.a || 0) - (q.a || 0));
+  // ประโยคเดียวที่ไทม์ไลน์ผ่าครึ่ง แล้วสองครึ่งมาต่อกันพอดีในหนัง = ชิ้นเดียว
+  // ปล่อยเป็นสองชิ้นแล้วตัวหนังสือจะดับและจุดใหม่หนึ่งเฟรมตรงรอยต่อ ทั้งที่คนพูดต่อ
+  const join = [];
+  out.forEach(r => {
+    const p = join[join.length - 1];
+    if (p && r.a != null && p.b != null && r.id === p.id && r.text === p.text
+        && Math.abs(r.a - p.b) < 0.05){ p.b = r.b; return; }
+    join.push(r);
+  });
+  return join;
+}
+
+// คิดใหม่เฉพาะตอนมีอะไรเปลี่ยนจริง — capPaint ถูกเรียก 4 ครั้งต่อวินาทีตอนเล่น
+let capMemo = {key: null, rows: []};
+const capTlKey = () => (PV ? `${PV.mode}/${PV.live}/${PV.joinFilter}` : '-')
+  + '|' + pvPieces().map(p => `${p.name}:${p.start}:${p.dur}`).join(',');
+const capKey = () => capTlKey() + '|' + JSON.stringify(
+  [CAP.auto.enabled, CAP.auto.drop, CAP.auto.edits,
+   (CAP.boxes || []).map(b => [b.id, b.name, b.at, b.dur, b.text])]);
+
+function capRows(){
+  if (!CAP) return [];
+  const k = capKey();
+  if (capMemo.key !== k) capMemo = {key: k, rows: capBuild()};
+  return capMemo.rows;
+}
+
+// ── พรีวิวข้อความบนตัวเล่น ──────────────────────────────────────
+//
+// วาดจาก cues ชุดเดียวกับที่จะกลายเป็นไฟล์ .ass ต่างกันแค่ฐานเวลา (ดูข้างบน)
+// ตำแหน่ง/ขนาดคิดเป็นสัดส่วนของกรอบภาพ ไม่ใช่พิกเซลจริง — กรอบในหน้าเว็บเล็ก
+// กว่าหนังจริงหลายเท่า ถ้าใช้พิกเซลตรง ๆ ตัวหนังสือจะล้นจอทันที
+function capPaint(){
+  if (!PV || !PV.el || !PV.el.cap) return;
+  const box = PV.el.cap;
+  if (step !== 4 || !CAP){ if (box.firstChild) box.innerHTML = ''; return; }
+  const t = PV.gt || 0;
+  const H = +val('video.height') || 1080;
+  const k = box.clientHeight / H;              // ย่อจากพิกเซลหนังจริงเป็นพิกเซลจอ
+  const now = capRows().filter(c => c.a != null && t >= c.a - 0.01 && t < c.b);
+  // คีย์ต้องรวมสไตล์กับตัวข้อความด้วย ไม่ใช่แค่ว่าชิ้นไหนกำลังขึ้น — ไม่งั้น
+  // เลื่อนแถบสีหรือพิมพ์แก้บรรทัดแล้วภาพไม่ขยับจนกว่าจะเปลี่ยนวินาที
+  // ซึ่งอ่านว่า "ปรับไม่ติด"
+  const key = now.map(c => c.id).join('|') + '@' + capSel + '@' + capStamp()
+            + '@' + capMemo.key;
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.innerHTML = '';
+  now.forEach(c => box.append(capNode(c, k)));
+}
+
+const capStamp = () => JSON.stringify([CAP.style, CAP.auto.styles,
+                                       (CAP.boxes || []).map(b => [b.style, b.x, b.y, b.text])]);
+
+// สไตล์ที่ใช้วาดจริงตอนนี้ — ผสมสดจากของที่ยังไม่บันทึก ไม่ใช่ของที่เซิร์ฟเวอร์
+// ผสมมาให้ตอนโหลด (นั่นเก่าไปแล้วทันทีที่มีคนเลื่อนแถบสักตัว)
+function capLive(c){
+  const over = c.kind === 'box'
+    ? ((CAP.boxes || []).find(b => (b.id || '') === c.id) || {}).style
+    : (CAP.auto.styles || {})[c.id];
+  return {...CAP.style, ...(over || {})};
+}
+
+function capNode(c, k){
+  const s = capLive(c);
+  const bx = c.kind === 'box'
+    ? (CAP.boxes || []).find(b => (b.id || '') === c.id) : null;
+  if (bx){ c = {...c, text: bx.text, x: bx.x, y: bx.y}; }
+  const d = el('div', 'cp' + (c.kind === 'box' ? ' bx' : '') + (capSel === c.id ? ' on' : ''));
+  d.textContent = c.text;
+  d.dataset.id = c.id;
+  const bord = (+s.border || 0) * k;
+  d.style.font = `${s.italic ? 'italic ' : ''}${s.bold ? '700' : '400'} `
+               + `${Math.max(7, (+s.size || 54) * k)}px "${s.font || 'sans-serif'}", sans-serif`;
+  d.style.color = s.color || '#fff';
+  if (bord > 0.4)
+    d.style.textShadow = [[-1,-1],[1,-1],[-1,1],[1,1],[0,-1],[0,1],[-1,0],[1,0]]
+      .map(([x, y]) => `${x * bord}px ${y * bord}px 0 ${s.outline || '#000'}`).join(',');
+  if (c.kind === 'box'){
+    const al = +s.align || 5;
+    d.style.left = ((c.x != null ? c.x : 0.5) * 100) + '%';
+    d.style.top = ((c.y != null ? c.y : 0.5) * 100) + '%';
+    // เลขแป้นตัวเลข 1-9: หลักคือแนวนอน (1,4,7 ซ้าย) แถวคือแนวตั้ง (1-3 ล่าง)
+    const hx = [0, 0, 50, 100][((al - 1) % 3) + 1];
+    const vy = [0, 100, 50, 0][Math.floor((al - 1) / 3) + 1];
+    d.style.transform = `translate(${-hx}%, ${-vy}%)`;
+    d.style.textAlign = hx === 0 ? 'left' : hx === 100 ? 'right' : 'center';
+    d.onpointerdown = e => capDrag(e, c.id);
+  } else {
+    const al = +CAP.style.align || 2;
+    const mv = (+CAP.style.margin_v || 60) * k;
+    const mh = (+CAP.style.margin_h || 60) * k;
+    d.style.left = mh + 'px'; d.style.right = mh + 'px';
+    d.style.textAlign = 'center';
+    if (al <= 3) d.style.bottom = mv + 'px';
+    else if (al >= 7) d.style.top = mv + 'px';
+    else { d.style.top = '50%'; d.style.transform = 'translateY(-50%)'; }
+  }
+  return d;
+}
+
+// ลากกล่องข้อความบนตัวเล่นเพื่อจัดตำแหน่ง — เก็บเป็นสัดส่วน 0–1 ของกรอบภาพ
+// จะได้ไม่ผูกกับขนาดจอของใครคนใดคนหนึ่ง
+function capDrag(e, id){
+  const b = (CAP.boxes || []).find(x => (x.id || '') === id);
+  if (!b) return;
+  const stage = PV.el.cap;
+  e.preventDefault();
+  capSel = id;
+  const move = ev => {
+    const r = stage.getBoundingClientRect();
+    b.x = +Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)).toFixed(4);
+    b.y = +Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height)).toFixed(4);
+    const node = stage.querySelector(`.cp[data-id="${id}"]`);
+    if (node){ node.style.left = (b.x * 100) + '%'; node.style.top = (b.y * 100) + '%'; }
+  };
+  const up = () => {
+    document.removeEventListener('pointermove', move);
+    document.removeEventListener('pointerup', up);
+    capTouch();
+  };
+  document.addEventListener('pointermove', move);
+  document.addEventListener('pointerup', up);
 }
 
 function pvSeek(t){
@@ -2794,7 +3457,7 @@ function pvGotoPiece(x, play){
 function pvResync(){
   // isConnected เพราะตอนไทม์ไลน์ถูกล็อก (composeLock) ตัวเล่นถูกถอดออกจากหน้าไป
   // แล้ว PV.node ยังลอยอยู่ข้างนอก — ไปสั่งโหลดชิ้นใส่มันตอนนั้นไม่มีประโยชน์
-  if (!PV || !PV.node || !PV.node.isConnected || step !== 3) return;
+  if (!PV || !PV.node || !PV.node.isConnected || !tlStep()) return;
   // แก้ไทม์ไลน์ทีเดียวไฟล์ที่ต่อไว้ก็เป็นของเก่าทันที — เด้งออกจากโหมดนั้นไปเลย
   // แทนที่จะค้างอยู่แล้วให้การ์ดงอกกล่องเตือนสามบรรทัดพร้อมปุ่มขึ้นมาดันไทม์ไลน์
   pvDropStaleFile();
@@ -2861,7 +3524,7 @@ function pvStreamReflow(){
   clearTimeout(pvReTimer);
   pvReTimer = setTimeout(() => {
     pvReTimer = 0;
-    if (!PV || !PV.node || !PV.node.isConnected || step !== 3 || !pvStreaming()) return;
+    if (!PV || !PV.node || !PV.node.isConnected || !tlStep() || !pvStreaming()) return;
     const cs = pvChunks();
     if (!cs.length || pvStreamMissing()) return;
     const base = pvBase(cs);
@@ -3160,7 +3823,7 @@ window.addEventListener('keydown', e => {
   tlKeyS = true;
   // ⌘+S ปกติคือ "บันทึกหน้าเว็บ" ของเบราว์เซอร์ — กล่องเซฟจะเด้งตั้งแต่ยังไม่ได้
   // หมุนล้อ ห้ามไว้เฉพาะตอนอยู่หน้าไทม์ไลน์แบบแถบ ที่อื่นยังเซฟหน้าได้ตามปกติ
-  if (e.metaKey && step === 3 && tlView === 'strip') e.preventDefault();
+  if (e.metaKey && tlStep() && tlView === 'strip') e.preventDefault();
 });
 window.addEventListener('keyup', e => {
   if (e.code === 'KeyS' || e.key === 'Meta' || (e.key || '').toLowerCase() === 's')
@@ -3459,7 +4122,7 @@ const TL_KEYS = {
 };
 
 function tlKey(e){
-  if (step !== 3 || e.repeat) return;          // ไทม์ไลน์อยู่แค่ในขั้น 3
+  if (!tlStep() || e.repeat) return;           // ไทม์ไลน์อยู่ในขั้น 3 กับขั้น 4
   if (!keyFree(e)) return;
   const hit = TL_KEYS[e.code]
     || Object.values(TL_KEYS).find(([ch]) => (e.key || '').toLowerCase() === ch);
@@ -4097,7 +4760,7 @@ $('#rst').addEventListener('click', e => { if (e.target === $('#rst')) $('#rst')
 $('#save').onclick = saveConfig;
 $('#run').onclick = () => runStep('plan');
 window.addEventListener('beforeunload', e => {
-  if (Object.keys(edits).length || tlDirty() || clDirty() || poolDirty()){
+  if (Object.keys(edits).length || tlDirty() || clDirty() || poolDirty() || capDirty){
     e.preventDefault(); e.returnValue = ''; }
 });
 

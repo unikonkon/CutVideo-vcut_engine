@@ -19,8 +19,8 @@ import sys
 import time
 from pathlib import Path
 
-from . import (ai, assemble, compose, config, decide, listen, prepare, render,
-               reset, review, scan, serve, settings, silence, thumbs)
+from . import (ai, assemble, caption, compose, config, decide, listen, prepare,
+               render, reset, review, scan, serve, settings, silence, thumbs)
 from .util import (c, die, disk_free_gb, hhmmss, info, read_json,
                    require_tools, warn)
 
@@ -38,6 +38,7 @@ USAGE = """vcut — ตัดต่อวิดีโออัตโนมัต
   vcut render                     ตัด+แก้ภาพ/เสียงเป็นชิ้น ๆ (มี cache)
   vcut assemble                   ต่อเป็นไฟล์เดียว
   vcut review                     ให้ AI ดูหนังที่ตัดแล้ว → เสนอให้เอาออก/สลับที่
+  vcut caption                    เขียนข้อความลงหนัง → final-text.mp4
   vcut view                       เปิดหน้าเว็บดู/แก้ EDL ในเครื่อง
   vcut info                       สรุปสถานะโปรเจกต์
   vcut presets                    ดู preset ที่มี
@@ -73,7 +74,7 @@ def build_parser():
     sub = ap.add_subparsers(dest="cmd")
 
     for name in ("scan", "listen", "thumbs", "ai", "silence", "prepare",
-                 "compose", "decide", "render", "assemble", "review", "view",
+                 "compose", "decide", "render", "assemble", "caption", "review", "view",
                  "run", "info", "gc", "presets", "config", "reset"):
         p = sub.add_parser(name, add_help=False)
         p.add_argument("-h", "--help", action="store_true")
@@ -81,7 +82,7 @@ def build_parser():
         if name in ("scan", "listen", "ai", "silence", "render", "run"):
             p.add_argument("-f", "--force", action="store_true",
                            help="ไม่ใช้ cache ทำใหม่ทั้งหมด")
-        if name in ("assemble", "run"):
+        if name in ("assemble", "caption", "run"):
             p.add_argument("-o", "--out", help="ไฟล์ผลลัพธ์")
         if name == "compose":
             p.add_argument("--mode", choices=list(compose.MODES),
@@ -417,6 +418,7 @@ def cmd_run(ctx, args):
         "compose": lambda: compose.run(ctx),
         "render": lambda: render.run(ctx, force=args.force),
         "assemble": lambda: assemble.run(ctx, out=args.out),
+        "caption": lambda: caption.run(ctx),
     }
     for sid in todo:
         runner[sid]()
@@ -479,6 +481,8 @@ def main(argv=None):
         render.run(ctx, force=args.force)
     elif args.cmd == "assemble":
         assemble.run(ctx, out=args.out)
+    elif args.cmd == "caption":
+        caption.run(ctx, out=args.out)
     elif args.cmd == "review":
         review.run(ctx, context=args.context, force=args.force)
     elif args.cmd == "view":

@@ -39,6 +39,7 @@ STEPS = [
     {"id": "compose",  "label": "เรียงเป็นหนัง"},
     {"id": "render",   "label": "ตัดเป็นชิ้น"},
     {"id": "assemble", "label": "ต่อเป็นไฟล์"},
+    {"id": "caption",  "label": "ใส่ข้อความ"},
 ]
 STEP_ORDER = [s["id"] for s in STEPS]
 STEP_LABEL = {s["id"]: s["label"] for s in STEPS}
@@ -59,6 +60,12 @@ PHASES = [
     {"id": "compose", "no": 3, "label": "รวมเป็นหนัง",
      "why": "หยิบชิ้นจากคลังมาเรียง แล้วผลิตเป็นไฟล์เดียว",
      "steps": ["compose", "render", "assemble"], "key": "run.compose"},
+    # ขั้น 4 ไม่ตัดอะไรใหม่ — ใช้ไทม์ไลน์กับ segment ชุดเดียวกับขั้น 3 ทั้งหมด
+    # เพิ่มแค่ชั้นข้อความแล้วต่อเป็นไฟล์ตัวที่สอง ของขั้น 3 ไม่ถูกแตะ
+    {"id": "text", "no": 4, "label": "รวมเป็นหนังแบบมีText",
+     "why": "ใช้ไทม์ไลน์เดียวกับขั้น 3 แล้วเขียนข้อความลงไปในภาพ "
+            "— ซับจากบทพูดที่ถอดไว้ กับข้อความที่ใส่เอง",
+     "steps": ["caption"], "key": "run.text"},
 ]
 
 # ── คีย์ไหนเป็นของขั้นไหน — ใช้ตอนรีเซ็ตทีละขั้น ────────────────
@@ -70,6 +77,7 @@ PHASE_STAGES = {
     "source":  ["project", "scan", "thumbs"],
     "prepare": ["listen", "ai", "prepare"],
     "compose": ["compose", "render", "assemble"],
+    "text": ["caption"],
 }
 SCOPES = ["all"] + [p["id"] for p in PHASES]
 SCOPE_LABEL = {"all": "ทุกขั้น",
@@ -101,6 +109,7 @@ FIELDS = [
     F("run.source", "รันขั้น 1", "bool", "free", "run"),
     F("run.prepare", "รันขั้น 2", "bool", "free", "run"),
     F("run.compose", "รันขั้น 3", "bool", "free", "run"),
+    F("run.text", "รันขั้น 4", "bool", "free", "run"),
 
     # ── โปรเจกต์ ──
     F("project.name", "ชื่อโปรเจกต์", "str", "free", "project"),
@@ -694,6 +703,8 @@ def step_status(ctx, cfg):
             "compose": work / "edl.json",
             "render": work / "render.json",
             "assemble": ctx.out,
+            "caption": Path(ctx.out).with_name(
+                Path(ctx.out).stem + "-text" + Path(ctx.out).suffix),
         }[sid]
         exists = path.exists() and (not path.is_dir() or any(path.iterdir()))
         rec = {**st, "exists": exists,
@@ -744,6 +755,18 @@ def step_status(ctx, cfg):
             rec["summary"] = f"{len(r.get('segments', []))} ชิ้น"
         elif sid == "assemble" and exists:
             rec["summary"] = f"{path.stat().st_size / 1e9:.2f} GB"
+        elif sid == "caption":
+            # ไม่มี params ให้เทียบเหมือนขั้นอื่น เพราะข้อความเป็น *เอกสาร* ไม่ใช่
+            # ค่าตั้ง — เทียบด้วยเวลาแก้แทน: แก้ข้อความหรือแก้ไทม์ไลน์หลังจากที่
+            # ทำไฟล์ไว้ = ไฟล์ที่มีอยู่ไม่ตรงกับที่เห็นบนหน้าจอแล้ว
+            cap = work / "captions.json"
+            if exists:
+                rec["summary"] = f"{path.stat().st_size / 1e9:.2f} GB"
+                newer = [n for n, p in (("ข้อความ", cap), ("ไทม์ไลน์", work / "edl.json"))
+                         if p.exists() and p.stat().st_mtime > path.stat().st_mtime]
+                if newer:
+                    rec["changed"] = newer
+                    rec["summary"] += " · " + " กับ ".join(newer) + "เปลี่ยนไปหลังจากนั้น"
         out.append(rec)
     return out
 
