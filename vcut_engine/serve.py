@@ -29,7 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from . import clips, config, render, reset, settings
+from . import clips, config, render, reset, scan, settings
 from .util import c, info, read_json, warn, write_json
 
 VIEWER = Path(__file__).resolve().parent.parent / "viewer" / "index.html"
@@ -45,6 +45,11 @@ JOB_STEPS = {
     "plan": ["run"],          # ทำตามแผนใน [run] — ปุ่ม "ทำทุกขั้น" ใช้ตัวนี้
 }
 # ปุ่ม "รัน Phase นี้" — รันทุกขั้นใน Phase เดียว โดยไม่แตะ Phase อื่น
+#
+# เก็บเป็น *ชื่อขั้น* เหมือน BUILD_JOBS/PREPARE_JOBS แล้วให้ JOB_STEPS แปลงเป็น
+# argv ตอนสั่งเสมอ — ชื่อขั้นกับชื่อคำสั่งไม่ได้ตรงกันทุกตัว ("finish" ของขั้น 5
+# คือคำสั่ง `vcut fx`) ถ้าเอาชื่อขั้นไปเป็น argv ตรง ๆ จะได้ `vcut finish` ซึ่ง
+# argparse ปฏิเสธทันที (invalid choice) — กดปุ่มแล้วขึ้น error โดยไม่ได้ทำอะไรเลย
 PHASE_JOBS = {p["id"]: p["steps"] for p in settings.PHASES}
 
 # ปุ่มหลักของขั้น 2 — เติมของที่ขาดให้ก่อนแล้วค่อยตัดทีละคลิป
@@ -133,8 +138,14 @@ class Job:
     def running(self):
         return self.active
 
-    def start(self, argvs, step, cwd):
-        """argvs = คำสั่งเดียว หรือหลายคำสั่งที่ต้องรันต่อกัน (หยุดทันทีถ้าอันไหนพัง)"""
+    def start(self, argvs, step, cwd, names=None):
+        """argvs = คำสั่งเดียว หรือหลายคำสั่งที่ต้องรันต่อกัน (หยุดทันทีถ้าอันไหนพัง)
+
+        names = ชื่อ *ขั้น* ของแต่ละคำสั่ง สำหรับบอกหน้าเว็บว่าทำถึงไหน — ต้องส่งมา
+        เมื่อชื่อขั้นไม่ตรงกับชื่อคำสั่ง (ขั้น "finish" สั่งด้วย `vcut fx`) ไม่งั้น
+        หัวข้อความคืบหน้าจะขึ้นว่า "กำลังfx…" แทน "กำลังแต่งหนัง…" และปุ่มที่กดไป
+        ก็ไม่ถูกขีดเส้นกะพริบ เพราะหน้าเว็บเทียบด้วยชื่อขั้น
+        """
         if argvs and isinstance(argvs[0], str):
             argvs = [argvs]
         with self.lock:
@@ -146,8 +157,9 @@ class Job:
             self._cwd = cwd
             self.active = True
             self.stopped = False
-            # argv = [python, vcut, <ชื่อขั้น>, ...] — เก็บชื่อไว้บอกว่าทำถึงคำสั่งไหน
-            self.cmds = [a[2] if len(a) > 2 else "" for a in argvs]
+            # argv = [python, vcut, <ชื่อคำสั่ง>, ...] — เก็บชื่อไว้บอกว่าทำถึงคำสั่งไหน
+            self.cmds = (list(names) if names
+                         else [a[2] if len(a) > 2 else "" for a in argvs])
             self.at, self.prog, self.took, self.task = 0, None, 0.0, ""
         threading.Thread(target=self._pump, daemon=True).start()
         return True
@@ -713,12 +725,22 @@ def probe_dir(ctx, path):
     if not p.is_dir():
         return {"ok": False, "msg": "ไม่พบโฟลเดอร์นี้"}
     exts = {e.lower() for e in ctx.get("scan.extensions", [".MOV"])}
-    files = [f for f in p.iterdir()
-             if f.is_file() and f.suffix.lower() in exts and not f.name.startswith(".")]
+    # นับให้ตรงกับที่ scan จะเห็นจริง — ไฟล์ผลลัพธ์ของเอนจินไม่ถูกนับเป็นฟุตเทจ
+    # (ดู scan.list_sources) ถ้านับตรงนี้แต่ scan ข้าม ตัวเลขสองที่จะไม่ตรงกัน
+    skip = scan.our_outputs(ctx)
+    files, mine = [], 0
+    for f in p.iterdir():
+        if not f.is_file() or f.suffix.lower() not in exts or f.name.startswith("."):
+            continue
+        if f.resolve() in skip:
+            mine += 1
+            continue
+        files.append(f)
     size = sum(f.stat().st_size for f in files) / 1e9
+    note = (f" · ข้ามไฟล์ผลลัพธ์ของเอนจินเอง {mine} ไฟล์" if mine else "")
     return {"ok": bool(files), "count": len(files), "gb": round(size, 1),
-            "msg": (f"พบ {len(files)} คลิป · {size:.1f} GB" if files
-                    else "ไม่พบไฟล์วิดีโอที่นามสกุลตรงกับ [scan] extensions")}
+            "msg": (f"พบ {len(files)} คลิป · {size:.1f} GB{note}" if files
+                    else "ไม่พบไฟล์วิดีโอที่นามสกุลตรงกับ [scan] extensions" + note)}
 
 
 # ─────────────────────────── HTTP ───────────────────────────
@@ -1208,28 +1230,35 @@ def make_handler(ctx, job):
                     return self._json({"error": "มีงานกำลังรันอยู่"}, 409)
                 head = [sys.executable, str(ctx.launcher)]
                 force = ["--force"] if payload.get("force") else []
+                FORCEABLE = ("scan", "listen", "ai", "silence", "render", "plan")
+
+                # ทุกทางแตกต้องแปลงชื่อขั้น → argv ผ่าน JOB_STEPS เสมอ ห้ามเอาชื่อ
+                # ขั้นไปเป็น argv ตรง ๆ — สองอย่างนี้ไม่ได้ตรงกันทุกตัว (ดู PHASE_JOBS)
+                def cmds_for(steps, forceable=True):
+                    return [head + JOB_STEPS[s] + ctx.argv_tail
+                            + (force if forceable and s in FORCEABLE else [])
+                            for s in steps]
+
+                forceable = True
 
                 # ขั้นเดี่ยวมาก่อน Phase เสมอ — ชื่อ "prepare" กับ "compose" เป็นทั้ง
                 # ชื่อขั้นและชื่อ Phase ถ้าให้ Phase ชนะ ปุ่ม "ตัดทีละคลิป" จะลาก
                 # listen + ai ไปรันด้วย ซึ่ง ai เสียโควตาจริงโดยที่ปุ่มไม่ได้บอก
                 if step in JOB_STEPS:
-                    argvs = [head + JOB_STEPS[step] + ctx.argv_tail
-                             + (force if step in ("scan", "listen", "ai", "silence",
-                                                  "render", "plan") else [])]
+                    todo = [step]
                 elif step in BUILD_JOBS:
                     # ไม่กรองด้วยสวิตช์ [run] — คนกดปุ่มบนการ์ดของขั้นนั้นบอกชัด
                     # แล้วว่าต้องการขั้นนั้น (ดูเหตุผลเต็มที่ BUILD_JOBS)
-                    argvs = [head + JOB_STEPS[s] + ctx.argv_tail
-                             + (force if s == "render" else [])
-                             for s in BUILD_JOBS[step]]
+                    todo = list(BUILD_JOBS[step])
                 elif step in PREPARE_JOBS:
                     # เติมเฉพาะขั้นที่ "แผนบอกให้รัน" และ "ยังไม่มีของ/ของเก่าแล้ว"
                     # — ขั้นที่ทำไว้แล้วและค่ายังไม่เปลี่ยนจะถูกข้าม ไม่ทำซ้ำฟรี ๆ
+                    # ปุ่มนี้จึงไม่ส่ง --force ต่อเลย ไม่งั้นความหมายกลับด้านทันที
                     st = {s["id"]: s for s in settings.step_status(ctx, ctx.cfg)}
                     todo = [i for i in PREPARE_JOBS[step]
                             if i == "prepare"
                             or (st[i]["run"] and (not st[i]["exists"] or st[i]["changed"]))]
-                    argvs = [head + [s] + ctx.argv_tail for s in todo]
+                    forceable = False
                 else:
                     # รันเฉพาะขั้นใน Phase นี้ที่แผนบอกว่าให้รัน
                     ok = {s["id"] for s in settings.plan(ctx.cfg) if s["run"]}
@@ -1237,11 +1266,8 @@ def make_handler(ctx, job):
                     if not todo:
                         return self._json(
                             {"error": "ทุกขั้นใน Phase นี้ถูกปิดหรือข้ามไว้"}, 400)
-                    argvs = [head + [s] + ctx.argv_tail
-                             + (force if s in ("scan", "listen", "ai", "silence",
-                                               "render") else [])
-                             for s in todo]
-                job.start(argvs, step, ctx.launcher.parent)
+                job.start(cmds_for(todo, forceable), step,
+                          ctx.launcher.parent, names=todo)
                 return self._json({"ok": True, "step": step})
 
             return self._json({"error": "ไม่รู้จักเส้นทางนี้"}, 404)

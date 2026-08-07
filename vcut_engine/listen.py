@@ -8,8 +8,8 @@ import re
 import shutil
 from pathlib import Path
 
-from .util import (Progress, c, die, info, read_json, run as sh, warn,
-                   write_json)
+from .util import (Progress, c, die, info, part_path, read_json, run as sh,
+                   warn, write_json)
 
 
 def _patterns(ctx):
@@ -46,25 +46,53 @@ def _find_import(import_dir, name):
 
 
 def _extract_wav(src, dst):
-    """16 kHz mono PCM — รูปแบบที่ whisper ต้องการ"""
+    """16 kHz mono PCM — รูปแบบที่ whisper ต้องการ
+
+    เขียนที่อื่นก่อนแล้วย้ายมาทับ เพราะ run() ใช้ `wav.exists()` เป็นตัวตรวจว่า
+    "แยกเสียงไว้แล้ว" — ถอดเสียงทั้งกองใช้เวลาเป็นสิบนาที คนกด "หยุด" กลางทาง
+    เป็นเรื่องปกติ ถ้าโดนฆ่าตอน ffmpeg เขียนอยู่ จะเหลือ .wav ที่ขาดครึ่ง แล้ว
+    รอบหน้ามันถูกนับเป็นของที่ทำเสร็จแล้ว → whisper ถอดจากเสียงที่ขาด → บทพูด
+    ของคลิปนั้นผิดไปตลอด และไม่มีทางรู้เลยว่าผิดเพราะอะไร
+    """
     dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp = part_path(dst, ".wav")
     r = sh(["ffmpeg", "-nostdin", "-hide_banner", "-v", "error", "-y",
             "-i", str(src), "-vn", "-ar", "16000", "-ac", "1",
-            "-c:a", "pcm_s16le", str(dst)], check=False)
-    return dst.exists() and r.returncode == 0
+            "-c:a", "pcm_s16le", str(tmp)], check=False)
+    if r.returncode != 0 or not tmp.exists() or tmp.stat().st_size < 1024:
+        tmp.unlink(missing_ok=True)
+        return False
+    tmp.replace(dst)
+    return True
 
 
 def _whisper(ctx, wav, out_base):
+    """ถอดเสียงหนึ่งคลิป → <out_base>.json
+
+    ให้ whisper เขียนลงชื่อชั่วคราวแล้วค่อยย้ายมาทับ ด้วยเหตุผลเดียวกับ
+    _extract_wav แต่เจ็บกว่า: run() เห็นไฟล์ JSON ที่เขียนไม่จบก็ถือว่า
+    "ถอดคลิปนี้แล้ว" ส่วน parse_whisper_json() อ่าน JSON เสียแล้วคืน [] เงียบ ๆ
+    (read_json กลืน JSONDecodeError) ผลคือคลิปนั้นกลายเป็น "ไม่มีคำพูด" ถาวร →
+    ขั้น 2 จัดเป็น BROLL ทั้งที่เป็นคลิปพูด และ `vcut listen` รอบไหนก็ไม่แก้ให้
+    เพราะมันเชื่อว่าทำไปแล้ว
+    """
     model = Path(ctx.get("listen.model", "")).expanduser()
     if not model.exists():
         die(f"ไม่พบโมเดล whisper: {model}\n"
             f"   แก้ที่ [listen] model ใน config หรือดาวน์โหลดโมเดลก่อน")
+    raw = Path(f"{out_base}.json")
+    tmp = part_path(raw, ".json")        # <ชื่อ>.<pid>-<เธรด>.part.json
+    base = tmp.with_suffix("")           # whisper เติม .json ต่อท้ายให้เอง
     r = sh([ctx.get("listen.binary", "whisper-cli"),
             "-m", str(model), "-f", str(wav),
             "-l", ctx.get("listen.language", "th"),
             "-t", str(int(ctx.get("listen.threads", 6))),
-            "-oj", "-of", str(out_base), "-np"], check=False)
-    return Path(f"{out_base}.json").exists(), r.stderr
+            "-oj", "-of", str(base), "-np"], check=False)
+    if r.returncode != 0 or not tmp.exists():
+        tmp.unlink(missing_ok=True)
+        return False, r.stderr
+    tmp.replace(raw)
+    return True, r.stderr
 
 
 # ─────────────────────────── เขียนบทพูดเป็นไฟล์ ───────────────────────────

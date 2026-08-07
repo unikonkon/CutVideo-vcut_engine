@@ -5,22 +5,51 @@ contact sheet คือกุญแจของ Phase 4: ส่งภาพ 273 
 """
 from concurrent.futures import ThreadPoolExecutor
 
-from .util import Progress, c, die, info, read_json, run as sh
+from .util import (Progress, build_lock, c, die, info, part_path, read_json,
+                   run as sh, warn)
+
+MIN_JPG = 512          # เล็กกว่านี้ไม่ใช่ภาพ — เป็นเศษไฟล์ที่ ffmpeg เขียนค้างไว้
 
 
 def _grab(args):
+    """ภาพตัวอย่างของคลิปหนึ่งใบ — เขียนที่อื่นก่อนแล้วค่อยย้ายมาทับเสมอ
+
+    เมื่อก่อนเขียนลงชื่อไฟล์จริงตรง ๆ แล้วใช้แค่ `dst.exists()` เป็นตัวตรวจ cache
+    ซึ่งพังสองทาง และทั้งสองทางจบที่ "ภาพเสียค้างถาวร" เพราะไม่มีใครไปตรวจซ้ำ:
+
+      · ffmpeg ตายกลางคัน (กด "หยุด" ตอนขั้น 1 กำลังจับภาพ = โพรเซสถูกฆ่า) →
+        เหลือ .jpg ที่เขียนไม่จบ  รอบหน้า exists() บอกว่ามีแล้ว จึงไม่ทำใหม่
+        — ค่า returncode ก็ถูกทิ้งไปเฉย ๆ ไม่มีใครดู
+      · เขียนพร้อมกันสองที่ → ffmpeg สองตัวเขียนไฟล์เดียวกันทับกัน  เกิดจริงได้
+        เพราะ clips.sync_manifest() เรียกตัวนี้จากเธรดของ HTTP (กด "บันทึก" ที่
+        ขั้น 1 สองครั้งรัว ๆ หรือเปิดสองแท็บ ก็สองเธรดแล้ว) คนละทางกับ
+        ThreadPoolExecutor ของ thumbs.run
+
+    ภาพที่เสียไม่ได้หยุดแค่ขั้น 1 — contact sheet ประกอบจากภาพพวกนี้ แล้วขั้น 2
+    ส่ง sheet ให้ AI ดูเพื่อตัดสินว่าคลิปไหนใช้ได้ (ดูหัวไฟล์)
+    """
     clip, ctx = args
     dst = ctx.thumb_dir / f"{clip['name']}.jpg"
     if dst.exists():
         return dst, True
-    t = min(clip["duration"] * 0.5, max(0.5, clip["duration"] - 0.2))
-    w = int(ctx.get("thumbs.width", 320))
-    vf = f"scale={w}:-2"
-    if clip.get("rot_override"):
-        vf = f"{clip['rot_override']},{vf}"
-    sh(["ffmpeg", "-nostdin", "-hide_banner", "-v", "error", "-y",
-        "-ss", f"{t:.2f}", "-i", clip["src"], "-frames:v", "1",
-        "-vf", vf, "-q:v", "4", str(dst)], check=False)
+    with build_lock(dst):
+        if dst.exists():
+            return dst, True
+        t = min(clip["duration"] * 0.5, max(0.5, clip["duration"] - 0.2))
+        w = int(ctx.get("thumbs.width", 320))
+        vf = f"scale={w}:-2"
+        if clip.get("rot_override"):
+            vf = f"{clip['rot_override']},{vf}"
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        tmp = part_path(dst, ".jpg")
+        r = sh(["ffmpeg", "-nostdin", "-hide_banner", "-v", "error", "-y",
+                "-ss", f"{t:.2f}", "-i", clip["src"], "-frames:v", "1",
+                "-vf", vf, "-q:v", "4", str(tmp)], check=False)
+        if r.returncode != 0 or not tmp.exists() or tmp.stat().st_size < MIN_JPG:
+            tmp.unlink(missing_ok=True)
+            warn(f"{clip['name']}: จับภาพตัวอย่างไม่สำเร็จ — จะลองใหม่รอบหน้า")
+            return dst, False
+        tmp.replace(dst)
     return dst, False
 
 
@@ -46,10 +75,12 @@ def run(ctx):
     per = cols * rows
     sheets = ctx.thumb_dir / "sheets"
     sheets.mkdir(exist_ok=True)
-    for f in sheets.glob("*.jpg"):
-        f.unlink()
 
-    made = 0
+    # ล้างแผ่นเก่า *หลัง* ทำแผ่นใหม่ครบ ไม่ใช่ก่อน — ของเดิมล้างทิ้งตั้งแต่ต้น
+    # แล้วค่อยทยอยสร้างใหม่ พอรอบนั้นถูกกด "หยุด" หรือ ffmpeg พังกลางทาง
+    # โฟลเดอร์จะเหลือแผ่นไม่ครบหรือไม่เหลือเลย โดยที่ไม่มีอะไรบอก แล้วขั้น 2
+    # ก็ส่งเท่าที่มีให้ AI ตัดสินคลิปทั้งกอง — เห็นไม่ครบแต่ตอบเหมือนเห็นครบ
+    made, kept = 0, set()
     for i in range(0, len(clips), per):
         batch = [ctx.thumb_dir / f"{cl['name']}.jpg" for cl in clips[i:i + per]]
         batch = [b for b in batch if b.exists()]
@@ -71,10 +102,22 @@ def run(ctx):
         if n == 1:
             fc = norm + "[t0]copy[o]"
         dst = sheets / f"sheet_{i // per + 1:02d}.jpg"
-        r = sh(cmd + ["-filter_complex", fc, "-map", "[o]", "-q:v", "4", str(dst)],
+        tmp = part_path(dst, ".jpg")
+        r = sh(cmd + ["-filter_complex", fc, "-map", "[o]", "-q:v", "4", str(tmp)],
                check=False)
-        if r.returncode == 0:
-            made += 1
+        if r.returncode != 0 or not tmp.exists() or tmp.stat().st_size < MIN_JPG:
+            tmp.unlink(missing_ok=True)
+            warn(f"ทำ {dst.name} ไม่สำเร็จ — แผ่นเดิม (ถ้ามี) ยังอยู่")
+            kept.add(dst.name)          # ของเดิมยังใช้ได้อยู่ ห้ามไปลบทิ้งข้างล่าง
+            continue
+        tmp.replace(dst)
+        kept.add(dst.name)
+        made += 1
+
+    # แผ่นที่เหลือจากรอบก่อนซึ่งรอบนี้ไม่มีแล้ว (คลิปน้อยลง = แผ่นน้อยลง)
+    for f in sheets.glob("sheet_*.jpg"):
+        if f.name not in kept:
+            f.unlink(missing_ok=True)
 
     from .settings import params_of
     from .util import write_json

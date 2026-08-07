@@ -24,8 +24,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from .util import (Progress, c, die, disk_free_gb, info, key_of,
-                   measure_loudness, read_json, run as sh, warn, write_json)
+from .util import (Progress, build_lock, c, die, disk_free_gb, info, key_of,
+                   measure_loudness, part_path, read_json, run as sh, warn,
+                   write_json)
 
 
 # ─────────────────────────── ฟิลเตอร์ภาพ ───────────────────────────
@@ -257,7 +258,7 @@ def seg_key(seg, ctx, gain):
 def render_one(seg, ctx, gain, dst):
     if dst.exists() and dst.stat().st_size > 1024:
         return True, "cache"
-    tmp = dst.with_suffix(".part.mov")
+    tmp = part_path(dst, ".mov")
     silent = seg.get("achannels", 2) == 0
     e = ctx.get("encode", {})
     n = exact_frames(seg["dur"], ctx)
@@ -289,6 +290,26 @@ def render_one(seg, ctx, gain, dst):
     return True, "new"
 
 
+def _dedup(plan):
+    """ชิ้นที่กุญแจซ้ำกันต้องเหลือคิวเดียว — ไม่ใช่หลายคิวที่ตัดไฟล์เดียวกันพร้อมกัน
+
+    ไทม์ไลน์มีชิ้นที่เหมือนกันเป๊ะสองชิ้นได้ (ซอยแล้วลากขอบกลับมาเท่ากัน หรือ
+    หยิบช็อตเดิมมาใช้ซ้ำ) — กุญแจไม่มีคำว่า "ลำดับ" อยู่ในนั้น ทั้งคู่จึงชี้ไปที่
+    ไฟล์ปลายทางชื่อเดียวกัน ปล่อยเข้า ThreadPoolExecutor พร้อมกันแล้ว ffmpeg
+    สองตัวจะตัดทับกัน ได้ segment ที่พังแล้วมันจะถูกต่อเข้าหนังจริงทั้งขั้น 3, 4
+    และ 5 (ทุกขั้นใช้ segment ชุดเดียวกัน) โดยไม่มีอะไรเตือน เพราะตัวตรวจ cache
+    ดูแค่ว่ามีไฟล์และใหญ่กว่า 1 KB
+    """
+    seen, out = set(), []
+    for p in plan:
+        k = str(p["path"])
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(p)
+    return out
+
+
 def run(ctx, force=False):
     edl = read_json(ctx.edl)
     if not edl:
@@ -317,14 +338,15 @@ def run(ctx, force=False):
                      "src_lufs": I, "src_peak": TP,
                      "key": k, "path": ctx.seg_dir / f"{k}.mov"})
 
-    todo = [p for p in plan if not (p["path"].exists() and p["path"].stat().st_size > 1024)]
+    todo = _dedup(p for p in plan
+                  if not (p["path"].exists() and p["path"].stat().st_size > 1024))
     info(f"RENDER  {len(plan)} ชิ้น  ({c(f'cache {len(plan) - len(todo)}', 'd')}, "
          f"ใหม่ {len(todo)})  ·  limiter แตะจริง {n_lim} ชิ้น")
 
     if force:
         for p in plan:
             p["path"].unlink(missing_ok=True)
-        todo = plan
+        todo = _dedup(plan)
 
     failed = []
     t0 = time.time()
@@ -401,13 +423,21 @@ def web_copy(ctx, name):
     dst = out / f"{src.stem}.mp4"
     if dst.exists() and dst.stat().st_size > 1024:
         return dst
-    out.mkdir(parents=True, exist_ok=True)
-    tmp = dst.with_suffix(".part.mp4")
-    r = sh(["ffmpeg", "-nostdin", "-hide_banner", "-v", "error", "-y", "-i", str(src),
-            "-c:v", "copy", "-c:a", "aac", "-b:a", "128k",
-            "-movflags", "+faststart", str(tmp)], check=False)
-    if r.returncode != 0 or not tmp.exists():
-        tmp.unlink(missing_ok=True)
-        return None
-    tmp.replace(dst)
-    return dst
+    # ตัวเล่นในหน้าเว็บขอชิ้นเดียวกันพร้อมกันได้จริง: <video> สองตัวสลับกัน ตัวหนึ่ง
+    # เล่นอยู่อีกตัว preload ท่อนถัดไป และในโหมด "ดูเฉพาะรอยต่อ" ท่อนที่ติดกันคือ
+    # ชิ้นเดียวกัน · กดดูชิ้นในแถบข้างระหว่างที่ชิ้นนั้นกำลังเล่นก็ชนกันได้
+    # ถ้าไม่ล็อก ffmpeg สองตัวจะเขียนสำเนาเดียวกันทับกัน แล้วได้ไฟล์เสียที่ค้างเป็น
+    # cache ตลอดไป (เห็นเป็นภาพเละ/เล่นไม่ได้ รีเฟรชกี่ครั้งก็ไม่หาย)
+    with build_lock(dst):
+        if dst.exists() and dst.stat().st_size > 1024:
+            return dst
+        out.mkdir(parents=True, exist_ok=True)
+        tmp = part_path(dst, ".mp4")
+        r = sh(["ffmpeg", "-nostdin", "-hide_banner", "-v", "error", "-y", "-i", str(src),
+                "-c:v", "copy", "-c:a", "aac", "-b:a", "128k",
+                "-movflags", "+faststart", str(tmp)], check=False)
+        if r.returncode != 0 or not tmp.exists():
+            tmp.unlink(missing_ok=True)
+            return None
+        tmp.replace(dst)
+        return dst

@@ -45,7 +45,7 @@ captions.json ไม่ต้องถูกแตะเลย และไฟ�
 import re
 from pathlib import Path
 
-from .util import die, read_json, warn, write_json
+from .util import die, part_path, read_json, warn, write_json
 
 FX = "fx.json"
 PLAN = "fx-render.json"
@@ -169,14 +169,28 @@ def plan_path(ctx):
     return ctx.work / PLAN
 
 
-def out_path(ctx):
+def out_path(ctx, quiet=False):
     """ไฟล์ผลลัพธ์ของขั้น 5
 
     อยู่ที่นี่ไม่ใช่ที่ finish.py เพราะ settings/serve/reset ต้องรู้ที่อยู่ของมัน
     โดยไม่ต้องลากตัวประกอบไฟล์ (ซึ่งดึง caption + render ตามมาทั้งพวง) เข้ามาด้วย
+
+    คำต่อท้ายมาจากไฟล์ตั้งค่าที่คนแก้เองได้ จึงต้องกันสามอย่างก่อนเชื่อ: ว่าง
+    (ขั้น 5 จะเขียนทับไฟล์ของขั้น 3) · เท่ากับ "-text" (เขียนทับไฟล์ของขั้น 4) ·
+    มีขีดคั่นโฟลเดอร์ (ไฟล์ไปโผล่นอกที่ที่ตั้งใจ) ทั้งสามกรณีคือหนังที่ทำเสร็จ
+    แล้วหายไปเงียบ ๆ ตอนกดปุ่มขั้นถัดไป จึงถอยไปใช้ค่าตั้งต้นแทน
+
+    quiet=True สำหรับคนที่ถามแค่ "ไฟล์ของขั้น 5 ชื่ออะไร" ระหว่างทำอย่างอื่น
+    (scan.our_outputs ถามทุกครั้งที่ไล่โฟลเดอร์ฟุตเทจ) — คำเตือนตัวเดียวกัน
+    ขึ้นซ้ำทุกคำขอ HTTP ไม่ได้ช่วยใครและกลบบันทึกการทำงานจริง
     """
     p = Path(ctx.out)
-    suffix = str(ctx.get("fx.out_suffix", "-fx") or "-fx")
+    suffix = str(ctx.get("fx.out_suffix", "-fx") or "").strip()
+    if not suffix or suffix == "-text" or "/" in suffix or "\\" in suffix:
+        if suffix and not quiet:
+            warn(f"[fx] out_suffix = '{suffix}' ใช้ไม่ได้ (ทับไฟล์ของขั้นก่อน "
+                 f"หรือพาออกนอกโฟลเดอร์) — ใช้ '-fx' แทน")
+        suffix = "-fx"
     return p.with_name(p.stem + suffix + p.suffix)
 
 
@@ -512,7 +526,7 @@ def render_one(ctx, src, f, frames, dst):
     from .util import run as sh
     if dst.exists() and dst.stat().st_size > 1024:
         return True, "cache"
-    tmp = dst.with_suffix(".part.mov")
+    tmp = part_path(dst, ".mov")
     dur = frames / _fps(ctx)
     cmd = ["ffmpeg", "-nostdin", "-hide_banner", "-v", "error", "-y",
            "-i", str(src),
@@ -536,8 +550,15 @@ def render(ctx, man):
     """ตัดชิ้นที่ถูกแต่งให้ครบตาม fx-render.json — ชิ้นที่ไม่ได้แตะไม่ต้องทำอะไร"""
     from concurrent.futures import ThreadPoolExecutor
     from .util import Progress, c, info
-    todo = [s for s in man["segments"]
-            if s["fx"] and not (seg_dir(ctx) / s["out"]).exists()]
+    # กุญแจซ้ำ = ไฟล์ปลายทางชื่อเดียวกัน ต้องเหลือคิวเดียว ไม่งั้นตัดทับกันแล้วได้
+    # ชิ้นที่พัง (เหตุผลเดียวกับ render._dedup — และที่นี่ซ้ำง่ายกว่าอีก เพราะ
+    # ชิ้นที่มาจาก segment เดียวกันและตั้งเอฟเฟกต์เหมือนกันย่อมได้กุญแจเท่ากัน)
+    seen, todo = set(), []
+    for s in man["segments"]:
+        if not s["fx"] or (seg_dir(ctx) / s["out"]).exists() or s["out"] in seen:
+            continue
+        seen.add(s["out"])
+        todo.append(s)
     n_fx = sum(1 for s in man["segments"] if s["fx"])
     if not n_fx:
         return

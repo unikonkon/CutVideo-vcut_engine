@@ -5,6 +5,7 @@ cache ตรวจด้วย (ขนาดไฟล์ + mtime) ถ้าไ�
 """
 import re
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 from .util import (Progress, c, info, measure_loudness, measure_motion_bright,
                    probe_video, read_json, warn, write_json)
@@ -17,12 +18,55 @@ def sort_key(name, mode="filename"):
     return (int(m[-1]) if m else 0, name)
 
 
+def our_outputs(ctx):
+    """ไฟล์หนังที่เอนจินนี้เป็นคนผลิตเอง — ขั้น 3, ขั้น 4 และขั้น 5
+
+    **ถามเจ้าของที่อยู่ ไม่ประกอบชื่อเอง** — ของเดิมประกอบ `ชื่อขั้น 3 + คำต่อท้าย`
+    ขึ้นมาใหม่ตรงนี้ ซึ่งเป็นสูตรคนละตัวกับที่ fx.out_path() ใช้เขียนไฟล์จริง พอ
+    [fx] out_suffix เป็นค่าที่ fx.out_path() ปฏิเสธ (ว่าง · "-text" · มีขีดคั่น
+    โฟลเดอร์ · มีช่องว่างหน้าหลัง) สองสูตรจะให้คนละชื่อ: ขั้น 5 เขียน final-fx.mp4
+    แต่รายชื่อ "ห้ามนับเป็นฟุตเทจ" ที่นี่ยังเป็นชื่อที่ไม่มีอยู่จริง — final-fx.mp4
+    จึงถูกนับเป็นคลิปต้นฉบับ เข้า EDL แล้ว **ขั้น 5 เขียนทับไฟล์ที่ตัวเองใช้เป็น
+    ต้นฉบับอยู่** (ค่าที่มี "/" ยังทำให้ with_name โยน ValueError ทั้งขั้น 1 ด้วย)
+
+    import ในฟังก์ชันไม่ใช่บนหัวไฟล์ เพราะ caption/fx import ย้อนกลับมาทาง
+    render/settings ตอนทำงานจริง — เรียกตอนนี้ทั้งคู่โหลดครบแล้วแน่นอน
+    """
+    from . import caption, fx
+    out = [Path(ctx.out)]
+    for where in (lambda: caption.out_path(ctx), lambda: fx.out_path(ctx, quiet=True)):
+        try:
+            out.append(where())
+        except (ValueError, OSError):
+            pass          # ตั้งค่าไว้จนประกอบชื่อไม่ได้ = ขั้นนั้นสร้างไฟล์ไม่ได้อยู่แล้ว
+    got = set()
+    for p in out:
+        try:
+            got.add(p.resolve())
+        except OSError:
+            pass
+    return got
+
+
 def list_sources(ctx):
     exts = {e.lower() for e in ctx.get("scan.extensions", [".MOV"])}
     if not ctx.source.is_dir():
         return []
-    files = [p for p in ctx.source.iterdir()
-             if p.is_file() and p.suffix.lower() in exts and not p.name.startswith(".")]
+    # ผลงานของตัวเองไม่ใช่ฟุตเทจ — [scan] extensions มี .mp4 อยู่ด้วยตามค่าตั้งต้น
+    # ถ้าโฟลเดอร์ฟุตเทจดันเป็นที่เดียวกับที่วางไฟล์ผลลัพธ์ (ตั้ง source เป็น "."
+    # ก็เกิดได้แล้ว) final.mp4 / final-text.mp4 / final-fx.mp4 จะถูกนับเป็นคลิป
+    # ต้นฉบับ เข้าไปอยู่ใน EDL แล้ว **ขั้น 3/4/5 จะเขียนทับไฟล์ที่ตัวเองใช้เป็น
+    # ต้นฉบับอยู่** — ฟุตเทจหายจริง กู้ไม่ได้ และ EDL ที่อ้างช่วงเวลาในไฟล์เดิม
+    # ก็ชี้ไปที่เนื้อหาคนละอันทันที
+    skip = our_outputs(ctx)
+    files = []
+    for p in ctx.source.iterdir():
+        if not p.is_file() or p.suffix.lower() not in exts or p.name.startswith("."):
+            continue
+        if p.resolve() in skip:
+            warn(f"ข้าม {p.name} — เป็นไฟล์ผลลัพธ์ของเอนจินเอง ไม่ใช่ฟุตเทจ")
+            continue
+        files.append(p)
     return sorted(files, key=lambda p: sort_key(p.stem))
 
 

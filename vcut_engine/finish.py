@@ -25,7 +25,7 @@
 from pathlib import Path
 
 from . import caption, fx, fxtext, music, overlay
-from .util import c, die, info, read_json, run as sh, warn
+from .util import c, die, info, part_path, read_json, run as sh, warn
 
 
 def out_path(ctx):
@@ -103,7 +103,7 @@ def run(ctx, out=None):
     info(f"FINISH  {len(files)} ชิ้น · {how} → {dst.name}  "
          f"{c('(เข้ารหัสภาพใหม่หนึ่งรอบ)', 'd')}")
 
-    tmp = dst.with_suffix(".part.mp4")
+    tmp = part_path(dst, ".mp4")     # ชื่อไม่ซ้ำกัน — ดูเหตุผลที่ assemble.run
     fpath = str(ass).replace("\\", "\\\\").replace(":", r"\:").replace("'", r"\'")
     cmd = [exe, "-nostdin", "-hide_banner", "-v", "error", "-y",
            "-f", "concat", "-safe", "0", "-i", str(lst)] + ov_in + mu_in

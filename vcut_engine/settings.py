@@ -7,7 +7,9 @@
 TOML มาก: [talk] กับ [encode] อยู่ห่างกันแค่ไม่กี่บรรทัดในไฟล์ แต่แก้ตัวหนึ่ง
 ใช้เวลา 35 วินาที อีกตัวใช้ 40 นาที
 """
+import os
 import re
+import threading
 from pathlib import Path
 
 from . import config, fx
@@ -686,7 +688,11 @@ def save_project(rel_path, changes, extends=None, raw=None, drop=()):
                                  "ค่าที่ไม่ได้อยู่ในนี้จะตกมาจาก preset ที่ extends ไว้"])
 
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".toml.tmp")
+    # ชื่อไม่ซ้ำกันด้วยเหตุผลเดียวกับ util.write_json — สองคำขอที่บันทึกไฟล์
+    # โปรเจกต์เดียวกันพร้อมกันเคยเขียนทับ .tmp ตัวเดียวกัน แล้วได้ TOML ที่เนื้อใน
+    # ปนกันสองรอบ ซึ่งผ่านด่าน config.load ไม่ได้ก็จริง แต่ถ้าบังเอิญผ่าน
+    # ค่าที่ตั้งไว้ทั้งไฟล์จะกลายเป็นของครึ่ง ๆ กลาง ๆ
+    tmp = p.with_name(f"{p.name}.{os.getpid()}-{threading.get_ident():x}.tmp")
     tmp.write_text(body, encoding="utf-8")
     try:
         config.load(str(tmp), [])

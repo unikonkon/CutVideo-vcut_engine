@@ -18,7 +18,7 @@
 import tomllib
 
 from . import config, render, scan, settings, thumbs
-from .util import key_of, read_json, run as sh, write_json
+from .util import build_lock, key_of, part_path, read_json, run as sh, write_json
 
 # ค่าที่ยอมให้ตั้งได้ — หน้าเว็บส่งอะไรมาก็ต้องอยู่ในนี้เท่านั้น
 ROTATIONS = [
@@ -289,21 +289,28 @@ def preview(ctx, name, mode):
     if dst.exists() and dst.stat().st_size > 1024:
         return dst, None
 
-    out.mkdir(parents=True, exist_ok=True)
-    tmp = dst.with_suffix(".part.mp4")
-    r = sh(["ffmpeg", "-nostdin", "-hide_banner", "-v", "error", "-y",
-            "-ss", f"{start:.3f}", "-t", f"{dur:.3f}", "-i", cl["src"],
-            "-filter_complex", vf, "-map", "[v]", "-an",
-            "-fps_mode", "cfr", "-r", str(ctx.get("video.fps", "60000/1001")),
-            "-color_range", "tv", "-colorspace", "bt709",
-            "-color_primaries", "bt709", "-color_trc", "bt709"]
-           + _video_only(render.encode_args(ctx))
-           + ["-movflags", "+faststart", str(tmp)], check=False)
-    if r.returncode != 0 or not tmp.exists():
-        tmp.unlink(missing_ok=True)
-        return None, (r.stderr or "")[-300:] or "ffmpeg ทำตัวอย่างไม่สำเร็จ"
-    tmp.replace(dst)
-    return dst, None
+    # กดสลับโหมดกลับไปกลับมาเร็ว ๆ (หรือเปิดคลิปเดียวกันสองแท็บ) ทำให้มีคำขอเดียวกัน
+    # ค้างอยู่พร้อมกันหลายคำขอ — เซิร์ฟเวอร์ตอบทีละเธรด ถ้าไม่ล็อกจะมี ffmpeg
+    # หลายตัวเขียนไฟล์ตัวอย่างไฟล์เดียวกันทับกัน แล้วได้ตัวอย่างที่ดูไม่ได้ค้างเป็น
+    # cache ไปตลอด (กุญแจของมันมาจากฟิลเตอร์ ไม่ได้เปลี่ยนตามเวลา)
+    with build_lock(dst):
+        if dst.exists() and dst.stat().st_size > 1024:
+            return dst, None
+        out.mkdir(parents=True, exist_ok=True)
+        tmp = part_path(dst, ".mp4")
+        r = sh(["ffmpeg", "-nostdin", "-hide_banner", "-v", "error", "-y",
+                "-ss", f"{start:.3f}", "-t", f"{dur:.3f}", "-i", cl["src"],
+                "-filter_complex", vf, "-map", "[v]", "-an",
+                "-fps_mode", "cfr", "-r", str(ctx.get("video.fps", "60000/1001")),
+                "-color_range", "tv", "-colorspace", "bt709",
+                "-color_primaries", "bt709", "-color_trc", "bt709"]
+               + _video_only(render.encode_args(ctx))
+               + ["-movflags", "+faststart", str(tmp)], check=False)
+        if r.returncode != 0 or not tmp.exists():
+            tmp.unlink(missing_ok=True)
+            return None, (r.stderr or "")[-300:] or "ffmpeg ทำตัวอย่างไม่สำเร็จ"
+        tmp.replace(dst)
+        return dst, None
 
 
 def source_path(ctx, name):

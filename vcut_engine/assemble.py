@@ -11,8 +11,8 @@ concat_mode = "copy" ต่อ**ภาพ**โดยไม่เข้ารห�
 """
 from pathlib import Path
 
-from .util import (c, die, hhmmss, info, measure_loudness, probe_video,
-                   read_json, run as sh, warn)
+from .util import (c, die, hhmmss, info, measure_loudness, part_path,
+                   probe_video, read_json, run as sh, warn)
 
 
 def _write_concat_list(ctx, files):
@@ -42,7 +42,11 @@ def run(ctx, out=None):
     info(f"ASSEMBLE  {len(files)} ชิ้น → {dst.name}  ({c(how, 'd')})")
 
     e = ctx.get("encode", {})
-    tmp = dst.with_suffix(".part.mp4")
+    # ปุ่มในหน้าเว็บกันไม่ให้สั่งงานซ้อนกันอยู่แล้ว แต่สั่งจากเทอร์มินัลตอนที่หน้าเว็บ
+    # กำลังต่อไฟล์อยู่ยังทำได้ — ถ้าชื่อไฟล์ระหว่างเขียนเป็นตัวเดียวกัน ffmpeg สองตัว
+    # จะเขียนทับกันแล้ว final.mp4 ที่ replace ออกมาคือไฟล์เสีย  ชื่อที่ไม่ซ้ำกัน
+    # ทำให้อย่างแย่ที่สุดคือ "ใครเสร็จทีหลังชนะ" ซึ่งยังเป็นไฟล์ที่สมบูรณ์เสมอ
+    tmp = part_path(dst, ".mp4")
     cmd = ["ffmpeg", "-nostdin", "-hide_banner", "-v", "error", "-y",
            "-f", "concat", "-safe", "0", "-i", str(lst)]
     if mode == "copy":

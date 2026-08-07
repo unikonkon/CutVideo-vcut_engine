@@ -23,7 +23,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .util import c, die, info, read_json, run as sh, warn, write_json
+from .util import c, die, info, part_path, read_json, run as sh, warn, write_json
 
 CAPTIONS = "captions.json"
 
@@ -477,7 +477,7 @@ def run(ctx, out=None):
 
     e = ctx.get("encode", {})
     master = float(ctx.get("audio.master_lufs", 0.0) or 0.0)
-    tmp = dst.with_suffix(".part.mp4")
+    tmp = part_path(dst, ".mp4")     # ชื่อไม่ซ้ำกัน — ดูเหตุผลที่ assemble.run
     # ฟิลเตอร์อ่านไฟล์ .ass ตามที่อยู่ — escape ให้เป็นทางของ ffmpeg
     fpath = str(ass).replace("\\", "\\\\").replace(":", r"\:").replace("'", r"\'")
     cmd = [exe, "-nostdin", "-hide_banner", "-v", "error", "-y",

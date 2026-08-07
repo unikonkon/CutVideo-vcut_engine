@@ -23,7 +23,7 @@ from . import (ai, assemble, caption, compose, config, decide, finish, fx, liste
                prepare, render, reset, review, scan, serve, settings, silence,
                thumbs)
 from .util import (c, die, disk_free_gb, hhmmss, info, read_json,
-                   require_tools, warn)
+                   require_tools, sweep_dir, warn)
 
 USAGE = """vcut — ตัดต่อวิดีโออัตโนมัติด้วย config
 
@@ -222,6 +222,13 @@ def _wanted_segments(ctx):
 
     ชิ้นที่ยังไม่เคยวัดความดังคำนวณ hash ไม่ได้ ถ้ามีแบบนั้นปนอยู่ก็เก็บรายชื่อ
     จาก render.json ไว้ด้วย ดีกว่าลบเกินจนต้อง render ใหม่ทั้งกองโดยไม่ตั้งใจ
+
+    **ต้องถามความดังผ่าน render.seg_loud() ไม่ใช่เปิด loudness.json อ่านเอง**
+    เปิด [audio] match_clips ไว้เมื่อไร ชิ้นจะพก loud_ref (ค่าของทั้งคลิป) มาเอง
+    และ render ใช้ค่านั้นคิด gain — ส่วน loudness.json เก็บค่าที่วัดทีละท่อนซึ่ง
+    อาจค้างจากรอบก่อนหน้าที่ยังไม่ได้เปิดสวิตช์ อ่านผิดตัวแล้ว gain ผิด → กุญแจ
+    ผิด → ไฟล์จริงไม่อยู่ในรายการ "ยังใช้อยู่" แล้ว gc ลบชิ้นที่ยังต้องใช้ทิ้ง
+    (วัดกับโปรเจกต์จริง: 174 จาก 208 ชิ้นคิด gain ออกมาไม่ตรงกับที่ render ใช้)
     """
     rman = read_json(ctx.work / "render.json", {}) or {}
     listed = {s["file"] for s in rman.get("segments", [])}
@@ -231,12 +238,12 @@ def _wanted_segments(ctx):
     loud = read_json(ctx.work / "loudness.json", {}) or {}
     a = ctx.get("audio", {})
     keep, unknown = set(), 0
-    for seg in edl.get("timeline", []):
-        k = f"{seg['name']}@{seg['start']:.3f}+{seg['dur']:.3f}"
-        if k not in loud:
+    for raw in edl.get("timeline", []):
+        seg = {**raw, "_lkey": f"{raw['name']}@{raw['start']:.3f}+{raw['dur']:.3f}"}
+        if not seg.get("loud_ref") and seg["_lkey"] not in loud:
             unknown += 1
             continue
-        I, TP = loud[k]
+        I, TP = render.seg_loud(seg, loud)
         gain, _ = render.compute_gain(I, TP, float(seg["target_lufs"]), a)
         keep.add(f"{render.seg_key(seg, ctx, gain)}.mov")
     return keep | listed if unknown else keep
@@ -265,6 +272,16 @@ def cmd_gc(ctx, args):
             shutil.rmtree(ctx.work)
             info(f"  ลบ {ctx.work} ทั้งหมดแล้ว")
         return
+    # ไฟล์ระหว่างเขียนของขั้น 1 กับขั้น 2 — ต้องกวาดก่อนเช็ค segment cache
+    # เพราะตอนที่ขั้น 1/2 ถูกกดหยุดค้างไว้ ยังไม่มีโฟลเดอร์ segment ด้วยซ้ำ
+    # ถ้าไปกวาดทีหลังจะเจอ `return` ข้างล่างตัดหน้าไปก่อนตลอด แล้วของขาด ๆ
+    # (wav ของทั้งคลิปมีเป็น GB) ก็ไม่มีใครเก็บให้เลย
+    n_part = sum(sweep_dir(d) for d in
+                 (ctx.thumb_dir, ctx.thumb_dir / "sheets", ctx.audio_dir,
+                  ctx.work / "whisper", ctx.work / "preview")
+                 if d.exists())
+    if n_part:
+        info(f"  ลบไฟล์ระหว่างเขียนที่ตกค้างจากขั้น 1/2 {n_part} ไฟล์")
     if not ctx.seg_dir.exists():
         info("  ไม่มี segment cache")
         return
@@ -275,9 +292,9 @@ def cmd_gc(ctx, args):
             freed += f.stat().st_size
             f.unlink()
             n += 1
-    for pat in ("*.part.mp4", "*.part.mov"):
-        for f in ctx.seg_dir.glob(pat):
-            f.unlink(missing_ok=True)
+    # ไฟล์ระหว่างเขียนที่ตกค้าง — เฉพาะของโพรเซสที่ตายไปแล้ว ไม่แตะของที่กำลัง
+    # ตัดอยู่จริงในอีกหน้าต่าง (ดู util.sweep_dir)
+    sweep_dir(ctx.seg_dir)
     # สำเนาสำหรับหน้าเว็บของชิ้นที่ไม่ได้ใช้แล้ว
     web = ctx.work / "segweb"
     if web.exists():
@@ -297,8 +314,7 @@ def cmd_gc(ctx, args):
                 freed += f.stat().st_size
                 f.unlink()
                 n_fx += 1
-        for f in fxdir.glob("*.part.mov"):
-            f.unlink(missing_ok=True)
+        sweep_dir(fxdir)
 
     have = len(render.seg_files(ctx))
     if n_fx:

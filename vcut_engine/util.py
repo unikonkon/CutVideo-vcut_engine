@@ -1,10 +1,12 @@
 """ตัวช่วยกลาง: เรียก ffmpeg/ffprobe, วัดเสียง, cache ด้วย content hash"""
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -218,10 +220,120 @@ def read_json(path, default=None):
 def write_json(path, data):
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(p.suffix + ".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
-    tmp.replace(p)
+    # ชื่อไฟล์ชั่วคราวต้องไม่ซ้ำกันข้ามเธรด/ข้ามโพรเซส — เซิร์ฟเวอร์เป็น
+    # ThreadingHTTPServer สองคำขอที่บันทึกไฟล์เดียวกันพร้อมกัน (กดบันทึกรัว ๆ
+    # หรือเปิดสองแท็บ) จะเขียนทับ .tmp ตัวเดียวกันสลับกันทีละก้อน แล้ว replace
+    # ไฟล์ที่เนื้อในเป็นของสองรอบปนกัน = JSON เสีย = ค่าที่ตั้งไว้หายทั้งไฟล์
+    tmp = p.with_name(f"{p.name}.{os.getpid()}-{threading.get_ident():x}.tmp")
+    try:
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        tmp.replace(p)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
     return p
+
+
+# ─────────────────────────── สร้าง cache แบบไม่ชนกัน ───────────────────────────
+#
+# ทุกที่ในเอนจินที่ทำไฟล์ cache ใช้ท่าเดียวกัน: เขียนลง .part แล้ว replace ทับ
+# ปลายทาง ซึ่ง atomic จริงถ้ามี *ผู้เขียนคนเดียว* — แต่ตัวสร้าง cache หลายตัว
+# ถูกเรียกจากเธรดพร้อมกันได้ (HTTP handler ของ serve.py และ ThreadPoolExecutor
+# ของ render/fx) พอสองคนคิดชื่อ .part ได้เท่ากัน ffmpeg สองตัวจะเขียนไฟล์เดียวกัน
+# ทับกันไปมา ไฟล์ที่ replace ออกมาจึงเป็นวิดีโอที่พัง — และมันถูกนับเป็น cache
+# ที่ใช้ได้ตลอดไป (ตัวตรวจดูแค่ "มีไฟล์และใหญ่กว่า 1 KB") ต้องลบเองถึงจะหาย
+#
+# กันสองชั้น: ล็อกต่อปลายทางหนึ่งไฟล์ (ไม่ให้ทำงานซ้ำซ้อนตั้งแต่แรก) และชื่อ
+# .part ที่ไม่ซ้ำกัน (เผื่อกรณีข้ามโพรเซส ซึ่งล็อกในหน่วยความจำเอื้อมไม่ถึง)
+
+_BUILD_LOCKS = {}
+_BUILD_GUARD = threading.Lock()
+
+
+def build_lock(key):
+    """ล็อกประจำไฟล์ปลายทางหนึ่งไฟล์ — คนที่มาทีหลังรอ แล้วเจอ cache ที่ทำเสร็จแล้ว"""
+    k = str(key)
+    with _BUILD_GUARD:
+        lk = _BUILD_LOCKS.get(k)
+        if lk is None:
+            lk = _BUILD_LOCKS[k] = threading.Lock()
+        return lk
+
+
+_PART_RE = re.compile(r"\.(\d+)-[0-9a-f]+\.part$")
+
+
+def part_path(dst, suffix=None):
+    """ชื่อไฟล์ระหว่างเขียนของ dst — ไม่ซ้ำกับของเธรด/โพรเซสอื่น
+
+    ยังลงท้ายด้วย .part<นามสกุล> เหมือนเดิม ตัวเก็บกวาด (`vcut gc`) และตัวไล่
+    รายชื่อ segment จึงยังมองออกว่าเป็นไฟล์ระหว่างทาง ไม่ใช่ผลงานจริง
+
+    เก็บกวาดของที่ตกค้างให้ด้วยก่อนคืนชื่อใหม่ — เมื่อก่อนชื่อไฟล์ระหว่างเขียน
+    เป็นชื่อตายตัว รอบถัดไปจึงทับของเก่าทิ้งเอง พอชื่อไม่ซ้ำแล้วของที่ตายกลางคัน
+    (กด "หยุด" ตอนกำลังเข้ารหัส = โพรเซสถูกฆ่าก่อนได้ลบไฟล์ของตัวเอง) จะกองอยู่
+    ทีละหลาย GB โดยไม่มีใครไปแตะ
+    """
+    sfx = suffix or dst.suffix or ".tmp"
+    sweep_parts(dst, sfx)
+    return dst.with_name(f"{dst.stem}.{os.getpid()}-{threading.get_ident():x}.part{sfx}")
+
+
+def owner_dead(name):
+    """ไฟล์ระหว่างเขียนชื่อนี้ ไม่มีใครเป็นเจ้าของแล้วใช่ไหม — ลบได้หรือยัง
+
+    เจ้าของคือ pid ที่ฝังอยู่ในชื่อไฟล์ ถาม kill(pid, 0) ว่ายังอยู่ไหม ยังอยู่ =
+    อาจเป็น ffmpeg ของอีกหน้าต่างที่กำลังทำงานจริง ลบทิ้งแล้วงานนั้นพังทันที
+    ชื่อรุ่นเก่าที่ไม่มี pid ฝังไว้ถือว่าไม่มีเจ้าของ (ไม่มีใครให้ถาม)
+    """
+    m = _PART_RE.search(name)
+    if not m:
+        return True
+    pid = int(m.group(1))
+    if pid == os.getpid():
+        return False
+    try:
+        os.kill(pid, 0)
+        return False                  # เจ้าของยังมีชีวิต — ปล่อยไว้
+    except ProcessLookupError:
+        return True
+    except OSError:
+        return False                  # ถามไม่ได้ (คนละผู้ใช้) — ปลอดภัยไว้ก่อน
+
+
+def sweep_parts(dst, suffix):
+    """ลบไฟล์ระหว่างเขียนของ dst ที่เจ้าของตายไปแล้ว — ของที่ยังเขียนอยู่ไม่แตะ"""
+    try:
+        sibs = list(dst.parent.glob(f"{dst.stem}.*.part{suffix}"))
+    except OSError:
+        return
+    for f in sibs:
+        if _PART_RE.search(f.name[:-len(suffix)]) and owner_dead(f.name[:-len(suffix)]):
+            f.unlink(missing_ok=True)
+
+
+def sweep_dir(directory):
+    """ลบไฟล์ระหว่างเขียน *ทั้งโฟลเดอร์* ที่เจ้าของตายไปแล้ว — คืนจำนวนที่ลบ
+
+    `vcut gc` เคยกวาด `*.part.mov` ทิ้งทั้งหมดโดยไม่ถามว่าใครเป็นเจ้าของ ตอนที่
+    ชื่อไฟล์ระหว่างเขียนยังเป็นชื่อตายตัวมันไม่มีทางชนกับงานที่กำลังรัน แต่พอ
+    ชื่อไม่ซ้ำกันต่อโพรเซสแล้ว การกวาดแบบนั้นคือการลบไฟล์ที่ ffmpeg ของอีก
+    หน้าต่างกำลังเขียนอยู่ — งานนั้นจะจบด้วย "ตัดชิ้นไม่สำเร็จ" ทั้งที่ไม่มีอะไรผิด
+    """
+    n = 0
+    try:
+        files = list(Path(directory).iterdir())
+    except OSError:
+        return 0
+    for f in files:
+        stem, sep, sfx = f.name.rpartition(".part")
+        # ".part" ต้องเป็นนามสกุลจริง ๆ ไม่ใช่ต้นคำอื่น — "a.parts.mov" ไม่ใช่ของเรา
+        if not sep or (sfx and not sfx.startswith(".")) or not f.is_file():
+            continue
+        if owner_dead(stem + ".part"):
+            f.unlink(missing_ok=True)
+            n += 1
+    return n
 
 
 def disk_free_gb(path):
