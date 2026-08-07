@@ -10,7 +10,7 @@ TOML มาก: [talk] กับ [encode] อยู่ห่างกันแ�
 import re
 from pathlib import Path
 
-from . import config
+from . import config, fx
 from .util import read_json
 
 PKG_ROOT = Path(__file__).resolve().parent.parent
@@ -40,6 +40,7 @@ STEPS = [
     {"id": "render",   "label": "ตัดเป็นชิ้น"},
     {"id": "assemble", "label": "ต่อเป็นไฟล์"},
     {"id": "caption",  "label": "ใส่ข้อความ"},
+    {"id": "finish",   "label": "แต่งหนัง"},
 ]
 STEP_ORDER = [s["id"] for s in STEPS]
 STEP_LABEL = {s["id"]: s["label"] for s in STEPS}
@@ -66,6 +67,14 @@ PHASES = [
      "why": "ใช้ไทม์ไลน์เดียวกับขั้น 3 แล้วเขียนข้อความลงไปในภาพ "
             "— ซับจากบทพูดที่ถอดไว้ กับข้อความที่ใส่เอง",
      "steps": ["caption"], "key": "run.text"},
+    # ขั้น 5 เป็นสาขาคู่ขนานของขั้น 4 ไม่ใช่ขั้นที่ต่อจากมัน — อ่านไทม์ไลน์ของ
+    # ขั้น 3 กับชั้นข้อความของขั้น 4 แล้วผลิตไฟล์ตัวที่สาม ทั้งสองขั้นก่อนหน้า
+    # ไม่ถูกแตะ · ของใหม่ทุกอย่าง (แอนิเมชันข้อความ · ภาพซ้อน · สโลว์โม · เพลง)
+    # จะมาลงที่นี่ที่เดียว จะได้ไม่ต้องไปแก้ของที่ใช้งานได้ดีอยู่แล้ว
+    {"id": "fx", "no": 5, "label": "แต่งหนัง",
+     "why": "ใช้ไทม์ไลน์ของขั้น 3 กับข้อความของขั้น 4 แล้วแต่งเป็นไฟล์ตัวที่สาม "
+            "— ตอนนี้มีแต่ท่อ ผลลัพธ์จึงเหมือนขั้น 4 ทุกประการ",
+     "steps": ["finish"], "key": "run.fx"},
 ]
 
 # ── คีย์ไหนเป็นของขั้นไหน — ใช้ตอนรีเซ็ตทีละขั้น ────────────────
@@ -78,6 +87,7 @@ PHASE_STAGES = {
     "prepare": ["listen", "ai", "prepare"],
     "compose": ["compose", "render", "assemble"],
     "text": ["caption"],
+    "fx": ["fx"],
 }
 SCOPES = ["all"] + [p["id"] for p in PHASES]
 SCOPE_LABEL = {"all": "ทุกขั้น",
@@ -110,6 +120,7 @@ FIELDS = [
     F("run.prepare", "รันขั้น 2", "bool", "free", "run"),
     F("run.compose", "รันขั้น 3", "bool", "free", "run"),
     F("run.text", "รันขั้น 4", "bool", "free", "run"),
+    F("run.fx", "รันขั้น 5", "bool", "free", "run"),
 
     # ── โปรเจกต์ ──
     F("project.name", "ชื่อโปรเจกต์", "str", "free", "project"),
@@ -338,6 +349,13 @@ FIELDS = [
     F("render.concat_mode", "วิธีต่อไฟล์", "select", "free", "assemble",
       options=["copy", "encode"],
       labels={"copy": "ต่อตรง ๆ ไม่เข้ารหัสซ้ำ", "encode": "เข้ารหัสใหม่ทั้งเรื่อง"}),
+
+    # ── ขั้น 5 · แต่งหนัง ──
+    # เอฟเฟกต์รายชิ้นไม่ได้อยู่ในฟอร์ม เพราะมันเป็นของที่ตั้ง *รายชิ้น* ในไทม์ไลน์
+    # ไม่ใช่ค่ากลางของทั้งเรื่อง (เก็บใน .vcut/fx.json เหมือนที่ข้อความเก็บใน
+    # captions.json) ที่นี่มีแต่ค่ากลางจริง ๆ
+    F("fx.out_suffix", "ท้ายชื่อไฟล์ของขั้น 5", "str", "free", "fx",
+      help="ต่อท้ายชื่อไฟล์ของขั้น 3 — final.mp4 + '-fx' = final-fx.mp4"),
 ]
 
 FIELD_BY_KEY = {f["key"]: f for f in FIELDS}
@@ -705,6 +723,7 @@ def step_status(ctx, cfg):
             "assemble": ctx.out,
             "caption": Path(ctx.out).with_name(
                 Path(ctx.out).stem + "-text" + Path(ctx.out).suffix),
+            "finish": fx.out_path(ctx),
         }[sid]
         exists = path.exists() and (not path.is_dir() or any(path.iterdir()))
         rec = {**st, "exists": exists,
@@ -767,6 +786,18 @@ def step_status(ctx, cfg):
                 if newer:
                     rec["changed"] = newer
                     rec["summary"] += " · " + " กับ ".join(newer) + "เปลี่ยนไปหลังจากนั้น"
+        elif sid == "finish" and exists:
+            # เทียบด้วยเวลาแก้เหมือนขั้น 4 — ขั้นนี้กินของสามอย่างเป็นวัตถุดิบ
+            # (ไทม์ไลน์ · ข้อความ · ชั้นเอฟเฟกต์) แก้ตัวไหนก็ทำให้ไฟล์ที่มีอยู่
+            # ไม่ตรงกับที่เห็นบนหน้าจอแล้ว
+            rec["summary"] = f"{path.stat().st_size / 1e9:.2f} GB"
+            newer = [n for n, p in (("เอฟเฟกต์", fx.path(ctx)),
+                                    ("ข้อความ", work / "captions.json"),
+                                    ("ไทม์ไลน์", work / "edl.json"))
+                     if p.exists() and p.stat().st_mtime > path.stat().st_mtime]
+            if newer:
+                rec["changed"] = newer
+                rec["summary"] += " · " + " กับ ".join(newer) + "เปลี่ยนไปหลังจากนั้น"
         out.append(rec)
     return out
 

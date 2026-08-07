@@ -17,7 +17,7 @@ import time
 import tomllib
 from pathlib import Path
 
-from . import settings
+from . import fx, settings
 from .util import read_json, write_json
 
 HISTORY_DIR = settings.PKG_ROOT / ".vcut-history"
@@ -62,6 +62,24 @@ def _entries(ctx):
              "ต้อง render ใหม่ทุกชิ้น (~40 นาที)", True),
             ("out", "ไฟล์หนังที่ต่อเสร็จแล้ว", [ctx.out],
              "ต่อไฟล์ใหม่ (~1 นาที)", False),
+        ],
+        "fx": [
+            # ชั้นเอฟเฟกต์เป็น *เอกสารที่คนเขียน* เหมือนชั้นข้อความ ไม่ใช่ผลคำนวณ
+            # ที่ทำใหม่ได้ฟรี — ลบแล้วต้องมานั่งตั้งใหม่เอง จึงติดธงอันตรายไว้
+            ("fx", "ชั้นเอฟเฟกต์ที่ตั้งไว้", [ctx.work / "fx.json"],
+             "ต้องตั้งเอฟเฟกต์ใหม่เองทั้งหมด", True),
+            ("fxplan", "รายการชิ้นของขั้น 5", [ctx.work / "fx-render.json",
+                                              ctx.work / "fx-captions.ass",
+                                              ctx.work / "concat_fx.txt"],
+             "คำนวณใหม่เองตอนกดสร้างไฟล์ (ทันที)", False),
+            ("fxseg", "ชิ้นที่แต่งแล้ว (cache ของขั้น 5)", [ctx.work / "fxseg"],
+             "ตัดชิ้นที่ใส่เอฟเฟกต์ใหม่ทุกชิ้น", False),
+            # ไฟล์ที่คนอัปโหลดเข้ามาเอง — ไม่มีที่ไหนสร้างใหม่ให้ได้ ต้องหามาใส่
+            # เองทั้งหมด จึงอันตรายกว่า cache ทุกตัวในตาราง
+            ("assets", "ไฟล์ภาพซ้อนกับเพลงที่อัปโหลดไว้", [ctx.work / "assets"],
+             "ต้องหาไฟล์มาใส่ใหม่เองทั้งหมด", True),
+            ("fxout", "ไฟล์หนังที่แต่งแล้ว", [fx.out_path(ctx)],
+             "แต่งใหม่ — เข้ารหัสภาพหนึ่งรอบ (~5 นาที)", False),
         ],
     }
 

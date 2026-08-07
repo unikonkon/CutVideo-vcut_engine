@@ -19,8 +19,9 @@ import sys
 import time
 from pathlib import Path
 
-from . import (ai, assemble, caption, compose, config, decide, listen, prepare,
-               render, reset, review, scan, serve, settings, silence, thumbs)
+from . import (ai, assemble, caption, compose, config, decide, finish, fx, listen,
+               prepare, render, reset, review, scan, serve, settings, silence,
+               thumbs)
 from .util import (c, die, disk_free_gb, hhmmss, info, read_json,
                    require_tools, warn)
 
@@ -39,6 +40,7 @@ USAGE = """vcut — ตัดต่อวิดีโออัตโนมัต
   vcut assemble                   ต่อเป็นไฟล์เดียว
   vcut review                     ให้ AI ดูหนังที่ตัดแล้ว → เสนอให้เอาออก/สลับที่
   vcut caption                    เขียนข้อความลงหนัง → final-text.mp4
+  vcut fx                         ขั้น 5 · แต่งหนัง → final-fx.mp4
   vcut view                       เปิดหน้าเว็บดู/แก้ EDL ในเครื่อง
   vcut info                       สรุปสถานะโปรเจกต์
   vcut presets                    ดู preset ที่มี
@@ -74,7 +76,8 @@ def build_parser():
     sub = ap.add_subparsers(dest="cmd")
 
     for name in ("scan", "listen", "thumbs", "ai", "silence", "prepare",
-                 "compose", "decide", "render", "assemble", "caption", "review", "view",
+                 "compose", "decide", "render", "assemble", "caption", "fx",
+                 "review", "view",
                  "run", "info", "gc", "presets", "config", "reset"):
         p = sub.add_parser(name, add_help=False)
         p.add_argument("-h", "--help", action="store_true")
@@ -82,7 +85,7 @@ def build_parser():
         if name in ("scan", "listen", "ai", "silence", "render", "run"):
             p.add_argument("-f", "--force", action="store_true",
                            help="ไม่ใช้ cache ทำใหม่ทั้งหมด")
-        if name in ("assemble", "caption", "run"):
+        if name in ("assemble", "caption", "fx", "run"):
             p.add_argument("-o", "--out", help="ไฟล์ผลลัพธ์")
         if name == "compose":
             p.add_argument("--mode", choices=list(compose.MODES),
@@ -239,6 +242,23 @@ def _wanted_segments(ctx):
     return keep | listed if unknown else keep
 
 
+def _wanted_fx(ctx):
+    """ชื่อไฟล์ในโฟลเดอร์ fxseg ที่ fx.json ปัจจุบันต้องใช้
+
+    คำนวณใหม่ด้วยเหตุผลเดียวกับ _wanted_segments — เชื่อรายชื่อใน fx-render.json
+    ที่เขียนไว้รอบก่อนไม่ได้ ถ้าสูตรคิดกุญแจเปลี่ยนไป ไฟล์รุ่นเก่าจะถูกนับว่า
+    "ยังใช้อยู่" ตลอดกาลแล้ว gc จะไม่ลบอะไรเลย
+    """
+    try:
+        man = fx.plan(ctx)
+    except SystemExit:
+        # ยังไม่มี render.json หรือ fx.json ตั้งของที่ทำไม่ได้ไว้ — ตอบไม่ได้ว่า
+        # ต้องเก็บอะไร คืน None แล้วให้ผู้เรียก *ข้ามการเก็บกวาดไปเลย*
+        # (คืนเซ็ตว่างไม่ได้ — มันแปลว่า "ไม่ต้องเก็บอะไรเลย" = ลบทิ้งทั้งโฟลเดอร์)
+        return None
+    return {s["out"] for s in man["segments"] if s["fx"]}
+
+
 def cmd_gc(ctx, args):
     if args.all:
         if ctx.work.exists():
@@ -266,7 +286,23 @@ def cmd_gc(ctx, args):
             if f.stem not in stems:
                 freed += f.stat().st_size
                 f.unlink()
+    # ชิ้นที่ขั้น 5 แต่งไว้ — ทุกครั้งที่มีคนขยับความเร็ว/ซูม/โทนสี กุญแจเปลี่ยน
+    # แล้วไฟล์เก่ากลายเป็นขยะทันที ถ้าไม่เก็บกวาดที่นี่ด้วยดิสก์จะโตขึ้นเงียบ ๆ
+    n_fx, keep_fx = 0, _wanted_fx(ctx)
+    fxdir = fx.seg_dir(ctx)
+    if keep_fx is not None and fxdir.exists():
+        for f in fxdir.iterdir():
+            if f.suffix.lower() == ".mov" and ".part." not in f.name \
+                    and f.name not in keep_fx:
+                freed += f.stat().st_size
+                f.unlink()
+                n_fx += 1
+        for f in fxdir.glob("*.part.mov"):
+            f.unlink(missing_ok=True)
+
     have = len(render.seg_files(ctx))
+    if n_fx:
+        info(f"  ลบชิ้นที่แต่งไว้แต่ไม่ได้ใช้แล้ว {n_fx} ไฟล์ (ขั้น 5)")
     info(f"  ลบ segment ที่ไม่ได้ใช้ {n} ไฟล์  คืนพื้นที่ {freed / 1e9:.2f} GB")
     info(f"  EDL ปัจจุบันต้องใช้ {len(keep)} ไฟล์ · มีอยู่แล้ว {have} ไฟล์"
          + (c(f" · ต้อง render อีก {len(keep) - have} ชิ้น", "y")
@@ -419,6 +455,9 @@ def cmd_run(ctx, args):
         "render": lambda: render.run(ctx, force=args.force),
         "assemble": lambda: assemble.run(ctx, out=args.out),
         "caption": lambda: caption.run(ctx),
+        # ไม่ส่ง --out ต่อเหมือน caption — ธงตัวนั้นเป็นของ assemble ในแผนนี้
+        # ส่งต่อให้สองขั้นพร้อมกันคือสั่งให้เขียนทับกันเองที่ไฟล์เดียว
+        "finish": lambda: finish.run(ctx),
     }
     for sid in todo:
         runner[sid]()
@@ -483,6 +522,8 @@ def main(argv=None):
         assemble.run(ctx, out=args.out)
     elif args.cmd == "caption":
         caption.run(ctx, out=args.out)
+    elif args.cmd == "fx":
+        finish.run(ctx, out=args.out)
     elif args.cmd == "review":
         review.run(ctx, context=args.context, force=args.force)
     elif args.cmd == "view":

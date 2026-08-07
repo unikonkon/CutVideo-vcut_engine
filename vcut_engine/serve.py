@@ -41,6 +41,7 @@ JOB_STEPS = {
     "silence": ["silence"], "prepare": ["prepare"],
     "compose": ["compose"], "decide": ["decide"],
     "render": ["render"], "assemble": ["assemble"], "caption": ["caption"],
+    "finish": ["fx"],
     "plan": ["run"],          # ทำตามแผนใน [run] — ปุ่ม "ทำทุกขั้น" ใช้ตัวนี้
 }
 # ปุ่ม "รัน Phase นี้" — รันทุกขั้นใน Phase เดียว โดยไม่แตะ Phase อื่น
@@ -56,16 +57,28 @@ PREPARE_JOBS = {
     "prepare_free": ["listen", "silence", "prepare"],
 }
 
-# ปุ่ม "สร้างไฟล์" ในขั้น 3 — ผลิตไฟล์จากไทม์ไลน์ที่ตัดสินใจไว้แล้วเท่านั้น
+# ── ปุ่ม "ผลิตไฟล์" ประจำขั้น 3 / 4 / 5 ────────────────────────────────
 #
-# เดิมปุ่มนี้สั่ง "plan" ซึ่งคือ `vcut run` ทั้งไปป์ไลน์ — กดคำเดียวแล้วมันไป
+# เดิมปุ่มขั้น 3 สั่ง "plan" ซึ่งคือ `vcut run` ทั้งไปป์ไลน์ — กดคำเดียวแล้วมันไป
 # ถอดเสียงใหม่ ถาม AI ใหม่ เตรียมคลังใหม่ รวมใหม่ ก่อนจะถึงการต่อไฟล์ คนกดเห็น
-# claude รันอยู่ครึ่งชั่วโมงทั้งที่เลือกโหมด "ไม่ใช้ AI" ไว้ ตอนนี้ทำแค่สองขั้นท้าย
-PHASE_JOBS["build"] = ["render", "assemble"]
-
-# ปุ่ม "สร้างไฟล์มีข้อความ" ในขั้น 4 — ต้องมี segment ครบก่อนถึงเขียนข้อความได้
-# เติม render ให้เองเหมือนปุ่มขั้น 3 จะได้ไม่ต้องเด้งกลับไปกดอีกขั้นก่อน
-PHASE_JOBS["build_text"] = ["render", "caption"]
+# claude รันอยู่ครึ่งชั่วโมงทั้งที่เลือกโหมด "ไม่ใช้ AI" ไว้ ตอนนี้ทำแค่ขั้นท้าย
+#
+# **แยกจาก PHASE_JOBS เพราะสวิตช์ใน [run] ไม่ควรมีผลกับปุ่มพวกนี้**
+#
+# สวิตช์ [run] ตอบคำถามว่า "ปุ่มทำทุกขั้นจะแวะขั้นไหนบ้าง" ไม่ใช่ "ขั้นนี้ถูก
+# ปิดใช้งาน" — คนที่กดปุ่มบนการ์ดของขั้นนั้นโดยตรงบอกชัดแล้วว่าต้องการขั้นนั้น
+#
+# ตอนที่อยู่ใน PHASE_JOBS ตัวกรองของทางนั้นคัด caption/finish ทิ้งเงียบ ๆ เพราะ
+# ค่าตั้งต้นของ run.text/run.fx เป็น false เหลือแต่ render — กดปุ่ม "สร้างไฟล์
+# แบบมีข้อความ" แล้วได้แค่ตัดชิ้นใหม่ ไม่มีไฟล์ข้อความออกมา และไม่มีอะไรบอกว่า
+# ทำไม (ขั้น 3 ไม่โดนเพราะ run.compose ตั้งต้นเป็น true บังเอิญ)
+BUILD_JOBS = {
+    "build":      ["render", "assemble"],
+    # ต้องมี segment ครบก่อนถึงเขียนข้อความได้ — เติม render ให้เองจะได้ไม่ต้อง
+    # เด้งกลับไปกดขั้นก่อนหน้า
+    "build_text": ["render", "caption"],
+    "build_fx":   ["render", "finish"],
+}
 
 
 def reload_ctx(ctx):
@@ -636,6 +649,24 @@ def build_captions(ctx):
     }
 
 
+def build_fx(ctx):
+    """ชั้นเอฟเฟกต์ของขั้น 5 + สถานะไฟล์ผลลัพธ์
+
+    ไม่ได้เรียก fx.plan() ที่นี่ทั้งที่มันคำนวณเวลาให้ครบ เพราะ plan() *เขียนไฟล์*
+    และหยุดทั้งคำสั่งเมื่อเจอค่าที่ยังไม่รองรับ ซึ่งเหมาะกับตอนกดสร้างไฟล์ ไม่ใช่
+    ตอนเปิดหน้าเว็บมาดูเฉย ๆ — เปิดหน้าแล้วเจอ error ทั้งหน้าเพราะตั้งค่าไว้ล่วงหน้า
+    ไม่ใช่พฤติกรรมที่ควรเป็น
+    """
+    from . import finish
+    return finish.status(ctx)
+
+
+def save_fx(ctx, payload):
+    from . import fx as fxmod
+    fxmod.save(ctx, fxmod.merge(fxmod.load(ctx), payload))
+    return build_fx(ctx)
+
+
 def save_captions(ctx, payload):
     from . import caption
     data = caption.load(ctx)
@@ -867,6 +898,22 @@ def make_handler(ctx, job):
             if p == "/api/captions":
                 return self._json(build_captions(ctx))
 
+            if p == "/api/fx":
+                return self._json(build_fx(ctx))
+
+            # ไฟล์ในโฟลเดอร์ assets — หน้าเว็บใช้วาดพรีวิวภาพซ้อน
+            if p.startswith("/asset/"):
+                from . import overlay as ovl
+                nm = ovl.safe_name(p[len("/asset/"):])
+                f = ovl.dir_of(ctx) / nm
+                try:
+                    f.resolve().relative_to(ovl.dir_of(ctx).resolve())
+                except (ValueError, OSError):
+                    return self._send(400, b"bad name", "text/plain")
+                if not nm or not f.is_file():
+                    return self._send(404, b"not found", "text/plain")
+                return self._range_file(f)
+
             # ไฟล์บทพูดที่ขั้น ① เขียนไว้ — ให้กดโหลดจากหน้าเว็บได้เลย
             if p.startswith("/text/"):
                 name = p[len("/text/"):]
@@ -939,6 +986,10 @@ def make_handler(ctx, job):
             if p == "/out":
                 # ไฟล์หนังที่ต่อเสร็จแล้ว — ตัวเล่นโหมด "ไฟล์ที่ต่อแล้ว" ใช้เส้นนี้
                 return self._range_file(ctx.out)
+
+            if p == "/out-fx":
+                from . import fx as fxmod
+                return self._range_file(fxmod.out_path(ctx))
 
             if p.startswith("/live/"):
                 token = p[len("/live/"):]
@@ -1075,6 +1126,22 @@ def make_handler(ctx, job):
             if p == "/api/captions":
                 return self._json({"ok": True, "captions": save_captions(ctx, payload)})
 
+            if p == "/api/fx":
+                return self._json({"ok": True, "fx": save_fx(ctx, payload)})
+
+            if p == "/api/asset":
+                from . import overlay as ovl
+                if payload.get("delete"):
+                    ok = ovl.delete_asset(ctx, payload["delete"])
+                    if not ok:
+                        return self._json({"error": "ลบไม่ได้ — ไม่พบไฟล์"}, 400)
+                    return self._json({"ok": True, "fx": build_fx(ctx)})
+                name, err = ovl.save_asset(ctx, payload.get("name"),
+                                           payload.get("data"))
+                if err:
+                    return self._json({"error": err}, 400)
+                return self._json({"ok": True, "file": name, "fx": build_fx(ctx)})
+
             if p == "/api/estimate":
                 try:
                     ctx2 = proposed_ctx(ctx, payload.get("values") or {})
@@ -1135,7 +1202,7 @@ def make_handler(ctx, job):
             if p == "/api/job":
                 step = payload.get("step")
                 if step not in JOB_STEPS and step not in PHASE_JOBS \
-                        and step not in PREPARE_JOBS:
+                        and step not in PREPARE_JOBS and step not in BUILD_JOBS:
                     return self._json({"error": f"ไม่รู้จักงาน '{step}'"}, 400)
                 if job.running:
                     return self._json({"error": "มีงานกำลังรันอยู่"}, 409)
@@ -1149,6 +1216,12 @@ def make_handler(ctx, job):
                     argvs = [head + JOB_STEPS[step] + ctx.argv_tail
                              + (force if step in ("scan", "listen", "ai", "silence",
                                                   "render", "plan") else [])]
+                elif step in BUILD_JOBS:
+                    # ไม่กรองด้วยสวิตช์ [run] — คนกดปุ่มบนการ์ดของขั้นนั้นบอกชัด
+                    # แล้วว่าต้องการขั้นนั้น (ดูเหตุผลเต็มที่ BUILD_JOBS)
+                    argvs = [head + JOB_STEPS[s] + ctx.argv_tail
+                             + (force if s == "render" else [])
+                             for s in BUILD_JOBS[step]]
                 elif step in PREPARE_JOBS:
                     # เติมเฉพาะขั้นที่ "แผนบอกให้รัน" และ "ยังไม่มีของ/ของเก่าแล้ว"
                     # — ขั้นที่ทำไว้แล้วและค่ายังไม่เปลี่ยนจะถูกข้าม ไม่ทำซ้ำฟรี ๆ
