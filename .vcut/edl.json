@@ -9,22 +9,22 @@
   "stats": {},
   "pool": {
    "clips": 284,
-   "deselected": 13,
-   "pieces": 383,
-   "usable": 241,
-   "excluded": 142,
+   "deselected": 9,
+   "pieces": 276,
+   "usable": 276,
+   "excluded": 0,
    "forced": 0,
-   "jump_pieces": 111,
-   "jump_saved": 260.3,
-   "loud_matched": 195,
+   "jump_pieces": 0,
+   "jump_saved": 0.0,
+   "loud_matched": 0,
    "same_level": false,
-   "talk": 153,
-   "broll": 88,
-   "duration_talk": 951.1,
-   "duration_broll": 321.7,
-   "duration_total": 1272.8
+   "talk": 125,
+   "broll": 151,
+   "duration_talk": 1337.4,
+   "duration_broll": 419.8,
+   "duration_total": 1757.2
   },
-  "dropped_run": 18
+  "dropped_run": 20
  },
  "ai": {
   "enabled": false
@@ -35,7 +35,7 @@
    "margin_pre": 0.4,
    "margin_post": 0.7,
    "gap_merge": 1.5,
-   "min_shot": 1.5
+   "min_shot": 3.0
   },
   "broll": {
    "motion_bands": [
@@ -47,7 +47,7 @@
     3.0,
     1.5
    ],
-   "run_max": 3,
+   "run_max": 5,
    "pick": "center",
    "drop_above_motion": 0.0,
    "drop_below_bright": 0.0,
@@ -79,7 +79,7 @@
    "target_lufs_talk": -19.0,
    "target_lufs_broll": -26.0,
    "same_level": false,
-   "match_clips": true,
+   "match_clips": false,
    "tp_ceiling": -4.0,
    "allow_limit": 12.0,
    "cap_up": 32.0,
@@ -121,16 +121,48 @@
   }
  },
  "summary": {
-  "segments": 223,
-  "segments_talk": 153,
-  "segments_broll": 70,
-  "segments_vertical": 31,
-  "duration_talk": 951.1,
-  "duration_broll": 257.7,
-  "duration_total": 1208.8,
-  "clips_dropped_run": 18
+  "segments": 256,
+  "segments_talk": 125,
+  "segments_broll": 131,
+  "segments_vertical": 36,
+  "duration_talk": 1337.4,
+  "duration_broll": 372.7,
+  "duration_total": 1710.1,
+  "clips_dropped_run": 20
  },
  "timeline": [
+  {
+   "name": "IMG_7068",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7068.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 6.032,
+   "end": 7.532,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 20.97,
+   "bright": 64.8,
+   "id": "IMG_7068#0"
+  },
+  {
+   "name": "IMG_7070",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7070.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 0.201,
+   "end": 1.701,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 20.71,
+   "bright": 96.8,
+   "id": "IMG_7070#0"
+  },
   {
    "name": "IMG_7074",
    "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7074.MOV",
@@ -143,10 +175,6 @@
    "end": 20.517,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -43.8,
-    -27.6
-   ],
    "motion": 5.82,
    "bright": 39.9,
    "id": "IMG_7074#0"
@@ -159,14 +187,10 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 7.043,
-   "end": 8.611,
-   "dur": 1.568,
+   "start": 6.99,
+   "end": 9.99,
+   "dur": 3.0,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -39.9,
-    -24.5
-   ],
    "text": "ไป",
    "id": "IMG_7075#0"
   },
@@ -182,10 +206,6 @@
    "end": 6.271,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -40.1,
-    -25.1
-   ],
    "motion": 5.03,
    "bright": 103.5,
    "id": "IMG_7076#0"
@@ -202,13 +222,25 @@
    "end": 5.596,
    "dur": 3.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -38.4,
-    -15.8
-   ],
    "motion": 13.91,
    "bright": 127.2,
    "id": "IMG_7077#0"
+  },
+  {
+   "name": "IMG_7079",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7079.MOV",
+   "orient": "H",
+   "rot_override": "transpose=2",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 1.852,
+   "end": 3.352,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 18.08,
+   "bright": 124.1,
+   "id": "IMG_7079#0"
   },
   {
    "name": "IMG_7080",
@@ -222,10 +254,6 @@
    "end": 10.36,
    "dur": 5.36,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -37.6,
-    -11.8
-   ],
    "text": "ไม่รู้ ไม่รู้ ไม่รู้ ไม่รู้ ไม่รู้ ไม่รู้",
    "id": "IMG_7080#0"
   },
@@ -241,10 +269,6 @@
    "end": 26.44,
    "dur": 26.44,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -25.0,
-    -7.0
-   ],
    "text": "ทางในมันแน่นมาครับ มันแน่นกว่ามาให้ครับ เต็มแน่น มันแน่นกว่ามาให้ครับ มันมีจิตปัญญาณเหรอ แบบวกเกอร์สุดสุดเลย ซึ่งไม่ใช่กู ไม่ใช่กู กันดีมะ กันดีครับ นี้ระวังเว้ย ฉันทำงี้มานี่โดโด สหารทั่วศาลนะ อ้าคุ้มไม่ได้ดูในเครีย์เนี่ย",
    "id": "IMG_7082#0"
   },
@@ -260,10 +284,6 @@
    "end": 16.788,
    "dur": 15.238,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -27.6,
-    -0.8
-   ],
    "text": "มันจะหายได้อะไรหรอ มันจะพูดกิ่ง มันหาย",
    "id": "IMG_7084#0"
   },
@@ -279,10 +299,6 @@
    "end": 5.737,
    "dur": 3.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -36.2,
-    -13.4
-   ],
    "motion": 14.05,
    "bright": 119.6,
    "id": "IMG_7085#0"
@@ -299,12 +315,24 @@
    "end": 10.928,
    "dur": 5.828,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -33.8,
-    -7.1
-   ],
    "text": "นั่นจะนั่นไม่ลง เดี๋ยวให้เบอร์เกิดดิงหรอ",
    "id": "IMG_7094#0"
+  },
+  {
+   "name": "IMG_7097",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7097.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 7.141,
+   "end": 8.642,
+   "dur": 1.501,
+   "target_lufs": -26.0,
+   "motion": 21.42,
+   "bright": 118.8,
+   "id": "IMG_7097#0"
   },
   {
    "name": "IMG_7099",
@@ -318,10 +346,6 @@
    "end": 7.358,
    "dur": 4.208,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -34.6,
-    -16.3
-   ],
    "text": "ก็คือบคุณพวกกับ คุณพวกกับ",
    "id": "IMG_7099#0"
   },
@@ -337,12 +361,24 @@
    "end": 12.298,
    "dur": 12.218,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -22.5,
-    -2.6
-   ],
    "text": "เฮ้ยเหรอเปล่า เชื่อรูปได้นะ ขอรูปได้นะ ขอรูปหนึ่งกันนะ",
    "id": "IMG_7100#0"
+  },
+  {
+   "name": "IMG_7102",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7102.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 5.782,
+   "end": 7.282,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 19.6,
+   "bright": 100.3,
+   "id": "IMG_7102#0"
   },
   {
    "name": "IMG_7103",
@@ -356,10 +392,6 @@
    "end": 8.883,
    "dur": 3.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -26.1,
-    -12.6
-   ],
    "motion": 9.16,
    "bright": 98.2,
    "id": "IMG_7103#0"
@@ -376,10 +408,6 @@
    "end": 6.623,
    "dur": 6.623,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -23.7,
-    -3.1
-   ],
    "text": "นี่นี่ 440 ม ไป",
    "id": "IMG_7104#0"
   },
@@ -395,10 +423,6 @@
    "end": 15.9,
    "dur": 14.7,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -28.9,
-    -9.6
-   ],
    "text": "โอ้โห ขอบคุณอย่างท่านนี้ ผมบอกแล้วถ้ามันเกียมมาพันนี้ ไม่ต้องหาคุณแบ่งไป สำคัญกับพันนี้",
    "id": "IMG_7105#0"
   },
@@ -414,10 +438,6 @@
    "end": 10.46,
    "dur": 4.82,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -30.9,
-    -14.1
-   ],
    "text": "นึงตรงนี้ก็เหลียวได้ เหลือจะเย็น นึงกลับประเนี่ยงทันนะ",
    "id": "IMG_7106#0"
   },
@@ -433,10 +453,6 @@
    "end": 8.695,
    "dur": 5.065,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -36.2,
-    -21.0
-   ],
    "text": "ก็ไม่ได้ ไม่ได้ ไม่ได้ ไม่ได้",
    "id": "IMG_7118#0"
   },
@@ -452,10 +468,6 @@
    "end": 13.28,
    "dur": 10.45,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -26.3,
-    -8.2
-   ],
    "text": "เราขนาดนี้เข้าไปใช่ไหมเนี่ย เอ๊ะ หลบ ช่วยหลบเนี่ยเข้าไปอ่ะ ไม่เห็น",
    "id": "IMG_7128#0"
   },
@@ -471,10 +483,6 @@
    "end": 12.26,
    "dur": 5.91,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -31.6,
-    -14.6
-   ],
    "text": "นายนายนายนายนายนายนายนายนายนายนายนายนายนายนาย",
    "id": "IMG_7142#0"
   },
@@ -490,10 +498,6 @@
    "end": 6.279,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -31.0,
-    -19.1
-   ],
    "motion": 7.08,
    "bright": 105.9,
    "id": "IMG_7151#0"
@@ -506,37 +510,28 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 3.056,
-   "end": 6.876,
-   "dur": 3.82,
+   "start": 0.0,
+   "end": 15.71,
+   "dur": 15.71,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -34.2,
-    -14.5
-   ],
    "text": "อันนี้ถึงขึ้งทางอย่างอย่างอยู่",
-   "id": "IMG_7152#1",
-   "jump": "IMG_7152~0"
+   "id": "IMG_7152#0"
   },
   {
-   "name": "IMG_7152",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7152.MOV",
+   "name": "IMG_7155",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7155.MOV",
    "orient": "H",
    "rot_override": "",
    "full_range": false,
    "achannels": 2,
-   "kind": "TALK",
-   "start": 13.24,
-   "end": 15.505,
-   "dur": 2.265,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -34.2,
-    -14.5
-   ],
-   "text": "อันนี้ถึงขึ้งทางอย่างอย่างอยู่",
-   "id": "IMG_7152#5",
-   "jump": "IMG_7152~0"
+   "kind": "BROLL",
+   "start": 2.178,
+   "end": 3.678,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 22.45,
+   "bright": 114.3,
+   "id": "IMG_7155#0"
   },
   {
    "name": "IMG_7156",
@@ -546,14 +541,10 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 0.802,
+   "start": 0.56,
    "end": 15.9,
-   "dur": 15.098,
+   "dur": 15.34,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -34.8,
-    -9.1
-   ],
    "text": "กิดน่าเห็นสมต่อมูกันเลย กูมองดูกูเห็นแล้ว เดี๋ยวไหม ขึ้นไป แบบกิดเท่าเย็นเลยอ่ะ",
    "id": "IMG_7156#0"
   },
@@ -569,10 +560,6 @@
    "end": 13.63,
    "dur": 13.63,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -32.0,
-    -4.5
-   ],
    "text": "ขอบคุณที่พูดคุณจริง",
    "id": "IMG_7157#0"
   },
@@ -588,10 +575,6 @@
    "end": 5.628,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -40.0,
-    -20.9
-   ],
    "motion": 1.87,
    "bright": 108.7,
    "id": "IMG_7158#0"
@@ -608,10 +591,6 @@
    "end": 5.846,
    "dur": 3.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -37.0,
-    -11.6
-   ],
    "motion": 13.14,
    "bright": 112.4,
    "id": "IMG_7159#0"
@@ -628,10 +607,6 @@
    "end": 7.42,
    "dur": 6.0,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -34.0,
-    -12.7
-   ],
    "text": "โอเค โอเค โอเค โอเค โอเค โอเค นี่ก็พิดว่า",
    "id": "IMG_7162#0"
   },
@@ -647,10 +622,6 @@
    "end": 6.5,
    "dur": 6.42,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -35.2,
-    -3.7
-   ],
    "text": "เก่งเลยอ่ะ พูดอย่างนี้แหละ ต่อแล้ว เหมือนจะหลับกันอ่ะ",
    "id": "IMG_7164#0"
   },
@@ -666,10 +637,6 @@
    "end": 6.607,
    "dur": 6.607,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -35.0,
-    -9.8
-   ],
    "text": "คุณเป็นร้าน เป็นร่อยไหม นั่นหน่อยได้ไหม เออ ไป",
    "id": "IMG_7165#0"
   },
@@ -681,14 +648,10 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 14.527,
-   "end": 16.614,
-   "dur": 2.087,
+   "start": 14.38,
+   "end": 17.38,
+   "dur": 3.0,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -41.8,
-    -17.3
-   ],
    "text": "อันนี้คืออะไรเนี่ย?",
    "id": "IMG_7168#0"
   },
@@ -704,10 +667,6 @@
    "end": 17.785,
    "dur": 16.815,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -30.3,
-    -9.2
-   ],
    "text": "ไม่เก็ด ไม่ก็ไม่เก็ด เธอแม่สับปลดสายมาในข้าดก็ไม่ เที่ยวตรงตรงนั้นถึงหรอ? เฮ้ยวตรงนั้นโคตรงนั้น ยังไงก็ได้ อุเปียดอีกแล้วอ่ะ ลงมาแล้ว",
    "id": "IMG_7170#0"
   },
@@ -723,12 +682,24 @@
    "end": 19.2,
    "dur": 19.2,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -29.4,
-    -5.2
-   ],
    "text": "มีปลายนะครับ มีปลาย อันตัวเขาจะคลิ้นก็คลิ้น ไปเริ่น ไปเริ่น วีดีโอ",
    "id": "qOnC_GMcxOfAe424GVyqmIEqUKWci4x3b95bNv0yHrQ#0"
+  },
+  {
+   "name": "DUuKpWXWww3WuwUAE7spDq2Hd_83-xQFoaxdVMJjZEw",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/DUuKpWXWww3WuwUAE7spDq2Hd_83-xQFoaxdVMJjZEw.MP4",
+   "orient": "V",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 2.268,
+   "end": 3.768,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 15.41,
+   "bright": 119.0,
+   "id": "DUuKpWXWww3WuwUAE7spDq2Hd_83-xQFoaxdVMJjZEw#0"
   },
   {
    "name": "IMG_7173",
@@ -742,10 +713,6 @@
    "end": 7.397,
    "dur": 3.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -39.6,
-    -13.2
-   ],
    "motion": 14.74,
    "bright": 113.7,
    "id": "IMG_7173#0"
@@ -762,13 +729,24 @@
    "end": 6.471,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -46.8,
-    -28.5
-   ],
    "motion": 1.92,
    "bright": 142.8,
    "id": "IMG_7175#0"
+  },
+  {
+   "name": "IMG_7176",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7176.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "TALK",
+   "start": 1.64,
+   "end": 5.55,
+   "dur": 3.91,
+   "target_lufs": -19.0,
+   "text": "แต่หวันอะไรนะครับ?",
+   "id": "IMG_7176#0"
   },
   {
    "name": "IMG_7177",
@@ -779,15 +757,26 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 4.17,
-   "end": 6.69,
-   "dur": 2.52,
+   "end": 7.17,
+   "dur": 3.0,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -37.0,
-    -6.4
-   ],
    "text": "วันเวลา จะมีเวลาล่ะ",
    "id": "IMG_7177#0"
+  },
+  {
+   "name": "IMG_7178",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7178.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "TALK",
+   "start": 0.87,
+   "end": 3.87,
+   "dur": 3.0,
+   "target_lufs": -19.0,
+   "text": "มากลับมัน ไปดู",
+   "id": "IMG_7178#0"
   },
   {
    "name": "IMG_7179",
@@ -801,10 +790,6 @@
    "end": 7.564,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -40.5,
-    -14.3
-   ],
    "motion": 4.61,
    "bright": 100.6,
    "id": "IMG_7179#0"
@@ -817,37 +802,12 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 1.418,
-   "end": 6.091,
-   "dur": 4.673,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -27.0,
-    -3.7
-   ],
-   "text": "จากกระถ่ายอะไร",
-   "id": "IMG_7188#1",
-   "jump": "IMG_7188~0"
-  },
-  {
-   "name": "IMG_7188",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7188.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 8.365,
+   "start": 0.0,
    "end": 13.145,
-   "dur": 4.78,
+   "dur": 13.145,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -27.0,
-    -3.7
-   ],
-   "text": "เอ้ย ระหวังครับ ระหวังนะครับ",
-   "id": "IMG_7188#3",
-   "jump": "IMG_7188~0"
+   "text": "มีหยับหน้ามันก็บุญเลย จากกระถ่ายอะไร เอ้ย ระหวังครับ ระหวังนะครับ",
+   "id": "IMG_7188#0"
   },
   {
    "name": "IMG_7189",
@@ -858,36 +818,11 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 0.0,
-   "end": 1.609,
-   "dur": 1.609,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -36.0,
-    -16.5
-   ],
-   "text": "โอ้ โจบแล้ว",
-   "id": "IMG_7189#0",
-   "jump": "IMG_7189~0"
-  },
-  {
-   "name": "IMG_7189",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7189.MOV",
-   "orient": "H",
-   "rot_override": "transpose=2",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 5.442,
    "end": 9.058,
-   "dur": 3.616,
+   "dur": 9.058,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -36.0,
-    -16.5
-   ],
-   "text": "ไปหาเลยกว่าไหม มึงกลับไปเช็กแล้วนะไข้ หนักแล้ว ไปทำอะไรไหมเนอะ",
-   "id": "IMG_7189#2",
-   "jump": "IMG_7189~0"
+   "text": "โอ้ โจบแล้ว ไปหาเลยกว่าไหม มึงกลับไปเช็กแล้วนะไข้ หนักแล้ว ไปทำอะไรไหมเนอะ",
+   "id": "IMG_7189#0"
   },
   {
    "name": "IMG_7190",
@@ -901,10 +836,6 @@
    "end": 14.613,
    "dur": 14.613,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -30.8,
-    -11.2
-   ],
    "text": "10 โมงขึ้น ดูดี ดูดี จานดูดี ฮ่า ต้องอีกมีใจฟาหน่อยแล้วมั้ย ศึกษาดี ศึกษาดี 10 โมงอ่ะ โอ้โห 8 โมงกูเท่าเขาเลยอ่ะ ต่อช้ากว่า 2 โมงก็ถึงกูแล้ว",
    "id": "IMG_7190#0"
   },
@@ -917,96 +848,11 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 0.0,
-   "end": 2.65,
-   "dur": 2.65,
+   "end": 20.29,
+   "dur": 20.29,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -37.8,
-    -17.8
-   ],
-   "text": "อื้อ... ประมากก่อน ประมากก่อน",
-   "id": "IMG_7194#0",
-   "jump": "IMG_7194~0"
-  },
-  {
-   "name": "IMG_7194",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7194.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 3.14,
-   "end": 6.607,
-   "dur": 3.467,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -37.8,
-    -17.8
-   ],
-   "text": "ประมากก่อน ประมากก่อน นี่เป็นยัง?",
-   "id": "IMG_7194#1",
-   "jump": "IMG_7194~0"
-  },
-  {
-   "name": "IMG_7194",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7194.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 6.804,
-   "end": 13.075,
-   "dur": 6.271,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -37.8,
-    -17.8
-   ],
-   "text": "นี่เป็นยัง? ไม่ ไม่เผิน? ยายายายายายายายายาย... อื้อ... อุ้ยๆๆๆๆ",
-   "id": "IMG_7194#2",
-   "jump": "IMG_7194~0"
-  },
-  {
-   "name": "IMG_7194",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7194.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 13.279,
-   "end": 15.005,
-   "dur": 1.726,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -37.8,
-    -17.8
-   ],
-   "text": "กว่ากูเลย... กว่ากูพี่...",
-   "id": "IMG_7194#3",
-   "jump": "IMG_7194~0"
-  },
-  {
-   "name": "IMG_7194",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7194.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 18.292,
-   "end": 20.258,
-   "dur": 1.966,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -37.8,
-    -17.8
-   ],
-   "text": "เป็นหน้าห้าว",
-   "id": "IMG_7194#6",
-   "jump": "IMG_7194~0"
+   "text": "อื้อ... ประมากก่อน ประมากก่อน นี่เป็นยัง? ไม่ ไม่เผิน? ยายายายายายายายายาย... อื้อ... อุ้ยๆๆๆๆ กว่ากูเลย... กว่ากูพี่... เป็นหน้าห้าว",
+   "id": "IMG_7194#0"
   },
   {
    "name": "IMG_7195",
@@ -1020,10 +866,6 @@
    "end": 10.27,
    "dur": 6.99,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -34.0,
-    -17.3
-   ],
    "text": "น้ำ น้ำ น้ำ น้ำ น้ำ น้ำ น้ำ",
    "id": "IMG_7195#0"
   },
@@ -1039,10 +881,6 @@
    "end": 10.34,
    "dur": 9.53,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -49.1,
-    -29.9
-   ],
    "text": "พยายามตราวิธีเดือนที่ไทย พี่สวัส อาวิธีเดือนที่ไทย",
    "id": "IMG_7201#0"
   },
@@ -1058,10 +896,6 @@
    "end": 4.969,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -41.6,
-    -19.5
-   ],
    "motion": 2.99,
    "bright": 115.5,
    "id": "IMG_7202#0"
@@ -1078,13 +912,25 @@
    "end": 4.061,
    "dur": 3.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -51.0,
-    -26.4
-   ],
    "motion": 13.16,
    "bright": 109.9,
    "id": "IMG_7204#0"
+  },
+  {
+   "name": "IMG_7207",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7207.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 2.444,
+   "end": 3.944,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 18.39,
+   "bright": 115.3,
+   "id": "IMG_7207#0"
   },
   {
    "name": "IMG_7208",
@@ -1098,10 +944,6 @@
    "end": 5.695,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -51.8,
-    -30.8
-   ],
    "motion": 5.28,
    "bright": 111.3,
    "id": "IMG_7208#0"
@@ -1114,17 +956,12 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 6.179,
-   "end": 8.198,
-   "dur": 2.019,
+   "start": 3.12,
+   "end": 8.542,
+   "dur": 5.422,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -41.3,
-    -25.4
-   ],
-   "text": "เป็นคนในอุโดน ทำงานอยู่ในในยอง",
-   "id": "IMG_7210#1",
-   "jump": "IMG_7210~0"
+   "text": "อ่ะ พี่มาจากในยอง ในยอง เป็นคนในอุโดน ทำงานอยู่ในในยอง",
+   "id": "IMG_7210#0"
   },
   {
    "name": "IMG_7213",
@@ -1134,14 +971,10 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 6.89,
+   "start": 5.692,
    "end": 8.692,
-   "dur": 1.802,
+   "dur": 3.0,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -49.2,
-    -34.4
-   ],
    "text": "ต้องลิกับมาได้ขอบคุณนี้",
    "id": "IMG_7213#0"
   },
@@ -1153,17 +986,12 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 8.415,
+   "start": 2.22,
    "end": 10.693,
-   "dur": 2.278,
+   "dur": 8.473,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -38.6,
-    -10.7
-   ],
-   "text": "ข้างขวายไม่ให้อะไร ข้างขวายยีดได้อยู่",
-   "id": "IMG_7214#1",
-   "jump": "IMG_7214~0"
+   "text": "ข้างไซกลังจะเป็นในคิว ข้างขวายไม่ให้อะไร ข้างขวายยีดได้อยู่",
+   "id": "IMG_7214#0"
   },
   {
    "name": "IMG_7225",
@@ -1177,93 +1005,9 @@
    "end": 8.348,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -48.8,
-    -28.9
-   ],
    "motion": 2.69,
    "bright": 112.4,
    "id": "IMG_7225#0"
-  },
-  {
-   "name": "IMG_7230",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7230.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 7.28,
-   "end": 10.4,
-   "dur": 3.12,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -41.1,
-    -23.1
-   ],
-   "text": "เมตเกียวเฮียอะไรล่ะ",
-   "id": "IMG_7230#1",
-   "jump": "IMG_7230~0"
-  },
-  {
-   "name": "i3gzwuWdwKRQWKuVLQiTpiS2AreuIFrY3NsmXQW1hM8",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/i3gzwuWdwKRQWKuVLQiTpiS2AreuIFrY3NsmXQW1hM8.MP4",
-   "orient": "V",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 1.784,
-   "end": 3.571,
-   "dur": 1.787,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -31.1,
-    -15.0
-   ],
-   "text": "ในสุดก็ถึงแล้ว",
-   "id": "i3gzwuWdwKRQWKuVLQiTpiS2AreuIFrY3NsmXQW1hM8#0",
-   "jump": "i3gzwuWdwKRQWKuVLQiTpiS2AreuIFrY3NsmXQW1hM8~0"
-  },
-  {
-   "name": "i3gzwuWdwKRQWKuVLQiTpiS2AreuIFrY3NsmXQW1hM8",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/i3gzwuWdwKRQWKuVLQiTpiS2AreuIFrY3NsmXQW1hM8.MP4",
-   "orient": "V",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 5.739,
-   "end": 7.551,
-   "dur": 1.812,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -31.1,
-    -15.0
-   ],
-   "text": "เห็นว่ากูต้องเดินไปต่ออีก เออ ระยะตามองเห็นกับว่าใกล้แล้วเว้ย",
-   "id": "i3gzwuWdwKRQWKuVLQiTpiS2AreuIFrY3NsmXQW1hM8#2",
-   "jump": "i3gzwuWdwKRQWKuVLQiTpiS2AreuIFrY3NsmXQW1hM8~0"
-  },
-  {
-   "name": "i3gzwuWdwKRQWKuVLQiTpiS2AreuIFrY3NsmXQW1hM8",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/i3gzwuWdwKRQWKuVLQiTpiS2AreuIFrY3NsmXQW1hM8.MP4",
-   "orient": "V",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 7.572,
-   "end": 10.307,
-   "dur": 2.735,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -31.1,
-    -15.0
-   ],
-   "text": "เออ ระยะตามองเห็นกับว่าใกล้แล้วเว้ย",
-   "id": "i3gzwuWdwKRQWKuVLQiTpiS2AreuIFrY3NsmXQW1hM8#3",
-   "jump": "i3gzwuWdwKRQWKuVLQiTpiS2AreuIFrY3NsmXQW1hM8~0"
   },
   {
    "name": "WdzNNaobb9LN1-4Qfq5EC8kZJFQCjMP_J7pOVPRxYJw",
@@ -1274,36 +1018,41 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 0.0,
-   "end": 3.101,
-   "dur": 3.101,
+   "end": 9.733,
+   "dur": 9.733,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -22.2,
-    -4.8
-   ],
    "text": "นี่คือหน้าตาของชายหนุ่มที่แมวอะไรแล้ว แล้วตัวกูเองด้วย หนักกับพวกแม่งอีก",
-   "id": "WdzNNaobb9LN1-4Qfq5EC8kZJFQCjMP_J7pOVPRxYJw#0",
-   "jump": "WdzNNaobb9LN1-4Qfq5EC8kZJFQCjMP_J7pOVPRxYJw~0"
+   "id": "WdzNNaobb9LN1-4Qfq5EC8kZJFQCjMP_J7pOVPRxYJw#0"
   },
   {
-   "name": "WdzNNaobb9LN1-4Qfq5EC8kZJFQCjMP_J7pOVPRxYJw",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/WdzNNaobb9LN1-4Qfq5EC8kZJFQCjMP_J7pOVPRxYJw.MP4",
+   "name": "IMG_7230",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7230.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "TALK",
+   "start": 0.0,
+   "end": 10.978,
+   "dur": 10.978,
+   "target_lufs": -19.0,
+   "text": "มันความสุ่งจากก็ตามน้ำเป็นเลย เมตเกียวเฮียอะไรล่ะ",
+   "id": "IMG_7230#0"
+  },
+  {
+   "name": "i3gzwuWdwKRQWKuVLQiTpiS2AreuIFrY3NsmXQW1hM8",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/i3gzwuWdwKRQWKuVLQiTpiS2AreuIFrY3NsmXQW1hM8.MP4",
    "orient": "V",
    "rot_override": "",
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 4.424,
-   "end": 6.92,
-   "dur": 2.496,
+   "start": 0.0,
+   "end": 10.307,
+   "dur": 10.307,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -22.2,
-    -4.8
-   ],
-   "text": "นี่คือหน้าตาของชายหนุ่มที่แมวอะไรแล้ว แล้วตัวกูเองด้วย หนักกับพวกแม่งอีก",
-   "id": "WdzNNaobb9LN1-4Qfq5EC8kZJFQCjMP_J7pOVPRxYJw#1",
-   "jump": "WdzNNaobb9LN1-4Qfq5EC8kZJFQCjMP_J7pOVPRxYJw~0"
+   "text": "ในสุดก็ถึงแล้ว จุดที่แม่ง เห็นว่ากูต้องเดินไปต่ออีก เออ ระยะตามองเห็นกับว่าใกล้แล้วเว้ย",
+   "id": "i3gzwuWdwKRQWKuVLQiTpiS2AreuIFrY3NsmXQW1hM8#0"
   },
   {
    "name": "IMG_7232",
@@ -1317,12 +1066,24 @@
    "end": 7.65,
    "dur": 4.02,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -50.6,
-    -28.1
-   ],
    "text": "ที่ที่ที่เทียร์ ที่เทียร์ ที่ยอดี",
    "id": "IMG_7232#0"
+  },
+  {
+   "name": "IMG_7233",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7233.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 0.976,
+   "end": 2.476,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 17.5,
+   "bright": 124.6,
+   "id": "IMG_7233#0"
   },
   {
    "name": "IMG_7234",
@@ -1336,13 +1097,24 @@
    "end": 4.979,
    "dur": 4.001,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -70.0,
-    -70.0
-   ],
    "motion": 7.45,
    "bright": 114.9,
    "id": "IMG_7234#0"
+  },
+  {
+   "name": "IMG_7236",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7236.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "TALK",
+   "start": 2.22,
+   "end": 5.572,
+   "dur": 3.352,
+   "target_lufs": -19.0,
+   "text": "นี่ด้วยนายกับทราบนี้?นาย",
+   "id": "IMG_7236#0"
   },
   {
    "name": "IMG_7238",
@@ -1356,13 +1128,25 @@
    "end": 6.263,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -50.0,
-    -19.3
-   ],
    "motion": 3.37,
    "bright": 116.8,
    "id": "IMG_7238#0"
+  },
+  {
+   "name": "IMG_7247",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7247.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 3.296,
+   "end": 4.796,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 16.45,
+   "bright": 114.1,
+   "id": "IMG_7247#0"
   },
   {
    "name": "IMG_7248",
@@ -1376,13 +1160,25 @@
    "end": 8.415,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -50.8,
-    -22.0
-   ],
    "motion": 3.32,
    "bright": 114.0,
    "id": "IMG_7248#0"
+  },
+  {
+   "name": "IMG_7249",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7249.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 10.821,
+   "end": 12.321,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 34.89,
+   "bright": 129.9,
+   "id": "IMG_7249#0"
   },
   {
    "name": "mKy-7EamtNxQc4WNawYVM7K1ZC6TJNuRz6fRXDkz9TM",
@@ -1392,36 +1188,12 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 6.089,
-   "end": 8.947,
-   "dur": 2.858,
+   "start": 0.0,
+   "end": 11.067,
+   "dur": 11.067,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -29.6,
-    -18.9
-   ],
-   "text": "วิวดีมากเลยให้เฮี้ย ด้วยหน้ามึงไงสัตว์",
+   "text": "ถ้าจานสวยมากจานก็ถ่ายให้จานอ่ะดิ วิวดีมากเลยให้เฮี้ย ด้วยหน้ามึงไงสัตว์",
    "id": "mKy-7EamtNxQc4WNawYVM7K1ZC6TJNuRz6fRXDkz9TM#0"
-  },
-  {
-   "name": "IMG_7307",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7307.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "BROLL",
-   "start": 5.883,
-   "end": 9.883,
-   "dur": 4.0,
-   "target_lufs": -26.0,
-   "loud_ref": [
-    -61.6,
-    -46.8
-   ],
-   "motion": 0.27,
-   "bright": 133.7,
-   "id": "IMG_7307#0"
   },
   {
    "name": "IMG_7309",
@@ -1435,10 +1207,6 @@
    "end": 6.829,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -58.6,
-    -30.4
-   ],
    "motion": 6.74,
    "bright": 138.6,
    "id": "IMG_7309#0"
@@ -1452,76 +1220,42 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 0.0,
-   "end": 5.277,
-   "dur": 5.277,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -31.8,
-    -10.7
-   ],
-   "text": "ไม่เคยดีใจเยี่ยในขนาดนี้เลย ไม่เห็นป้ายขาว ไม่เฮียนเยี่ยนะก็จังอ่ะ",
-   "id": "IMG_7310#0",
-   "jump": "IMG_7310~0"
-  },
-  {
-   "name": "IMG_7310",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7310.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 5.29,
-   "end": 7.652,
-   "dur": 2.362,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -31.8,
-    -10.7
-   ],
-   "text": "ไม่เห็นป้ายขาว ไม่เฮียนเยี่ยนะก็จังอ่ะ",
-   "id": "IMG_7310#1",
-   "jump": "IMG_7310~0"
-  },
-  {
-   "name": "IMG_7310",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7310.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 8.065,
    "end": 12.367,
-   "dur": 4.302,
+   "dur": 12.367,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -31.8,
-    -10.7
-   ],
-   "text": "ไม่เห็นป้ายขาว ไม่เฮียนเยี่ยนะก็จังอ่ะ กูไม่เห็นป้ายเยี่ยเลยเลย",
-   "id": "IMG_7310#2",
-   "jump": "IMG_7310~0"
+   "text": "ไม่เคยดีใจเยี่ยในขนาดนี้เลย ไม่เห็นป้ายขาว ไม่เฮียนเยี่ยนะก็จังอ่ะ กูไม่เห็นป้ายเยี่ยเลยเลย",
+   "id": "IMG_7310#0"
   },
   {
-   "name": "IMG_7360",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7360.MOV",
+   "name": "IMG_7311",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7311.MOV",
    "orient": "H",
    "rot_override": "",
    "full_range": false,
    "achannels": 2,
    "kind": "BROLL",
-   "start": 3.48,
-   "end": 7.48,
-   "dur": 4.0,
+   "start": 1.703,
+   "end": 3.203,
+   "dur": 1.5,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -45.6,
-    -25.5
-   ],
-   "motion": 0.39,
-   "bright": 126.5,
-   "id": "IMG_7360#0"
+   "motion": 15.94,
+   "bright": 119.5,
+   "id": "IMG_7311#0"
+  },
+  {
+   "name": "IMG_7312",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7312.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "TALK",
+   "start": 3.79,
+   "end": 7.42,
+   "dur": 3.63,
+   "target_lufs": -19.0,
+   "text": "ไม่รู้กับแล้วขากูฟื้นเลยอ่ะ ไปลงอ่ะ",
+   "id": "IMG_7312#0"
   },
   {
    "name": "IMG_7501",
@@ -1535,10 +1269,6 @@
    "end": 7.138,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -52.0,
-    -32.1
-   ],
    "motion": 5.4,
    "bright": 126.5,
    "id": "IMG_7501#0"
@@ -1555,13 +1285,25 @@
    "end": 4.601,
    "dur": 3.999,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -51.7,
-    -22.2
-   ],
    "motion": 6.96,
    "bright": 130.1,
    "id": "IMG_7363#0"
+  },
+  {
+   "name": "IMG_7364",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7364.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 1.654,
+   "end": 4.654,
+   "dur": 3.0,
+   "target_lufs": -26.0,
+   "motion": 12.25,
+   "bright": 116.6,
+   "id": "IMG_7364#0"
   },
   {
    "name": "IMG_7365",
@@ -1572,36 +1314,27 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 0.08,
-   "end": 4.37,
-   "dur": 4.29,
+   "end": 8.173,
+   "dur": 8.093,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -33.7,
-    -13.2
-   ],
-   "text": "เราตรงหลังนี้ ของสุดตับอีกแชงเรียบร้อย ครับผม โอ้ ทิ้งตัว",
-   "id": "IMG_7365#0",
-   "jump": "IMG_7365~0"
+   "text": "เราตรงหลังนี้ ของสุดตับอีกแชงเรียบร้อย ครับผม โอ้ ทิ้งตัว ของเรามีแห่งนี้ใช่มั้ย?",
+   "id": "IMG_7365#0"
   },
   {
-   "name": "IMG_7365",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7365.MOV",
+   "name": "IMG_7366",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7366.MOV",
    "orient": "H",
    "rot_override": "",
    "full_range": false,
    "achannels": 2,
-   "kind": "TALK",
-   "start": 4.712,
-   "end": 8.173,
-   "dur": 3.461,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -33.7,
-    -13.2
-   ],
-   "text": "ทิ้งตัว ของเรามีแห่งนี้ใช่มั้ย?",
-   "id": "IMG_7365#1",
-   "jump": "IMG_7365~0"
+   "kind": "BROLL",
+   "start": 2.779,
+   "end": 4.279,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 22.54,
+   "bright": 113.5,
+   "id": "IMG_7366#0"
   },
   {
    "name": "IMG_7367",
@@ -1615,32 +1348,24 @@
    "end": 4.62,
    "dur": 4.61,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -27.7,
-    -6.7
-   ],
    "text": "ขนมอะไรอยู่ในกระปล่อมากินดี นั่นก็ว่าแล้ว พอโทษอยู่",
    "id": "IMG_7367#0"
   },
   {
-   "name": "IMG_7396",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7396.MOV",
+   "name": "IMG_7369",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7369.MOV",
    "orient": "H",
    "rot_override": "",
    "full_range": false,
    "achannels": 2,
    "kind": "BROLL",
-   "start": 2.162,
-   "end": 6.162,
-   "dur": 4.0,
+   "start": 3.446,
+   "end": 4.946,
+   "dur": 1.5,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -35.2,
-    -16.6
-   ],
-   "motion": 5.41,
-   "bright": 118.2,
-   "id": "IMG_7396#0"
+   "motion": 17.35,
+   "bright": 125.8,
+   "id": "IMG_7369#0"
   },
   {
    "name": "IMG_7371",
@@ -1654,10 +1379,6 @@
    "end": 5.671,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -33.1,
-    -15.3
-   ],
    "motion": 7.61,
    "bright": 98.6,
    "id": "IMG_7371#0"
@@ -1671,56 +1392,11 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 0.0,
-   "end": 11.502,
-   "dur": 11.502,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -33.2,
-    -15.7
-   ],
-   "text": "กลัวเลยอ่ะ แต่คนนอนก็กลัว อย่าโดนอนนะ ผมก็วางให้ขันนะ ไม่ ไม่ ไม่ ไม่ ผมก็จิบมา แม่เขาบอก มูไม่กล้าหรอก เปิดมาตัวทนี้ว่าผมกินลัดบ้านนะวิ่งแบบ หือ",
-   "id": "IMG_7372#0",
-   "jump": "IMG_7372~0"
-  },
-  {
-   "name": "IMG_7372",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7372.mov",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": true,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 11.674,
-   "end": 13.885,
-   "dur": 2.211,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -33.2,
-    -15.7
-   ],
-   "text": "กลัวเลยอ่ะ แต่คนนอนก็กลัว อย่าโดนอนนะ ผมก็วางให้ขันนะ ไม่ ไม่ ไม่ ไม่ ผมก็จิบมา แม่เขาบอก มูไม่กล้าหรอก เปิดมาตัวทนี้ว่าผมกินลัดบ้านนะวิ่งแบบ หือ",
-   "id": "IMG_7372#1",
-   "jump": "IMG_7372~0"
-  },
-  {
-   "name": "IMG_7372",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7372.mov",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": true,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 13.937,
    "end": 17.232,
-   "dur": 3.295,
+   "dur": 17.232,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -33.2,
-    -15.7
-   ],
    "text": "กลัวเลยอ่ะ แต่คนนอนก็กลัว อย่าโดนอนนะ ผมก็วางให้ขันนะ ไม่ ไม่ ไม่ ไม่ ผมก็จิบมา แม่เขาบอก มูไม่กล้าหรอก เปิดมาตัวทนี้ว่าผมกินลัดบ้านนะวิ่งแบบ หือ",
-   "id": "IMG_7372#2",
-   "jump": "IMG_7372~0"
+   "id": "IMG_7372#0"
   },
   {
    "name": "IMG_7373",
@@ -1734,13 +1410,25 @@
    "end": 13.125,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -38.7,
-    -23.4
-   ],
    "motion": 0.03,
    "bright": 16.2,
    "id": "IMG_7373#0"
+  },
+  {
+   "name": "IMG_7374",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7374.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 4.081,
+   "end": 5.581,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 23.18,
+   "bright": 123.2,
+   "id": "IMG_7374#0"
   },
   {
    "name": "IMG_7375",
@@ -1754,10 +1442,6 @@
    "end": 12.899,
    "dur": 3.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -40.2,
-    -5.0
-   ],
    "motion": 9.75,
    "bright": 131.0,
    "id": "IMG_7375#0"
@@ -1771,95 +1455,11 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 0.0,
-   "end": 2.929,
-   "dur": 2.929,
+   "end": 16.067,
+   "dur": 16.067,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -40.5,
-    -20.6
-   ],
    "text": "หน้าไม่ถ่ายลูกจับจับหน้า",
-   "id": "kOjs0ajSzAdyWaQdxGPpqtTbXssyHoP5ZMDMZK-Oxso#0",
-   "jump": "kOjs0ajSzAdyWaQdxGPpqtTbXssyHoP5ZMDMZK-Oxso~0"
-  },
-  {
-   "name": "kOjs0ajSzAdyWaQdxGPpqtTbXssyHoP5ZMDMZK-Oxso",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/kOjs0ajSzAdyWaQdxGPpqtTbXssyHoP5ZMDMZK-Oxso.MP4",
-   "orient": "V",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 2.975,
-   "end": 5.516,
-   "dur": 2.541,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -40.5,
-    -20.6
-   ],
-   "text": "หน้าไม่ถ่ายลูกจับจับหน้า",
-   "id": "kOjs0ajSzAdyWaQdxGPpqtTbXssyHoP5ZMDMZK-Oxso#1",
-   "jump": "kOjs0ajSzAdyWaQdxGPpqtTbXssyHoP5ZMDMZK-Oxso~0"
-  },
-  {
-   "name": "kOjs0ajSzAdyWaQdxGPpqtTbXssyHoP5ZMDMZK-Oxso",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/kOjs0ajSzAdyWaQdxGPpqtTbXssyHoP5ZMDMZK-Oxso.MP4",
-   "orient": "V",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 6.582,
-   "end": 10.402,
-   "dur": 3.82,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -40.5,
-    -20.6
-   ],
-   "text": "หน้าไม่ถ่ายลูกจับจับหน้า",
-   "id": "kOjs0ajSzAdyWaQdxGPpqtTbXssyHoP5ZMDMZK-Oxso#2",
-   "jump": "kOjs0ajSzAdyWaQdxGPpqtTbXssyHoP5ZMDMZK-Oxso~0"
-  },
-  {
-   "name": "kOjs0ajSzAdyWaQdxGPpqtTbXssyHoP5ZMDMZK-Oxso",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/kOjs0ajSzAdyWaQdxGPpqtTbXssyHoP5ZMDMZK-Oxso.MP4",
-   "orient": "V",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 10.84,
-   "end": 13.962,
-   "dur": 3.122,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -40.5,
-    -20.6
-   ],
-   "text": "หน้าไม่ถ่ายลูกจับจับหน้า",
-   "id": "kOjs0ajSzAdyWaQdxGPpqtTbXssyHoP5ZMDMZK-Oxso#3",
-   "jump": "kOjs0ajSzAdyWaQdxGPpqtTbXssyHoP5ZMDMZK-Oxso~0"
-  },
-  {
-   "name": "F6-_Phf2XEkklBF0uorZfMCCRCpScXGQ1pEX0EWqHCI",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/F6-_Phf2XEkklBF0uorZfMCCRCpScXGQ1pEX0EWqHCI.MP4",
-   "orient": "V",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 0.0,
-   "end": 5.7,
-   "dur": 5.7,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -38.9,
-    -18.6
-   ],
-   "text": "ตอนนี้เรียนหมดครับ โอเค",
-   "id": "F6-_Phf2XEkklBF0uorZfMCCRCpScXGQ1pEX0EWqHCI#0"
+   "id": "kOjs0ajSzAdyWaQdxGPpqtTbXssyHoP5ZMDMZK-Oxso#0"
   },
   {
    "name": "video_625551874564817310-VS4ilqs4",
@@ -1873,10 +1473,6 @@
    "end": 29.3,
    "dur": 29.3,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -30.6,
-    -5.6
-   ],
    "text": "ประมาณกี่เมตรประจาก 50 ได้ไหม 25 30 50 เมตรอ่ะไม่เห็นแล้ว ฟ้นตกอีกแล้ว",
    "id": "video_625551874564817310-VS4ilqs4#0"
   },
@@ -1892,10 +1488,6 @@
    "end": 95.373,
    "dur": 52.393,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -30.6,
-    -5.6
-   ],
    "text": "แห่งอะไรแห่งข้อสวย สายนึง โอ้โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห โห ขอบคุณภาพ",
    "id": "video_625551874564817310-VS4ilqs4#1"
   },
@@ -1907,57 +1499,43 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 1.291,
-   "end": 3.954,
-   "dur": 2.663,
+   "start": 0.0,
+   "end": 21.108,
+   "dur": 21.108,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -42.9,
-    -12.0
-   ],
-   "text": "แต่ความหน้าธรรมดา มันจะไม่มาก มันจะบางบาง ต้องสำวัยมิดตัว",
-   "id": "L1CmrzTvlOQ1i4jiBmaRrvh15gImu7S4ucG9XBoyTZs#0",
-   "jump": "L1CmrzTvlOQ1i4jiBmaRrvh15gImu7S4ucG9XBoyTZs~0"
+   "text": "แต่ความหน้าธรรมดา มันจะไม่มาก มันจะบางบาง ต้องสำวัยมิดตัว แต่ถ้าหน้าหนาว มันจะมากก็ไม่ต้อง ก็ไม่ใช่",
+   "id": "L1CmrzTvlOQ1i4jiBmaRrvh15gImu7S4ucG9XBoyTZs#0"
   },
   {
-   "name": "IMG_7388",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7388.MOV",
+   "name": "video_625551860438139056-8KiRsiGZ",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/video_625551860438139056-8KiRsiGZ.MP4",
+   "orient": "V",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "TALK",
+   "start": 0.0,
+   "end": 99.303,
+   "dur": 99.303,
+   "target_lufs": -19.0,
+   "text": "ตรงนี้ คิดว่าที่สุดว่า ที่สุดว่าที่สุดว่า ที่สุดว่า ที่สุดว่า ที่สุดว่า ที่สุดว่า ที่สุดว่า ที่สุดว่า ที่สุดว่า ที่สุดว่า ที่สุดว่า ที่สุดว่า ที่สุดว่า ที่สุดว่า ที่สุดว่า ที่สุดว่า ที่สุดว่า ที่สุดว่า ที่สุดว่า ที่สุดว่า ที่สุดว่า ที่สุดว่า ท ขอบคุณที่สุดกับกับกับกับคุณที่สุดกับกับกับกับกับคุณที่สุดกับกับกับกับกับกับกับกับกับกับกับกับกับกับกับกับกับกับกับกับกับกับกับกับกับกับกับกับกับกับกับกับกับ",
+   "id": "video_625551860438139056-8KiRsiGZ#0"
+  },
+  {
+   "name": "IMG_7378",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7378.MOV",
    "orient": "H",
    "rot_override": "",
    "full_range": false,
    "achannels": 2,
    "kind": "BROLL",
-   "start": 3.806,
-   "end": 7.806,
-   "dur": 4.0,
+   "start": 10.579,
+   "end": 12.079,
+   "dur": 1.5,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -42.6,
-    -18.1
-   ],
-   "motion": 7.19,
-   "bright": 147.1,
-   "id": "IMG_7388#0"
-  },
-  {
-   "name": "IMG_7398",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7398.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "BROLL",
-   "start": 1.929,
-   "end": 4.928,
-   "dur": 2.999,
-   "target_lufs": -26.0,
-   "loud_ref": [
-    -41.3,
-    -17.8
-   ],
-   "motion": 10.92,
-   "bright": 139.0,
-   "id": "IMG_7398#0"
+   "motion": 34.48,
+   "bright": 126.8,
+   "id": "IMG_7378#0"
   },
   {
    "name": "IMG_7379",
@@ -1971,10 +1549,6 @@
    "end": 10.37,
    "dur": 9.88,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -30.1,
-    -6.9
-   ],
    "text": "แม่หมายถึงว่ามันเปิดตัวว่าให้มันมัน นี่ชื่อไม่เชี่ยม มันเจอชื่อแล้วเหรอ ชื่อแหละกัน ดีๆก็ผล แต่มันกดอะไรก่อนไม่ให้มัน",
    "id": "IMG_7379#0"
   },
@@ -1990,10 +1564,6 @@
    "end": 6.688,
    "dur": 6.688,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -25.0,
-    -5.8
-   ],
    "text": "โอ๊ย โอ๊ย โอ๊ย โอ๊ย โอ๊ย โอ๊ย",
    "id": "IMG_7382#0"
   },
@@ -2006,35 +1576,91 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 0.0,
-   "end": 2.21,
-   "dur": 2.21,
+   "end": 3.0,
+   "dur": 3.0,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -31.6,
-    -11.7
-   ],
    "text": "กลับกลับกลับกลับ",
    "id": "IMG_7384#0"
   },
   {
-   "name": "IMG_7399",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7399.MOV",
+   "name": "IMG_7388",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7388.MOV",
    "orient": "H",
    "rot_override": "",
    "full_range": false,
    "achannels": 2,
-   "kind": "TALK",
-   "start": 3.922,
-   "end": 5.793,
-   "dur": 1.871,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -34.6,
-    -17.9
-   ],
-   "text": "เขาหลวงไหนพี่ ซูพอไทยหรอ ใช่",
-   "id": "IMG_7399#3",
-   "jump": "IMG_7399~0"
+   "kind": "BROLL",
+   "start": 3.806,
+   "end": 7.806,
+   "dur": 4.0,
+   "target_lufs": -26.0,
+   "motion": 7.19,
+   "bright": 147.1,
+   "id": "IMG_7388#0"
+  },
+  {
+   "name": "IMG_7393",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7393.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 2.469,
+   "end": 3.969,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 34.95,
+   "bright": 130.6,
+   "id": "IMG_7393#0"
+  },
+  {
+   "name": "IMG_7394",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7394.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 1.36,
+   "end": 2.86,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 15.22,
+   "bright": 113.8,
+   "id": "IMG_7394#0"
+  },
+  {
+   "name": "IMG_7396",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7396.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 2.162,
+   "end": 6.162,
+   "dur": 4.0,
+   "target_lufs": -26.0,
+   "motion": 5.41,
+   "bright": 118.2,
+   "id": "IMG_7396#0"
+  },
+  {
+   "name": "IMG_7398",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7398.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 1.929,
+   "end": 4.928,
+   "dur": 2.999,
+   "target_lufs": -26.0,
+   "motion": 10.92,
+   "bright": 139.0,
+   "id": "IMG_7398#0"
   },
   {
    "name": "IMG_7399",
@@ -2044,37 +1670,27 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 5.974,
-   "end": 12.981,
-   "dur": 7.007,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -34.6,
-    -17.9
-   ],
-   "text": "ใช่ 2 กิโลเล็กอะ บอกเลย กัดปั้นอะ อ่า รังการน้อย รังการหลวงกับเขาหลวงซูพอไทยนะ อันดับสามอะไรพี่",
-   "id": "IMG_7399#4",
-   "jump": "IMG_7399~0"
-  },
-  {
-   "name": "IMG_7399",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7399.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 14.143,
+   "start": 0.0,
    "end": 15.833,
-   "dur": 1.69,
+   "dur": 15.833,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -34.6,
-    -17.9
-   ],
-   "text": "อันดับสามอะไรพี่ ในนั้นเหรอ ใช่ ในนี้เนี่ย",
-   "id": "IMG_7399#5",
-   "jump": "IMG_7399~0"
+   "text": "ทอบสามนะ เขาหลวง เขาหลวงไหนพี่ ซูพอไทยหรอ ใช่ 2 กิโลเล็กอะ บอกเลย กัดปั้นอะ อ่า รังการน้อย รังการหลวงกับเขาหลวงซูพอไทยนะ อันดับสามอะไรพี่ ในนั้นเหรอ ใช่ ในนี้เนี่ย",
+   "id": "IMG_7399#0"
+  },
+  {
+   "name": "IMG_7401",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7401.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "TALK",
+   "start": 0.2,
+   "end": 11.695,
+   "dur": 11.495,
+   "target_lufs": -19.0,
+   "text": "ไม่ใช่หลุก อันที่สก อ๋อ ตรงนี้มันดูพื้นมันเลือก อันนี้มันสโรบ มันน้ำไม่ได้",
+   "id": "IMG_7401#0"
   },
   {
    "name": "IMG_7404",
@@ -2088,10 +1704,6 @@
    "end": 6.27,
    "dur": 5.91,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -38.3,
-    -22.4
-   ],
    "text": "เจ้าต้องกลับกลับกลับกลับมาก",
    "id": "IMG_7404#0"
   },
@@ -2103,14 +1715,10 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 5.84,
-   "end": 7.94,
-   "dur": 2.1,
+   "start": 5.623,
+   "end": 8.623,
+   "dur": 3.0,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -37.7,
-    -15.0
-   ],
    "text": "ที่ดีอันชีวะ",
    "id": "IMG_7405#0"
   },
@@ -2126,10 +1734,6 @@
    "end": 4.319,
    "dur": 3.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -44.7,
-    -21.0
-   ],
    "motion": 11.22,
    "bright": 127.2,
    "id": "IMG_7407#0"
@@ -2146,13 +1750,39 @@
    "end": 4.211,
    "dur": 3.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -49.5,
-    -25.8
-   ],
    "motion": 10.38,
    "bright": 132.0,
    "id": "IMG_7408#0"
+  },
+  {
+   "name": "IMG_7411",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7411.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "TALK",
+   "start": 1.74,
+   "end": 10.05,
+   "dur": 8.31,
+   "target_lufs": -19.0,
+   "text": "ก็ได้ว่า มันไม่มีกว่า มันไม่ได้ว่า",
+   "id": "IMG_7411#0"
+  },
+  {
+   "name": "IMG_7414",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7414.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "TALK",
+   "start": 0.0,
+   "end": 9.727,
+   "dur": 9.727,
+   "target_lufs": -19.0,
+   "text": "ก็ขนาดพี่ยังนั้นบอกว่า ขอให้ได้ออกนะครับ นั้นขอให้โดนแบบ บ่องเบียด้วย",
+   "id": "IMG_7414#0"
   },
   {
    "name": "IMG_7424",
@@ -2163,16 +1793,11 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 0.0,
-   "end": 4.311,
-   "dur": 4.311,
+   "end": 10.895,
+   "dur": 10.895,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -40.8,
-    -18.6
-   ],
    "text": "ต้องแบบต้องดับดับดับดับดับได้",
-   "id": "IMG_7424#0",
-   "jump": "IMG_7424~0"
+   "id": "IMG_7424#0"
   },
   {
    "name": "IMG_7425",
@@ -2182,17 +1807,12 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 2.809,
-   "end": 4.705,
-   "dur": 1.896,
+   "start": 1.36,
+   "end": 8.825,
+   "dur": 7.465,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -40.4,
-    -19.4
-   ],
    "text": "รีศ มีโทรกรอด เอารีศขาวด้วย ขาวคุณมองคุ้ถ่ายด้า",
-   "id": "IMG_7425#1",
-   "jump": "IMG_7425~0"
+   "id": "IMG_7425#0"
   },
   {
    "name": "IMG_7429",
@@ -2206,13 +1826,25 @@
    "end": 4.036,
    "dur": 3.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -53.7,
-    -27.4
-   ],
    "motion": 10.58,
    "bright": 125.1,
    "id": "IMG_7429#0"
+  },
+  {
+   "name": "IMG_7439",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7439.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 1.401,
+   "end": 2.901,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 19.05,
+   "bright": 119.8,
+   "id": "IMG_7439#0"
   },
   {
    "name": "IMG_7440",
@@ -2222,14 +1854,10 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 8.94,
+   "start": 7.593,
    "end": 10.593,
-   "dur": 1.653,
+   "dur": 3.0,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -38.0,
-    -19.6
-   ],
    "text": "อาลายนายไปอีกว่า",
    "id": "IMG_7440#0"
   },
@@ -2245,10 +1873,6 @@
    "end": 9.592,
    "dur": 7.432,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -35.3,
-    -13.1
-   ],
    "text": "ขอบคุณผลม ปลับพลมิเตอร์ ของเขาปลับ ลับเตรียมแค้นอีก มาแต่ลาด ลาดสิ่งดี ไม่น่าชอบ จูน ลาดสุน",
    "id": "IMG_7441#0"
   },
@@ -2264,10 +1888,6 @@
    "end": 7.064,
    "dur": 3.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -47.8,
-    -26.6
-   ],
    "motion": 8.32,
    "bright": 133.6,
    "id": "IMG_7442#0"
@@ -2280,17 +1900,12 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 3.502,
-   "end": 5.548,
-   "dur": 2.046,
+   "start": 2.57,
+   "end": 9.41,
+   "dur": 6.84,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -43.4,
-    -16.8
-   ],
    "text": "ไม่ใช่ ไม่ใช่ ไม่ใช่ ไม่ใช่ ไม่ใช่ ไม่ใช่",
-   "id": "IMG_7444#0",
-   "jump": "IMG_7444~0"
+   "id": "IMG_7444#0"
   },
   {
    "name": "IMG_7445",
@@ -2304,33 +1919,25 @@
    "end": 7.881,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -40.3,
-    -15.1
-   ],
    "motion": 2.02,
    "bright": 135.9,
    "id": "IMG_7445#0"
   },
   {
-   "name": "IMG_7449",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7449.MOV",
+   "name": "IMG_7448",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7448.MOV",
    "orient": "H",
    "rot_override": "",
    "full_range": false,
    "achannels": 2,
-   "kind": "TALK",
-   "start": 0.391,
-   "end": 2.331,
-   "dur": 1.94,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -38.8,
-    -19.8
-   ],
-   "text": "เพราะตั้งนั้นไม่ลาวไปเลยอย่างนี้หรอ? กันกันนะ?",
-   "id": "IMG_7449#0",
-   "jump": "IMG_7449~0"
+   "kind": "BROLL",
+   "start": 3.062,
+   "end": 4.562,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 15.96,
+   "bright": 129.2,
+   "id": "IMG_7448#0"
   },
   {
    "name": "IMG_7449",
@@ -2340,37 +1947,12 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 3.75,
-   "end": 7.357,
-   "dur": 3.607,
+   "start": 0.2,
+   "end": 17.368,
+   "dur": 17.168,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -38.8,
-    -19.8
-   ],
-   "text": "กันกันนะ? มันเข้าๆ เป็นเฉิดลาวนี้",
-   "id": "IMG_7449#1",
-   "jump": "IMG_7449~0"
-  },
-  {
-   "name": "IMG_7449",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7449.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 11.084,
-   "end": 15.694,
-   "dur": 4.61,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -38.8,
-    -19.8
-   ],
-   "text": "พี่ยายข้าวไปแล้วหรอ? ลาวนี้ล้องแล้วเย็ม ยังไงสัตว์เทศลาว? โอ้ ไม่ต้องขันไปถ่ายสองนู้หรือไหม?",
-   "id": "IMG_7449#2",
-   "jump": "IMG_7449~0"
+   "text": "เพราะตั้งนั้นไม่ลาวไปเลยอย่างนี้หรอ? กันกันนะ? มันเข้าๆ เป็นเฉิดลาวนี้ พี่ยายข้าวไปแล้วหรอ? ลาวนี้ล้องแล้วเย็ม ยังไงสัตว์เทศลาว? โอ้ ไม่ต้องขันไปถ่ายสองนู้หรือไหม?",
+   "id": "IMG_7449#0"
   },
   {
    "name": "IMG_7451",
@@ -2384,10 +1966,6 @@
    "end": 6.471,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -46.7,
-    -23.0
-   ],
    "motion": 2.23,
    "bright": 142.5,
    "id": "IMG_7451#0"
@@ -2401,36 +1979,11 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 1.0,
-   "end": 3.987,
-   "dur": 2.987,
+   "end": 9.55,
+   "dur": 8.55,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -35.0,
-    -17.4
-   ],
    "text": "ฮะฮะฮะฮะฮะฮะฮะฮะขอบคุณ",
-   "id": "IMG_7452#0",
-   "jump": "IMG_7452~0"
-  },
-  {
-   "name": "IMG_7452",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7452.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 6.07,
-   "end": 8.547,
-   "dur": 2.477,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -35.0,
-    -17.4
-   ],
-   "text": "ฮะฮะฮะฮะฮะฮะฮะฮะขอบคุณ",
-   "id": "IMG_7452#2",
-   "jump": "IMG_7452~0"
+   "id": "IMG_7452#0"
   },
   {
    "name": "IMG_7453",
@@ -2444,10 +1997,6 @@
    "end": 12.37,
    "dur": 7.75,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -40.5,
-    -18.3
-   ],
    "text": "มันตั้งขวาอังสิ ไปลงไปทางล่าง ร้านข้าว ข้าวร้านตั้งขวาอร่อย",
    "id": "IMG_7453#0"
   },
@@ -2463,10 +2012,6 @@
    "end": 7.538,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -43.9,
-    -26.2
-   ],
    "motion": 1.65,
    "bright": 127.8,
    "id": "IMG_7454#0"
@@ -2480,56 +2025,11 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 0.04,
-   "end": 1.722,
-   "dur": 1.682,
+   "end": 16.217,
+   "dur": 16.177,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -42.8,
-    -25.4
-   ],
-   "text": "ตัวนี้ไม่แพงไงไม่ซ่า",
-   "id": "IMG_7455#0",
-   "jump": "IMG_7455~0"
-  },
-  {
-   "name": "IMG_7455",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7455.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 4.75,
-   "end": 8.07,
-   "dur": 3.32,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -42.8,
-    -25.4
-   ],
-   "text": "ดูราคาได้หนึ่ง อ่ะ มึง ห้านะ",
-   "id": "IMG_7455#1",
-   "jump": "IMG_7455~0"
-  },
-  {
-   "name": "IMG_7455",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7455.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 10.996,
-   "end": 15.615,
-   "dur": 4.619,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -42.8,
-    -25.4
-   ],
-   "text": "อ่ะ มึง ห้านะ จาก ร่อมยาวะ เดี๋ยวจะหาย",
-   "id": "IMG_7455#3",
-   "jump": "IMG_7455~0"
+   "text": "ตัวนี้ไม่แพงไงไม่ซ่า ดูราคาได้หนึ่ง อ่ะ มึง ห้านะ จาก ร่อมยาวะ เดี๋ยวจะหาย",
+   "id": "IMG_7455#0"
   },
   {
    "name": "IMG_7456",
@@ -2543,10 +2043,6 @@
    "end": 3.602,
    "dur": 3.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -46.2,
-    -25.7
-   ],
    "motion": 12.32,
    "bright": 116.7,
    "id": "IMG_7456#0"
@@ -2559,14 +2055,10 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 3.036,
+   "start": 1.988,
    "end": 4.988,
-   "dur": 1.952,
+   "dur": 3.0,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -41.8,
-    -21.7
-   ],
    "text": "เอาล่ะ เอาล่ะ",
    "id": "IMG_7457#0"
   },
@@ -2578,57 +2070,12 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 0.453,
-   "end": 2.359,
-   "dur": 1.906,
+   "start": 0.3,
+   "end": 12.19,
+   "dur": 11.89,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -39.4,
-    -19.8
-   ],
-   "text": "อันก็ไปเอาผมแหละ ไปนี้ก็ไปนูนต่อ",
-   "id": "IMG_7458#0",
-   "jump": "IMG_7458~0"
-  },
-  {
-   "name": "IMG_7458",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7458.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 3.096,
-   "end": 5.758,
-   "dur": 2.662,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -39.4,
-    -19.8
-   ],
-   "text": "อันก็ไปเอาผมแหละ ไปนี้ก็ไปนูนต่อ แต่นี่อีกนึงแล้ว ครับ",
-   "id": "IMG_7458#1",
-   "jump": "IMG_7458~0"
-  },
-  {
-   "name": "IMG_7458",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7458.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 5.979,
-   "end": 10.727,
-   "dur": 4.748,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -39.4,
-    -19.8
-   ],
-   "text": "ครับ มันเคยมนะ มันเคยมมากอย่างนี้นะ แล้ว ที่เอาได้ผมนะ ขอร์ด",
-   "id": "IMG_7458#2",
-   "jump": "IMG_7458~0"
+   "text": "อันก็ไปเอาผมแหละ ไปนี้ก็ไปนูนต่อ แต่นี่อีกนึงแล้ว ครับ มันเคยมนะ มันเคยมมากอย่างนี้นะ แล้ว ที่เอาได้ผมนะ ขอร์ด",
+   "id": "IMG_7458#0"
   },
   {
    "name": "IMG_7460",
@@ -2642,13 +2089,25 @@
    "end": 5.378,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -60.1,
-    -40.5
-   ],
    "motion": 6.57,
    "bright": 127.0,
    "id": "IMG_7460#0"
+  },
+  {
+   "name": "IMG_7468",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7468.MOV",
+   "orient": "V",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 0.636,
+   "end": 4.636,
+   "dur": 4.0,
+   "target_lufs": -26.0,
+   "motion": 0.38,
+   "bright": 131.2,
+   "id": "IMG_7468#0"
   },
   {
    "name": "IMG_7499",
@@ -2662,13 +2121,25 @@
    "end": 9.216,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -54.3,
-    -37.0
-   ],
    "motion": 0.72,
    "bright": 143.1,
    "id": "IMG_7499#0"
+  },
+  {
+   "name": "IMG_7502",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7502.MOV",
+   "orient": "V",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 3.271,
+   "end": 7.271,
+   "dur": 4.0,
+   "target_lufs": -26.0,
+   "motion": 0.37,
+   "bright": 135.6,
+   "id": "IMG_7502#0"
   },
   {
    "name": "IMG_7506",
@@ -2682,13 +2153,24 @@
    "end": 6.254,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -57.5,
-    -40.7
-   ],
    "motion": 1.31,
    "bright": 123.1,
    "id": "IMG_7506#0"
+  },
+  {
+   "name": "IMG_7508",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7508.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "TALK",
+   "start": 1.0,
+   "end": 16.083,
+   "dur": 15.083,
+   "target_lufs": -19.0,
+   "text": "ก็ไม่ใช่ไง ไม่ใช่ไง ไม่ใช่ไง",
+   "id": "IMG_7508#0"
   },
   {
    "name": "IMG_7509",
@@ -2702,10 +2184,6 @@
    "end": 9.977,
    "dur": 8.907,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -28.2,
-    -13.4
-   ],
    "text": "พี่ผมจะลุกขึ้นเกี่ยวอย่างไม่ลุกเลย เอาว่า หมเกี่ยวช่วยพี่ โอ้ย พี่มาได้ หมเกี่ยวให้ ทอดหมูคืออะไร หมูอะไร",
    "id": "IMG_7509#0"
   },
@@ -2721,10 +2199,6 @@
    "end": 7.94,
    "dur": 7.94,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -26.6,
-    -8.6
-   ],
    "text": "ยิ้มเลย อ่ะ จริงๆ ผมว่าถูก ผมคิดผมไม่จะทำกันดูนี่อ่ะ จริงๆ บอกหยุด ผมไม่ทำเงี้ย ผมเห็นไม่ทำไปแล้ว",
    "id": "IMG_7510#0"
   },
@@ -2740,10 +2214,6 @@
    "end": 21.655,
    "dur": 21.655,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -25.6,
-    -3.8
-   ],
    "text": "เต็มแหละก็แค่นายไปอีกด้วยครับ โอ้โห ด้วยก็พอคุณใจนะ ผมนำเองครับ เปิดโปรด ทอดหมูได้รอบเท่าแหละ 10 ปี หนักกูกุย ขอบ้างมือพอได้ไปทอด",
    "id": "IMG_7511#0"
   },
@@ -2759,10 +2229,6 @@
    "end": 20.755,
    "dur": 20.755,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -25.4,
-    -6.8
-   ],
    "text": "เดินป่าโอเค จากไปหลายคน ก็จริงๆก็ หลายทิปมาแล้ว หลายทิปแล้วไม่เที่ยวได้กันหลายปีนะ จะปูวิล่าไม่นุก ที่บันครับ ส่วนใหญ่นะ แต่อย่างไรให้หมดไม่ปิ โอเคครับ ที่บายแบบ 4 วัน 3 คืน มารับไทย ตัก ตัก คนจะเอาใหม่ลง คนล็อค คนล็อค คนล็อค",
    "id": "IMG_7512#0"
   },
@@ -2778,10 +2244,6 @@
    "end": 11.33,
    "dur": 10.45,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -31.6,
-    -9.5
-   ],
    "text": "ก็ไปว่ากัน ก็ต้องเซ็บแต่อีกวิดกับ",
    "id": "IMG_7514#0"
   },
@@ -2797,10 +2259,6 @@
    "end": 5.861,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -45.2,
-    -29.7
-   ],
    "motion": 1.6,
    "bright": 124.8,
    "id": "IMG_7515#0"
@@ -2817,10 +2275,6 @@
    "end": 5.402,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -43.7,
-    -29.7
-   ],
    "motion": 0.58,
    "bright": 140.4,
    "id": "IMG_7517#0"
@@ -2837,10 +2291,6 @@
    "end": 7.255,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -43.7,
-    -20.1
-   ],
    "motion": 0.84,
    "bright": 135.7,
    "id": "IMG_7519#0"
@@ -2857,10 +2307,6 @@
    "end": 10.18,
    "dur": 3.86,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -30.1,
-    -1.6
-   ],
    "text": "อ้าว อ้าว อ้าว อ้าว",
    "id": "IMG_7529#0"
   },
@@ -2876,13 +2322,25 @@
    "end": 7.413,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -36.0,
-    -25.4
-   ],
    "motion": 1.79,
    "bright": 98.3,
    "id": "IMG_7530#0"
+  },
+  {
+   "name": "IMG_7532",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7532.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 1.57,
+   "end": 5.57,
+   "dur": 4.0,
+   "target_lufs": -26.0,
+   "motion": 2.32,
+   "bright": 109.0,
+   "id": "IMG_7532#0"
   },
   {
    "name": "IMG_7535",
@@ -2896,13 +2354,25 @@
    "end": 6.596,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -38.1,
-    -14.7
-   ],
    "motion": 0.92,
    "bright": 102.0,
    "id": "IMG_7535#0"
+  },
+  {
+   "name": "IMG_7536",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7536.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 1.687,
+   "end": 5.687,
+   "dur": 4.0,
+   "target_lufs": -26.0,
+   "motion": 2.07,
+   "bright": 96.6,
+   "id": "IMG_7536#0"
   },
   {
    "name": "IMG_7541",
@@ -2916,10 +2386,6 @@
    "end": 9.575,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -42.8,
-    -32.2
-   ],
    "motion": 0.96,
    "bright": 102.1,
    "id": "IMG_7541#0"
@@ -2933,36 +2399,43 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 1.32,
-   "end": 4.268,
-   "dur": 2.948,
+   "end": 9.98,
+   "dur": 8.66,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -40.0,
-    -24.2
-   ],
-   "text": "คือมาถึงนั้น 4 โมงเย็น มาถึงไปไหนกัน",
-   "id": "IMG_7545#0",
-   "jump": "IMG_7545~0"
+   "text": "คือมาถึงนั้น 4 โมงเย็น มาถึงไปไหนกัน คือมาถึงนั้น 4 โมงเย็น",
+   "id": "IMG_7545#0"
   },
   {
-   "name": "IMG_7545",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7545.MOV",
-   "orient": "H",
-   "rot_override": "transpose=2",
+   "name": "IMG_7548",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7548.MOV",
+   "orient": "V",
+   "rot_override": "",
    "full_range": false,
    "achannels": 2,
-   "kind": "TALK",
-   "start": 4.48,
-   "end": 6.91,
-   "dur": 2.43,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -40.0,
-    -24.2
-   ],
-   "text": "มาถึงไปไหนกัน คือมาถึงนั้น 4 โมงเย็น",
-   "id": "IMG_7545#1",
-   "jump": "IMG_7545~0"
+   "kind": "BROLL",
+   "start": 3.521,
+   "end": 7.521,
+   "dur": 4.0,
+   "target_lufs": -26.0,
+   "motion": 0.7,
+   "bright": 92.5,
+   "id": "IMG_7548#0"
+  },
+  {
+   "name": "IMG_7549",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7549.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 2.506,
+   "end": 6.506,
+   "dur": 4.0,
+   "target_lufs": -26.0,
+   "motion": 5.78,
+   "bright": 94.0,
+   "id": "IMG_7549#0"
   },
   {
    "name": "IMG_7551",
@@ -2976,10 +2449,6 @@
    "end": 7.139,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -38.8,
-    -4.7
-   ],
    "motion": 1.78,
    "bright": 96.9,
    "id": "IMG_7551#0"
@@ -2996,10 +2465,6 @@
    "end": 6.532,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -44.3,
-    -24.1
-   ],
    "motion": 3.4,
    "bright": 57.1,
    "id": "IMG_7557#0"
@@ -3016,10 +2481,6 @@
    "end": 5.883,
    "dur": 4.001,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -41.9,
-    -18.9
-   ],
    "motion": 2.1,
    "bright": 48.7,
    "id": "IMG_7559#0"
@@ -3036,10 +2497,6 @@
    "end": 15.965,
    "dur": 15.965,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -28.2,
-    -9.1
-   ],
    "text": "น้องไปดูกว่าทีแล้วกันไหม ดูกว่าที น้องไปดูกว่าที น้องไปดูกว่าที",
    "id": "IMG_7560#0"
   },
@@ -3055,10 +2512,6 @@
    "end": 16.253,
    "dur": 15.603,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -17.3,
-    -0.6
-   ],
    "text": "ใช้ประหลับนี้มานานแล้ว ก็จะเหตุ เหตุมากัน เชื่อไหม เอาพิดตรงๆเลยนะ อันนี้ซื้อมาก่อน มางานนี้ อันอื่น อันอื่นก็มี พี่มีประมาณ 7 เกม",
    "id": "IMG_7563#0"
   },
@@ -3071,36 +2524,11 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 0.0,
-   "end": 3.765,
-   "dur": 3.765,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -19.7,
-    -0.6
-   ],
-   "text": "อ่ะ ผมถามก่อน ผมถามก่อนเลยนะงั้น ขอนเก่นอะไรขึ้นชื่อ ผีตะขน ไปเว้น",
-   "id": "IMG_7566#0",
-   "jump": "IMG_7566~0"
-  },
-  {
-   "name": "IMG_7566",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7566.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 4.981,
    "end": 22.227,
-   "dur": 17.246,
+   "dur": 22.227,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -19.7,
-    -0.6
-   ],
    "text": "อ่ะ ผมถามก่อน ผมถามก่อนเลยนะงั้น ขอนเก่นอะไรขึ้นชื่อ ผีตะขน ไปเว้น",
-   "id": "IMG_7566#1",
-   "jump": "IMG_7566~0"
+   "id": "IMG_7566#0"
   },
   {
    "name": "IMG_7569",
@@ -3114,10 +2542,6 @@
    "end": 7.242,
    "dur": 7.242,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -19.4,
-    -3.9
-   ],
    "text": "โอ้วววว ทุกพีนแหละ ไม่โฟกัดเลยยังไงคนที่พาไปด้วยอ่ะ มันรู้อะไรละเอียดหนังเลย ตรงนั้นตรงนี้เป็นยังไงละเอียดมาก",
    "id": "IMG_7569#0"
   },
@@ -3133,10 +2557,6 @@
    "end": 11.14,
    "dur": 11.14,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -30.6,
-    -12.1
-   ],
    "text": "พี่ พี่ พี่ พี่ พี่ พี่ เต็นไหม พี่ต้องรู้จักมัน มันคุยให้คนดีมะ มันคุยให้คนดีมะ มันคุยอะไร เดินหายไม่ได้มาไปโค่ เอ๊ย พี่อย่าไปคิดดังนั้น พี่ต้องส่วนใหญ่เป็นคุ้นจริง",
    "id": "IMG_7571#0"
   },
@@ -3152,10 +2572,6 @@
    "end": 10.775,
    "dur": 10.775,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -33.8,
-    -13.4
-   ],
    "text": "อันนี้ที่ต้องไหน? ตรงที่หาวัน ลุมกันไหน สิ่งสอง อันนี้ก็ได้ไหม? สิ่งสอง บ้าวน้ำนั้น",
    "id": "IMG_7572#0"
   },
@@ -3171,10 +2587,6 @@
    "end": 38.605,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -24.8,
-    -0.6
-   ],
    "motion": 4.78,
    "bright": 25.4,
    "id": "IMG_7575#0"
@@ -3191,13 +2603,41 @@
    "end": 12.334,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -41.4,
-    -19.5
-   ],
    "motion": 0.67,
    "bright": 19.2,
    "id": "IMG_7576#0"
+  },
+  {
+   "name": "IMG_7584",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7584.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 1.886,
+   "end": 5.886,
+   "dur": 4.0,
+   "target_lufs": -26.0,
+   "motion": 4.91,
+   "bright": 121.0,
+   "id": "IMG_7584#0"
+  },
+  {
+   "name": "IMG_7585",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7585.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 0.668,
+   "end": 3.668,
+   "dur": 3.0,
+   "target_lufs": -26.0,
+   "motion": 13.67,
+   "bright": 115.9,
+   "id": "IMG_7585#0"
   },
   {
    "name": "IMG_7586",
@@ -3211,10 +2651,6 @@
    "end": 5.445,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -41.9,
-    -20.1
-   ],
    "motion": 4.44,
    "bright": 130.0,
    "id": "IMG_7586#0"
@@ -3228,13 +2664,9 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 1.74,
-   "end": 7.675,
-   "dur": 5.935,
+   "end": 8.51,
+   "dur": 6.77,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -39.3,
-    -22.0
-   ],
    "text": "แต่ของต้องเปล่า ดูก่อนว่าต้องเปล่าเปล่าไหม รู้ตัวมันดี",
    "id": "IMG_7589#0"
   },
@@ -3246,37 +2678,12 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 3.402,
-   "end": 8.384,
-   "dur": 4.982,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -32.4,
-    -0.9
-   ],
-   "text": "เชื่อเธอเธอบาว รวมอีกดัก",
-   "id": "IMG_7594#1",
-   "jump": "IMG_7594~0"
-  },
-  {
-   "name": "IMG_7594",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7594.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 8.393,
+   "start": 2.21,
    "end": 11.445,
-   "dur": 3.052,
+   "dur": 9.235,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -32.4,
-    -0.9
-   ],
    "text": "เชื่อเธอเธอบาว รวมอีกดัก",
-   "id": "IMG_7594#2",
-   "jump": "IMG_7594~0"
+   "id": "IMG_7594#0"
   },
   {
    "name": "IMG_7595",
@@ -3287,36 +2694,11 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 0.0,
-   "end": 8.449,
-   "dur": 8.449,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -24.9,
-    -5.9
-   ],
-   "text": "ปันเดาเสียครับ จริงมันก็ได้อาบน้ำ ปันเดาเสีย ก็รู้สึกสบายตัวนะ",
-   "id": "IMG_7595#0",
-   "jump": "IMG_7595~0"
-  },
-  {
-   "name": "IMG_7595",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7595.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 8.914,
    "end": 10.762,
-   "dur": 1.848,
+   "dur": 10.762,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -24.9,
-    -5.9
-   ],
-   "text": "ก็รู้สึกสบายตัวนะ แต่ก็เย็นก็พอ พอ พอ",
-   "id": "IMG_7595#1",
-   "jump": "IMG_7595~0"
+   "text": "ปันเดาเสียครับ จริงมันก็ได้อาบน้ำ ปันเดาเสีย ก็รู้สึกสบายตัวนะ แต่ก็เย็นก็พอ พอ พอ",
+   "id": "IMG_7595#0"
   },
   {
    "name": "IMG_7598",
@@ -3330,10 +2712,6 @@
    "end": 9.427,
    "dur": 8.517,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -28.5,
-    -10.1
-   ],
    "text": "กลายหายผลด้วยอยู่นี่ กิดดีไม่ได้ ไม่อ่ะ ผมก็มาหายคนแล้ว อันนี้ไปเรื่อย ไม่ต้องเปิดออกไม้",
    "id": "IMG_7598#0"
   },
@@ -3349,10 +2727,6 @@
    "end": 5.611,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -44.1,
-    -30.4
-   ],
    "motion": 4.9,
    "bright": 146.8,
    "id": "IMG_7599#0"
@@ -3369,13 +2743,25 @@
    "end": 7.28,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -44.4,
-    -18.9
-   ],
    "motion": 3.99,
    "bright": 124.2,
    "id": "IMG_7601#0"
+  },
+  {
+   "name": "IMG_7605",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7605.MOV",
+   "orient": "V",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 5.049,
+   "end": 9.049,
+   "dur": 4.0,
+   "target_lufs": -26.0,
+   "motion": 6.49,
+   "bright": 134.4,
+   "id": "IMG_7605#0"
   },
   {
    "name": "IMG_7606",
@@ -3389,13 +2775,87 @@
    "end": 2.652,
    "dur": 2.652,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -36.8,
-    -12.3
-   ],
    "motion": 5.58,
    "bright": 139.4,
    "id": "IMG_7606#0"
+  },
+  {
+   "name": "IMG_7607",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7607.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 2.846,
+   "end": 6.846,
+   "dur": 4.0,
+   "target_lufs": -26.0,
+   "motion": 5.67,
+   "bright": 137.9,
+   "id": "IMG_7607#0"
+  },
+  {
+   "name": "IMG_7610",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7610.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "TALK",
+   "start": 0.0,
+   "end": 24.175,
+   "dur": 24.175,
+   "target_lufs": -19.0,
+   "text": "ก็ลงมาแล้ว ไปลงมาแล้ว ไปลงมาแล้ว ไปได้แล้วพ่อ บ้างให้แล้ว น้องกันเลยพี่ยัง ขอบุธกาพัก มันมีเลย ดีละ",
+   "id": "IMG_7610#0"
+  },
+  {
+   "name": "IMG_7611",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7611.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "TALK",
+   "start": 1.1,
+   "end": 7.055,
+   "dur": 5.955,
+   "target_lufs": -19.0,
+   "text": "เอาไปกันครับ",
+   "id": "IMG_7611#0"
+  },
+  {
+   "name": "IMG_7612",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7612.MOV",
+   "orient": "V",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 2.336,
+   "end": 3.836,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 17.69,
+   "bright": 147.9,
+   "id": "IMG_7612#0"
+  },
+  {
+   "name": "IMG_7613",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7613.MOV",
+   "orient": "V",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 5.974,
+   "end": 8.974,
+   "dur": 3.0,
+   "target_lufs": -26.0,
+   "motion": 9.31,
+   "bright": 150.1,
+   "id": "IMG_7613#0"
   },
   {
    "name": "IMG_7614",
@@ -3405,17 +2865,28 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 3.567,
-   "end": 5.195,
-   "dur": 1.628,
+   "start": 0.17,
+   "end": 9.18,
+   "dur": 9.01,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -43.7,
-    -24.7
-   ],
    "text": "ก็จะกลับกันกันก็จะกลับมาก",
-   "id": "IMG_7614#2",
-   "jump": "IMG_7614~0"
+   "id": "IMG_7614#0"
+  },
+  {
+   "name": "IMG_7615",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7615.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 11.346,
+   "end": 12.846,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 18.63,
+   "bright": 114.9,
+   "id": "IMG_7615#0"
   },
   {
    "name": "IMG_7616",
@@ -3429,10 +2900,6 @@
    "end": 4.41,
    "dur": 3.6,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -29.3,
-    -6.5
-   ],
    "text": "ไปด้วยกันนะแหละตั้ง 3 วันเลย",
    "id": "IMG_7616#0"
   },
@@ -3448,10 +2915,6 @@
    "end": 8.941,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -31.2,
-    -9.7
-   ],
    "motion": 7.32,
    "bright": 109.4,
    "id": "IMG_7618#0"
@@ -3464,36 +2927,28 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 0.842,
-   "end": 2.9,
-   "dur": 2.058,
+   "start": 0.72,
+   "end": 3.72,
+   "dur": 3.0,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -40.1,
-    -17.2
-   ],
    "text": "รู้ว่าจะเป็นภัยแล้ว",
    "id": "IMG_7622#0"
   },
   {
-   "name": "IMG_7632",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7632.MOV",
+   "name": "IMG_7623",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7623.MOV",
    "orient": "H",
    "rot_override": "",
    "full_range": false,
    "achannels": 2,
-   "kind": "TALK",
-   "start": 11.36,
-   "end": 15.793,
-   "dur": 4.433,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -40.7,
-    -9.4
-   ],
-   "text": "กลับลมตัวลูกลูก",
-   "id": "IMG_7632#1",
-   "jump": "IMG_7632~0"
+   "kind": "BROLL",
+   "start": 2.933,
+   "end": 4.434,
+   "dur": 1.501,
+   "target_lufs": -26.0,
+   "motion": 42.5,
+   "bright": 137.7,
+   "id": "IMG_7623#0"
   },
   {
    "name": "IMG_7632",
@@ -3503,17 +2958,44 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 16.025,
-   "end": 18.336,
-   "dur": 2.311,
+   "start": 8.88,
+   "end": 19.837,
+   "dur": 10.957,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -40.7,
-    -9.4
-   ],
    "text": "กลับลมตัวลูกลูก พี่จะถ่ายแบบเดียว",
-   "id": "IMG_7632#2",
-   "jump": "IMG_7632~0"
+   "id": "IMG_7632#0"
+  },
+  {
+   "name": "IMG_7634",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7634.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 1.449,
+   "end": 2.949,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 27.42,
+   "bright": 145.4,
+   "id": "IMG_7634#0"
+  },
+  {
+   "name": "IMG_7638",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7638.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 4.731,
+   "end": 7.731,
+   "dur": 3.0,
+   "target_lufs": -26.0,
+   "motion": 14.26,
+   "bright": 133.9,
+   "id": "IMG_7638#0"
   },
   {
    "name": "IMG_7640",
@@ -3527,10 +3009,6 @@
    "end": 10.826,
    "dur": 3.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -45.3,
-    -20.8
-   ],
    "motion": 11.82,
    "bright": 147.6,
    "id": "IMG_7640#0"
@@ -3547,10 +3025,6 @@
    "end": 7.947,
    "dur": 3.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -42.4,
-    -20.7
-   ],
    "motion": 11.33,
    "bright": 144.8,
    "id": "IMG_7641#0"
@@ -3567,10 +3041,6 @@
    "end": 5.104,
    "dur": 3.001,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -41.0,
-    -10.2
-   ],
    "motion": 11.82,
    "bright": 140.0,
    "id": "IMG_7642#0"
@@ -3584,36 +3054,11 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 3.92,
-   "end": 6.918,
-   "dur": 2.998,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -25.2,
-    -4.0
-   ],
-   "text": "ไอ้ น้องทำอะไร น้องถ่ายดีกว่า",
-   "id": "IMG_7643#0",
-   "jump": "IMG_7643~0"
-  },
-  {
-   "name": "IMG_7643",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7643.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 7.348,
    "end": 10.883,
-   "dur": 3.535,
+   "dur": 6.963,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -25.2,
-    -4.0
-   ],
-   "text": "โอ้โฮ คุ้กว่ามาหรายลูก น้าชิค่องเนี่ย",
-   "id": "IMG_7643#1",
-   "jump": "IMG_7643~0"
+   "text": "ไอ้ น้องทำอะไร น้องถ่ายดีกว่า โอ้โฮ คุ้กว่ามาหรายลูก น้าชิค่องเนี่ย",
+   "id": "IMG_7643#0"
   },
   {
    "name": "IMG_7644",
@@ -3623,17 +3068,12 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 1.214,
-   "end": 13.812,
-   "dur": 12.598,
+   "start": 0.0,
+   "end": 14.632,
+   "dur": 14.632,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -26.0,
-    -7.2
-   ],
    "text": "เดี๋ยวแข่งกับประจานเบียร์พี่ พอดแคตต์ เดี๋ยวมีพอดแคตต์ไอ้นีตายความเศร์ พอดแคตต์กับประจานเบียร์ นีตายความเศร์ กับผู้คนพูดให้สมหวัง",
-   "id": "IMG_7644#1",
-   "jump": "IMG_7644~0"
+   "id": "IMG_7644#0"
   },
   {
    "name": "IMG_7648",
@@ -3647,12 +3087,24 @@
    "end": 5.522,
    "dur": 5.522,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -29.9,
-    -2.2
-   ],
    "text": "เก็บให้เข้าได้ ของใครเนี่ย ของผมเอามาไป อ๋อ ขนั้นตัวน",
    "id": "IMG_7648#0"
+  },
+  {
+   "name": "IMG_7649",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7649.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 3.32,
+   "end": 4.82,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 17.56,
+   "bright": 122.9,
+   "id": "IMG_7649#0"
   },
   {
    "name": "IMG_7650",
@@ -3666,10 +3118,6 @@
    "end": 7.656,
    "dur": 3.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -38.1,
-    -11.2
-   ],
    "motion": 9.47,
    "bright": 131.3,
    "id": "IMG_7650#0"
@@ -3686,10 +3134,6 @@
    "end": 7.256,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -50.9,
-    -20.0
-   ],
    "motion": 5.79,
    "bright": 119.8,
    "id": "IMG_7654#0"
@@ -3703,76 +3147,11 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 0.0,
-   "end": 3.354,
-   "dur": 3.354,
+   "end": 13.413,
+   "dur": 13.413,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -34.6,
-    -13.8
-   ],
-   "text": "เขาวิ่งลงได้ เขาวิ่งเทียวลงมา แต่ที่แบบ 3 ทั่วโมงอ่ะ ทั่วโมงอ่ะ",
-   "id": "IMG_7656#0",
-   "jump": "IMG_7656~0"
-  },
-  {
-   "name": "IMG_7656",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7656.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 3.527,
-   "end": 5.39,
-   "dur": 1.863,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -34.6,
-    -13.8
-   ],
-   "text": "แต่ที่แบบ 3 ทั่วโมงอ่ะ ทั่วโมงอ่ะ ใช่ มันวิ่งเทียวลงมา พวกนั้นอ่ะ",
-   "id": "IMG_7656#1",
-   "jump": "IMG_7656~0"
-  },
-  {
-   "name": "IMG_7656",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7656.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 5.54,
-   "end": 8.153,
-   "dur": 2.613,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -34.6,
-    -13.8
-   ],
-   "text": "มันวิ่งเหมือนที่กูวิ่งอ่ะ แล้วมันวิ่งวิ่งกลัว ผ่าดเลยเหรอมะ",
-   "id": "IMG_7656#2",
-   "jump": "IMG_7656~0"
-  },
-  {
-   "name": "IMG_7656",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7656.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 8.265,
-   "end": 12.87,
-   "dur": 4.605,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -34.6,
-    -13.8
-   ],
-   "text": "แล้วมันวิ่งวิ่งกลัว ผ่าดเลยเหรอมะ ไม่ ถ้ามึงกล้าวเร็วพอ มันจะไม่ผ่าด พอทั้นทีที่มันจะ ยกกล้าวแล้วกล้าวตอบ",
-   "id": "IMG_7656#3",
-   "jump": "IMG_7656~0"
+   "text": "เขาวิ่งลงได้ เขาวิ่งเทียวลงมา แต่ที่แบบ 3 ทั่วโมงอ่ะ ทั่วโมงอ่ะ ใช่ มันวิ่งเทียวลงมา พวกนั้นอ่ะ มันวิ่งเหมือนที่กูวิ่งอ่ะ แล้วมันวิ่งวิ่งกลัว ผ่าดเลยเหรอมะ ไม่ ถ้ามึงกล้าวเร็วพอ มันจะไม่ผ่าด พอทั้นทีที่มันจะ ยกกล้าวแล้วกล้าวตอบ",
+   "id": "IMG_7656#0"
   },
   {
    "name": "IMG_7657",
@@ -3786,13 +3165,24 @@
    "end": 7.514,
    "dur": 3.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -47.1,
-    -15.8
-   ],
    "motion": 11.48,
    "bright": 115.6,
    "id": "IMG_7657#0"
+  },
+  {
+   "name": "IMG_7658",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7658.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "TALK",
+   "start": 5.07,
+   "end": 13.63,
+   "dur": 8.56,
+   "target_lufs": -19.0,
+   "text": "ตั้งใจถ่ายมากเลย",
+   "id": "IMG_7658#0"
   },
   {
    "name": "IMG_7660",
@@ -3806,13 +3196,40 @@
    "end": 11.359,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -52.8,
-    -25.3
-   ],
    "motion": 4.75,
    "bright": 121.1,
    "id": "IMG_7660#0"
+  },
+  {
+   "name": "IMG_7661",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7661.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 3.404,
+   "end": 4.904,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 21.28,
+   "bright": 114.5,
+   "id": "IMG_7661#0"
+  },
+  {
+   "name": "IMG_7662",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7662.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "TALK",
+   "start": 0.97,
+   "end": 3.97,
+   "dur": 3.0,
+   "target_lufs": -19.0,
+   "text": "นี่นี่",
+   "id": "IMG_7662#0"
   },
   {
    "name": "IMG_7667",
@@ -3826,12 +3243,24 @@
    "end": 8.542,
    "dur": 8.542,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -34.3,
-    -6.8
-   ],
    "text": "ก็นับที่ป้าย สินสินะ มันจะพามาสุด มันจะพามาสุด มันจะพามาสุด มันจะพามาสุด มันจะพามาสุด มันจะพามาสุด มันจะพามาสุด มันจะพามาสุด",
    "id": "IMG_7667#0"
+  },
+  {
+   "name": "IMG_7671",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7671.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 2.002,
+   "end": 3.502,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 19.54,
+   "bright": 113.3,
+   "id": "IMG_7671#0"
   },
   {
    "name": "IMG_7672",
@@ -3845,10 +3274,6 @@
    "end": 3.62,
    "dur": 3.58,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -36.6,
-    -5.5
-   ],
    "text": "เกิดดีกว่า",
    "id": "IMG_7672#0"
   },
@@ -3864,10 +3289,6 @@
    "end": 21.788,
    "dur": 21.328,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -35.2,
-    -5.8
-   ],
    "text": "เนื่องเดินอ่ะ ถ้าก็ถามว่า มันอยากไปฝ่านายแล้ว แต่น้องมันทวนวิ่ง เขาได้วิ่งอ่ะ คุณบอกผ่านใจดีขึ้นหน่อย มีขนาดดีขึ้นนั้น แต่ว่า แต่ว่ามันกูก็ไม่ได้วิ่งเลยอ่ะ มีช่วงมึงที่น้องเก็บ ก็น้องเชื่ออีกก็บอกว่า ว่าเดินดีกว่า",
    "id": "IMG_7673#0"
   },
@@ -3883,10 +3304,6 @@
    "end": 6.705,
    "dur": 6.705,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -33.8,
-    -16.8
-   ],
    "text": "ก็เรียนบอดตรงนี้ ที่มันจะชอบค้ายกัน แล้วมันจะรีบเดินป่า แล้วเรียนร้าขอใหญ่",
    "id": "IMG_7675#0"
   },
@@ -3898,17 +3315,59 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 4.788,
-   "end": 6.575,
-   "dur": 1.787,
+   "start": 2.35,
+   "end": 7.14,
+   "dur": 4.79,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -32.3,
-    -16.3
-   ],
    "text": "เบต ช่วยบอกกูที่ว่ามันลาบแล้ว",
-   "id": "IMG_7676#1",
-   "jump": "IMG_7676~0"
+   "id": "IMG_7676#0"
+  },
+  {
+   "name": "IMG_7678",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7678.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "TALK",
+   "start": 0.27,
+   "end": 3.84,
+   "dur": 3.57,
+   "target_lufs": -19.0,
+   "text": "ไม่มีว่า ต้องกัน",
+   "id": "IMG_7678#0"
+  },
+  {
+   "name": "IMG_7680",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7680.MOV",
+   "orient": "V",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 7.45,
+   "end": 8.95,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 30.03,
+   "bright": 134.6,
+   "id": "IMG_7680#0"
+  },
+  {
+   "name": "IMG_7681",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7681.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 3.846,
+   "end": 5.346,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 22.95,
+   "bright": 111.0,
+   "id": "IMG_7681#0"
   },
   {
    "name": "IMG_7682",
@@ -3918,17 +3377,12 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 1.727,
-   "end": 5.154,
-   "dur": 3.427,
+   "start": 0.49,
+   "end": 6.05,
+   "dur": 5.56,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -41.4,
-    -16.8
-   ],
    "text": "มันค่ะ มันค่ะ มันค่ะ",
-   "id": "IMG_7682#1",
-   "jump": "IMG_7682~0"
+   "id": "IMG_7682#0"
   },
   {
    "name": "IMG_7684",
@@ -3939,36 +3393,11 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 0.0,
-   "end": 14.136,
-   "dur": 14.136,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -33.9,
-    -7.7
-   ],
-   "text": "ก็เรียกไปเจอผีที่ใหญ่กว่า มันต้องรอมรับให้ได้ ถ้า มันรับให้ได้ถึงไปที่อีกกว่า ถ้ามันมาเป็นระบบ ถ้ามันมาเป็นระบบกก็ ย้ายตัวเองดีกว่า ถ้ามันมาเป็นทั่วบุกคน อาจจะพอคุยได้",
-   "id": "IMG_7684#0",
-   "jump": "IMG_7684~0"
-  },
-  {
-   "name": "IMG_7684",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7684.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 14.351,
    "end": 16.15,
-   "dur": 1.799,
+   "dur": 16.15,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -33.9,
-    -7.7
-   ],
-   "text": "ถ้ามันมาเป็นทั่วบุกคน อาจจะพอคุยได้",
-   "id": "IMG_7684#1",
-   "jump": "IMG_7684~0"
+   "text": "ก็เรียกไปเจอผีที่ใหญ่กว่า มันต้องรอมรับให้ได้ ถ้า มันรับให้ได้ถึงไปที่อีกกว่า ถ้ามันมาเป็นระบบ ถ้ามันมาเป็นระบบกก็ ย้ายตัวเองดีกว่า ถ้ามันมาเป็นทั่วบุกคน อาจจะพอคุยได้",
+   "id": "IMG_7684#0"
   },
   {
    "name": "IMG_7687",
@@ -3982,13 +3411,24 @@
    "end": 6.579,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -51.8,
-    -38.3
-   ],
    "motion": 4.16,
    "bright": 109.7,
    "id": "IMG_7687#0"
+  },
+  {
+   "name": "IMG_7688",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7688.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "TALK",
+   "start": 0.14,
+   "end": 4.45,
+   "dur": 4.31,
+   "target_lufs": -19.0,
+   "text": "ขอบคุณ ขอบคุณ",
+   "id": "IMG_7688#0"
   },
   {
    "name": "IMG_7689",
@@ -3999,15 +3439,75 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 3.72,
-   "end": 6.08,
-   "dur": 2.36,
+   "end": 6.72,
+   "dur": 3.0,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -36.6,
-    -7.9
-   ],
    "text": "มองแน่งก็ได้",
    "id": "IMG_7689#0"
+  },
+  {
+   "name": "IMG_7690",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7690.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 3.296,
+   "end": 4.796,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 22.41,
+   "bright": 108.8,
+   "id": "IMG_7690#0"
+  },
+  {
+   "name": "IMG_7691",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7691.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 3.236,
+   "end": 4.736,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 20.0,
+   "bright": 110.5,
+   "id": "IMG_7691#0"
+  },
+  {
+   "name": "IMG_7693",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7693.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 3.729,
+   "end": 5.229,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 17.14,
+   "bright": 113.8,
+   "id": "IMG_7693#0"
+  },
+  {
+   "name": "IMG_7694",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7694.MOV",
+   "orient": "H",
+   "rot_override": "transpose=2",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 3.504,
+   "end": 5.004,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 28.49,
+   "bright": 110.7,
+   "id": "IMG_7694#0"
   },
   {
    "name": "IMG_7695",
@@ -4018,56 +3518,11 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 0.08,
-   "end": 2.304,
-   "dur": 2.224,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -37.6,
-    -15.0
-   ],
-   "text": "ติดฝนด้วย ดนฝนตกว่า วันมา",
-   "id": "IMG_7695#0",
-   "jump": "IMG_7695~0"
-  },
-  {
-   "name": "IMG_7695",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7695.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 2.716,
-   "end": 5.143,
-   "dur": 2.427,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -37.6,
-    -15.0
-   ],
-   "text": "เครื่องประมาณ 80 ตก ได้เห็นมันวิรวนมีอยู่",
-   "id": "IMG_7695#1",
-   "jump": "IMG_7695~0"
-  },
-  {
-   "name": "IMG_7695",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7695.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 7.246,
    "end": 12.613,
-   "dur": 5.367,
+   "dur": 12.533,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -37.6,
-    -15.0
-   ],
-   "text": "นี่ความพี่เราเดินขึ้นมีฝนตก จะบางทางน้อย ติดฝนด้วยนะ ติดฝนด้วย",
-   "id": "IMG_7695#3",
-   "jump": "IMG_7695~0"
+   "text": "ติดฝนด้วย ดนฝนตกว่า วันมา เครื่องประมาณ 80 ตก ได้เห็นมันวิรวนมีอยู่ นี่ความพี่เราเดินขึ้นมีฝนตก จะบางทางน้อย ติดฝนด้วยนะ ติดฝนด้วย",
+   "id": "IMG_7695#0"
   },
   {
    "name": "IMG_7696",
@@ -4081,10 +3536,6 @@
    "end": 5.103,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -52.3,
-    -32.9
-   ],
    "motion": 7.03,
    "bright": 120.6,
    "id": "IMG_7696#0"
@@ -4101,12 +3552,72 @@
    "end": 14.3,
    "dur": 7.89,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -38.7,
-    -8.2
-   ],
    "text": "ก็กลับบ่ายฮามหรือบจัง ก็บ่ายฮามกับเบื้อ ใช่ไง บ่ายฮามครับ ก็ตอนนี้ที่อ่ะ",
    "id": "IMG_7698#0"
+  },
+  {
+   "name": "IMG_7699",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7699.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 3.696,
+   "end": 5.196,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 19.74,
+   "bright": 112.9,
+   "id": "IMG_7699#0"
+  },
+  {
+   "name": "IMG_7700",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7700.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 1.844,
+   "end": 3.344,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 19.39,
+   "bright": 111.3,
+   "id": "IMG_7700#0"
+  },
+  {
+   "name": "IMG_7702",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7702.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 6.256,
+   "end": 7.756,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 21.9,
+   "bright": 106.4,
+   "id": "IMG_7702#0"
+  },
+  {
+   "name": "IMG_7703",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7703.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 5.556,
+   "end": 7.056,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 18.27,
+   "bright": 113.4,
+   "id": "IMG_7703#0"
   },
   {
    "name": "IMG_7705",
@@ -4120,10 +3631,6 @@
    "end": 6.364,
    "dur": 3.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -45.7,
-    -17.3
-   ],
    "motion": 14.67,
    "bright": 112.2,
    "id": "IMG_7705#0"
@@ -4137,36 +3644,11 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 0.08,
-   "end": 1.839,
-   "dur": 1.759,
+   "end": 5.922,
+   "dur": 5.842,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -36.2,
-    -17.5
-   ],
    "text": "กูตายวิดีโอ้",
-   "id": "IMG_7706#0",
-   "jump": "IMG_7706~0"
-  },
-  {
-   "name": "IMG_7706",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7706.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 3.813,
-   "end": 5.502,
-   "dur": 1.689,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -36.2,
-    -17.5
-   ],
-   "text": "กูตายวิดีโอ้",
-   "id": "IMG_7706#1",
-   "jump": "IMG_7706~0"
+   "id": "IMG_7706#0"
   },
   {
    "name": "IMG_7713",
@@ -4176,17 +3658,89 @@
    "full_range": false,
    "achannels": 2,
    "kind": "TALK",
-   "start": 10.027,
-   "end": 12.391,
-   "dur": 2.364,
+   "start": 8.65,
+   "end": 14.69,
+   "dur": 6.04,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -42.1,
-    -17.6
-   ],
    "text": "ก็คุณมาก หลาย นี่นี่ส่วนไหม",
-   "id": "IMG_7713#1",
-   "jump": "IMG_7713~0"
+   "id": "IMG_7713#0"
+  },
+  {
+   "name": "IMG_7714",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7714.MOV",
+   "orient": "V",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "TALK",
+   "start": 12.72,
+   "end": 15.72,
+   "dur": 3.0,
+   "target_lufs": -19.0,
+   "text": "เกมอร์จ้า เกมอร์จ้า",
+   "id": "IMG_7714#0"
+  },
+  {
+   "name": "IMG_7715",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7715.MOV",
+   "orient": "V",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "TALK",
+   "start": 4.24,
+   "end": 14.13,
+   "dur": 9.89,
+   "target_lufs": -19.0,
+   "text": "อย่าเห็นภาพ",
+   "id": "IMG_7715#0"
+  },
+  {
+   "name": "IMG_7716",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7716.MOV",
+   "orient": "H",
+   "rot_override": "transpose=2",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "TALK",
+   "start": 6.64,
+   "end": 9.66,
+   "dur": 3.02,
+   "target_lufs": -19.0,
+   "text": "ไม่มีความสุขทุกคนอื่นไหม",
+   "id": "IMG_7716#0"
+  },
+  {
+   "name": "IMG_7717",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7717.MOV",
+   "orient": "V",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 6.674,
+   "end": 8.174,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 29.19,
+   "bright": 119.2,
+   "id": "IMG_7717#0"
+  },
+  {
+   "name": "IMG_7718",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7718.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 3.679,
+   "end": 5.179,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 30.54,
+   "bright": 111.9,
+   "id": "IMG_7718#0"
   },
   {
    "name": "IMG_7719",
@@ -4197,96 +3751,74 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 0.0,
-   "end": 3.26,
-   "dur": 3.26,
+   "end": 6.59,
+   "dur": 6.59,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -34.9,
-    -13.1
-   ],
    "text": "ก็คงรู้ว่าคงนี้นะ นี่ก็นี่ก็นี่ก็นี่ก็นี่",
-   "id": "IMG_7719#0",
-   "jump": "IMG_7719~0"
+   "id": "IMG_7719#0"
   },
   {
-   "name": "IMG_7719",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7719.MOV",
+   "name": "IMG_7720",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7720.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "TALK",
+   "start": 9.52,
+   "end": 27.978,
+   "dur": 18.458,
+   "target_lufs": -19.0,
+   "text": "ขึ้นกิมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมม",
+   "id": "IMG_7720#0"
+  },
+  {
+   "name": "IMG_7723",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7723.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 3.345,
+   "end": 4.845,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 20.53,
+   "bright": 110.2,
+   "id": "IMG_7723#0"
+  },
+  {
+   "name": "IMG_7724",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7724.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 5.239,
+   "end": 6.739,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 29.8,
+   "bright": 111.7,
+   "id": "IMG_7724#0"
+  },
+  {
+   "name": "IMG_7728",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7728.MOV",
    "orient": "V",
    "rot_override": "",
    "full_range": false,
    "achannels": 2,
-   "kind": "TALK",
-   "start": 3.411,
-   "end": 6.59,
-   "dur": 3.179,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -34.9,
-    -13.1
-   ],
-   "text": "นี่ก็นี่ก็นี่ก็นี่ก็นี่",
-   "id": "IMG_7719#1",
-   "jump": "IMG_7719~0"
-  },
-  {
-   "name": "IMG_7720",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7720.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 11.194,
-   "end": 15.012,
-   "dur": 3.818,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -36.8,
-    -11.6
-   ],
-   "text": "ขึ้นกิมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมม",
-   "id": "IMG_7720#1",
-   "jump": "IMG_7720~0"
-  },
-  {
-   "name": "IMG_7720",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7720.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 15.065,
-   "end": 16.727,
-   "dur": 1.662,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -36.8,
-    -11.6
-   ],
-   "text": "ขึ้นกิมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมม",
-   "id": "IMG_7720#2",
-   "jump": "IMG_7720~0"
-  },
-  {
-   "name": "IMG_7720",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7720.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 17.099,
-   "end": 27.978,
-   "dur": 10.879,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -36.8,
-    -11.6
-   ],
-   "text": "ขึ้นกิมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมมม",
-   "id": "IMG_7720#3",
-   "jump": "IMG_7720~0"
+   "kind": "BROLL",
+   "start": 5.865,
+   "end": 7.365,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 23.12,
+   "bright": 119.8,
+   "id": "IMG_7728#0"
   },
   {
    "name": "IMG_7729",
@@ -4300,10 +3832,6 @@
    "end": 5.795,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -40.3,
-    -24.5
-   ],
    "motion": 5.74,
    "bright": 110.6,
    "id": "IMG_7729#0"
@@ -4320,10 +3848,6 @@
    "end": 9.95,
    "dur": 6.32,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -34.1,
-    -16.2
-   ],
    "text": "เจ็บ เย็ดเยี่ยมมาก หนักก็ผม 4 โลอ่ะ ผม 8 โล",
    "id": "IMG_7730#0"
   },
@@ -4339,12 +3863,24 @@
    "end": 11.33,
    "dur": 11.33,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -27.4,
-    -1.8
-   ],
    "text": "มันเรียงยังไงวะ?",
    "id": "IMG_7731#0"
+  },
+  {
+   "name": "IMG_7732",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7732.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 5.524,
+   "end": 7.024,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 19.32,
+   "bright": 112.6,
+   "id": "IMG_7732#0"
   },
   {
    "name": "IMG_7734",
@@ -4355,56 +3891,11 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 0.04,
-   "end": 3.736,
-   "dur": 3.696,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -33.3,
-    -1.6
-   ],
-   "text": "ป้ายส่งน้ำ จับชูด้วย ใช้",
-   "id": "IMG_7734#0",
-   "jump": "IMG_7734~0"
-  },
-  {
-   "name": "IMG_7734",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7734.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 3.882,
-   "end": 6.011,
-   "dur": 2.129,
-   "target_lufs": -19.0,
-   "loud_ref": [
-    -33.3,
-    -1.6
-   ],
-   "text": "ใช้ เฮ้ย ใจยันน้ำไว้",
-   "id": "IMG_7734#1",
-   "jump": "IMG_7734~0"
-  },
-  {
-   "name": "IMG_7734",
-   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7734.MOV",
-   "orient": "H",
-   "rot_override": "",
-   "full_range": false,
-   "achannels": 2,
-   "kind": "TALK",
-   "start": 6.372,
    "end": 12.16,
-   "dur": 5.788,
+   "dur": 12.12,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -33.3,
-    -1.6
-   ],
-   "text": "เฮ้ย ใจยันน้ำไว้",
-   "id": "IMG_7734#2",
-   "jump": "IMG_7734~0"
+   "text": "ป้ายส่งน้ำ จับชูด้วย ใช้ เฮ้ย ใจยันน้ำไว้",
+   "id": "IMG_7734#0"
   },
   {
    "name": "IMG_7735",
@@ -4415,13 +3906,9 @@
    "achannels": 2,
    "kind": "TALK",
    "start": 1.23,
-   "end": 3.87,
-   "dur": 2.64,
+   "end": 4.23,
+   "dur": 3.0,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -38.1,
-    -7.6
-   ],
    "text": "มันจังไม่เห็นว่า มันช่าแล้ว",
    "id": "IMG_7735#0"
   },
@@ -4437,12 +3924,40 @@
    "end": 12.963,
    "dur": 11.413,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -29.1,
-    -7.4
-   ],
    "text": "ตรงนี้เก็บไปใช้ทางเดินปกติ กําเนื้อตรงนี้ แห่งปวดด้านแล้ว",
    "id": "IMG_7738#0"
+  },
+  {
+   "name": "IMG_7739",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7739.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 5.965,
+   "end": 7.465,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 17.18,
+   "bright": 109.6,
+   "id": "IMG_7739#0"
+  },
+  {
+   "name": "IMG_7740",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7740.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 5.264,
+   "end": 6.764,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 16.98,
+   "bright": 110.8,
+   "id": "IMG_7740#0"
   },
   {
    "name": "IMG_7741",
@@ -4456,13 +3971,41 @@
    "end": 4.945,
    "dur": 3.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -43.7,
-    -17.7
-   ],
    "motion": 12.5,
    "bright": 106.5,
    "id": "IMG_7741#0"
+  },
+  {
+   "name": "IMG_7742",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7742.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 3.787,
+   "end": 5.287,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 21.86,
+   "bright": 106.7,
+   "id": "IMG_7742#0"
+  },
+  {
+   "name": "IMG_7743",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7743.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 2.469,
+   "end": 3.969,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 19.83,
+   "bright": 104.3,
+   "id": "IMG_7743#0"
   },
   {
    "name": "IMG_7744",
@@ -4476,12 +4019,56 @@
    "end": 11.1,
    "dur": 7.5,
    "target_lufs": -19.0,
-   "loud_ref": [
-    -32.5,
-    -5.8
-   ],
    "text": "- จะถึงอย่างไร - มันไม้คำไม่ได้ น้ำต้องจับรู้กัน ยากนะ ถ้าจังไม่ได้ หรือการทำไม่ใช่",
    "id": "IMG_7744#0"
+  },
+  {
+   "name": "IMG_7746",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7746.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 2.161,
+   "end": 3.661,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 17.61,
+   "bright": 115.3,
+   "id": "IMG_7746#0"
+  },
+  {
+   "name": "IMG_7748",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7748.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 2.252,
+   "end": 3.752,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 19.32,
+   "bright": 108.2,
+   "id": "IMG_7748#0"
+  },
+  {
+   "name": "IMG_7750",
+   "src": "/Users/macbook3lf1/web work/ตัดต่อ vido/vido/IMG_7750.MOV",
+   "orient": "H",
+   "rot_override": "",
+   "full_range": false,
+   "achannels": 2,
+   "kind": "BROLL",
+   "start": 2.886,
+   "end": 4.386,
+   "dur": 1.5,
+   "target_lufs": -26.0,
+   "motion": 17.89,
+   "bright": 105.2,
+   "id": "IMG_7750#0"
   },
   {
    "name": "IMG_7762",
@@ -4495,10 +4082,6 @@
    "end": 5.52,
    "dur": 3.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -12.2,
-    -1.2
-   ],
    "motion": 14.39,
    "bright": 106.6,
    "id": "IMG_7762#0"
@@ -4515,10 +4098,6 @@
    "end": 7.583,
    "dur": 4.0,
    "target_lufs": -26.0,
-   "loud_ref": [
-    -62.1,
-    -32.5
-   ],
    "motion": 2.58,
    "bright": 21.4,
    "id": "IMG_7772#0"
