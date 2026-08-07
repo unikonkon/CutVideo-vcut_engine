@@ -165,22 +165,69 @@ def fonts():
 
 # ─────────────────────────── เวลาในหนัง ───────────────────────────
 
-def segments(ctx):
-    """ชิ้นตามลำดับในหนัง + เวลาเริ่มของแต่ละชิ้นเมื่อต่อกันแล้ว
+def _rows(tl, ctx):
+    """ไทม์ไลน์ → ชิ้นพร้อมเวลาเริ่มในหนัง
 
-    อ่านจาก render.json เพราะที่นั่นมี exact_dur — ความยาวจริงของไฟล์ segment
-    หลังปัดลงกริดเฟรมแล้ว ซึ่งคือความยาวที่จะโผล่ในไฟล์จริง · ใช้ dur จาก EDL
-    แทนจะคลาดสะสมทีละเศษเฟรมจนซับท้ายเรื่องเลื่อนไปหลายสิบมิลลิวินาที
+    ความยาวที่ใช้เดินเวลา (len) ต้องเป็น exact_dur — ความยาวที่ปัดลงกริดเฟรม
+    แล้ว ซึ่งคือความยาวที่จะโผล่ในไฟล์จริง ใช้ dur ดิบจะคลาดสะสมทีละเศษเฟรม
+    จนซับท้ายเรื่องเลื่อนไปหลายสิบมิลลิวินาที
     """
-    rman = read_json(ctx.work / "render.json") or {}
-    segs = sorted(rman.get("segments", []), key=lambda s: s["i"])
+    from .render import exact_dur
     out, t = [], 0.0
-    for s in segs:
-        d = float(s.get("exact_dur") or s["dur"])
+    for s in tl:
+        d = exact_dur(float(s["dur"]), ctx)
         out.append({"name": s["name"], "start": float(s["start"]),
                     "dur": float(s["dur"]), "at": t, "len": d})
         t += d
     return out, t
+
+
+def segments(ctx):
+    """ชิ้นตามลำดับในหนัง + เวลาเริ่มของแต่ละชิ้นเมื่อต่อกันแล้ว
+
+    **อ่านจาก edl.json ไม่ใช่ render.json** — render.json คือ *ผลของการกดสร้าง
+    ไฟล์ครั้งล่าสุด* ไม่ใช่ไทม์ไลน์ที่อยู่ตรงหน้า ✂ ตัด · ✕ ลบ · ลากขอบ แล้วกด
+    บันทึก edl.json ขยับทันทีแต่ render.json ยังเป็นของรอบก่อน ขั้น 4 จึงวางซับ
+    บนไทม์ไลน์เก่า: ซับของชิ้นที่เพิ่งลบยังอยู่ครบ และซับที่เหลือทั้งหมดเลื่อนไป
+    เท่ากับความยาวของชิ้นที่หายไป (วัดจริง: ลบชิ้นแรก 2 วิ แล้วซับทั้งเรื่องเลื่อน
+    2 วิ พร้อมมีซับผีของชิ้นที่ไม่มีอยู่แล้วโผล่นำหน้า)
+
+    ค่าที่ต้องใช้มีแค่ (ชื่อคลิป · ช่วงในคลิป · ความยาว) ซึ่งอยู่ใน EDL ครบอยู่แล้ว
+    ส่วน exact_dur คำนวณด้วยฟังก์ชันตัวเดียวกับที่ render ใช้ ผลจึงเท่ากันเป๊ะ
+    ตอนที่สองไฟล์ตรงกัน — และตอนที่ยังไม่ตรง ขั้น 4 จะตามไทม์ไลน์ ไม่ตามของเก่า
+    """
+    edl = read_json(ctx.edl, {}) or {}
+    tl = edl.get("timeline") or []
+    if tl:
+        return _rows(tl, ctx)
+    # ไม่มี EDL ให้อ่าน (ถูกลบทิ้ง) — ยังตอบจากรายการที่ต่อไว้รอบก่อนได้ดีกว่าตอบว่าง
+    rman = read_json(ctx.work / "render.json") or {}
+    segs = sorted(rman.get("segments", []), key=lambda s: s["i"])
+    return _rows(segs, ctx) if segs else ([], 0.0)
+
+
+def stale(ctx):
+    """ชิ้นที่ต่อไว้รอบก่อนยังตรงกับไทม์ไลน์ตอนนี้ไหม — คืนเหตุผล หรือ None ถ้าตรง
+
+    ขั้น 4 เขียนซับ *ทับไฟล์ที่ต่อจาก render.json* แต่คิดเวลาซับจาก edl.json
+    สองอย่างนี้ตรงกันเสมอเมื่อกดปุ่มในหน้าเว็บ (ปุ่มขั้น 4 สั่ง render ก่อน caption
+    ทุกครั้ง) แต่สั่ง `vcut caption` เองหลังแก้ไทม์ไลน์จะไม่ตรง แล้วซับจะถูกเผา
+    ลงบนภาพผิดช่วงแบบกู้ไม่ได้นอกจากทำใหม่ทั้งไฟล์ — หยุดไว้ก่อนดีกว่า
+    """
+    edl = read_json(ctx.edl, {}) or {}
+    tl = edl.get("timeline") or []
+    rman = read_json(ctx.work / "render.json", {}) or {}
+    segs = sorted(rman.get("segments", []), key=lambda s: s["i"])
+    key = lambda s: (s["name"], round(float(s["start"]), 3), round(float(s["dur"]), 3))
+    if not tl or not segs:
+        return None
+    if [key(s) for s in tl] != [key(s) for s in segs]:
+        return (f"ไทม์ไลน์เปลี่ยนไปหลังต่อไฟล์ครั้งล่าสุด "
+                f"(ตอนนี้ {len(tl)} ชิ้น · ที่ต่อไว้ {len(segs)} ชิ้น) — "
+                f"ต้องตัดชิ้นใหม่ก่อน ไม่งั้นซับจะไปอยู่ผิดช่วง\n"
+                f"   สั่ง `vcut render` ก่อน หรือกดปุ่ม 'สร้างไฟล์' ในหน้าเว็บ "
+                f"ซึ่งทำให้เองอยู่แล้ว")
+    return None
 
 
 def _overlap(seg, a, b):
@@ -452,6 +499,9 @@ def run(ctx, out=None):
     rman = read_json(ctx.work / "render.json")
     if not rman:
         die("ยังไม่มี render.json — สั่ง 'สร้างไฟล์' ที่ขั้น 3 ก่อน")
+    why = stale(ctx)
+    if why:
+        die(why)
     segs = sorted(rman["segments"], key=lambda s: s["i"])
     files = [ctx.seg_dir / s["file"] for s in segs]
     missing = [f.name for f in files if not f.exists()]

@@ -49,6 +49,11 @@ def run(ctx, out=None):
         die("ยังเขียนตัวหนังสือลงภาพไม่ได้ — ติดตั้ง ffmpeg-full ก่อน\n"
             "   brew install ffmpeg-full")
 
+    # ขั้น 5 ต่อจาก render.json เหมือนขั้น 4 และคิดเวลาข้อความจากไทม์ไลน์เหมือนกัน
+    # — ด่านเดียวกันจึงต้องอยู่ที่นี่ด้วย (ดู caption.stale)
+    why = caption.stale(ctx)
+    if why:
+        die(why)
     data = fx.load(ctx)
     man = fx.plan(ctx, data)
     segs = man["segments"]

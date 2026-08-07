@@ -3684,6 +3684,52 @@ function pvBuild(){
 const pvActive = () => (PV.flip ? PV.el.vb : PV.el.va);
 const pvIdle = () => (PV.flip ? PV.el.va : PV.el.vb);
 
+// ── หยุดตัวที่เลิกฉายแล้ว ─────────────────────────────────────────
+//
+// **display:none ไม่ได้ทำให้ <video> เงียบ** — คลาส hide ซ่อนได้แต่ภาพ เสียงยัง
+// ดังต่อ  โหมดต่อชิ้นสลับ <video> สองตัวไปมา ตอนสลับมีแต่การติด/ถอด hide ตัวที่
+// เพิ่งเลิกฉายจึงยังเล่นไฟล์ของมันต่อไปเงียบ ๆ ใต้ชิ้นใหม่
+//
+// ปกติมองไม่เห็นปัญหา เพราะชิ้นที่ยังไม่ถูกแตะจะเล่นจนสุดไฟล์แล้ว ended หยุดเอง
+// แต่ชิ้นที่ ✂ ตัด / ✕ ลบ / ลากขอบ เล่นจาก **ไฟล์ต้นฉบับ** ซึ่งมีเนื้อต่อไปอีกยาว
+// พอสลับไปชิ้นถัดไป ตัวเก่ายังเล่นของที่เพิ่งตัดทิ้งค้างอยู่ — ได้ยินเสียงสองชั้น
+// ที่ไม่ตรงกับภาพ ไปจนกว่าไฟล์ต้นฉบับจะหมด  (ฝั่งสตรีมแก้ไว้แล้วที่ pvSync
+// ด้วยเหตุผลเดียวกันเป๊ะ ตัวที่ต่อชิ้นเองตกหล่นไป)
+//
+// สั่งหลังสลับ PV.flip แล้วเสมอ ตัวฟัง 'pause' จึงเห็นว่าไม่ใช่ตัวที่ฉายอยู่แล้ว
+// ถอยออกไปเอง ไม่ไปตั้ง PV.playing = false ทั้งที่ชิ้นใหม่กำลังจะเล่น
+const pvHold = v => { try { if (v && !v.paused) v.pause(); } catch (_){} };
+
+// ── ยามเฝ้าขอบชิ้น ────────────────────────────────────────────────
+//
+// timeupdate ของ <video> ยิงแค่ ~4 ครั้งต่อวินาที (สเปกรับประกันแค่ "อย่างน้อย
+// ทุก 250 ms") ซึ่งเดิมเป็นที่เดียวที่ตรวจว่าเล่นถึงขอบชิ้นหรือยัง — ชิ้นที่ถูก
+// ตัด/ลบ/ลากขอบ เล่นจากไฟล์ต้นฉบับที่ยังมีเนื้อต่อ พอเลยขอบแล้วไม่มีใครมาบอก
+// มันจึงเล่นของที่เพิ่งตัดทิ้งต่อได้ถึง 250 ms **ทุกรอยตัด** ทั้งภาพและเสียง
+//
+// เฝ้าด้วย rAF (~60 ครั้ง/วินาที) แทน เกินขอบได้อย่างมากหนึ่งเฟรม  เฝ้าอย่างเดียว
+// ไม่วาดอะไรเลย — การวาด (แถบเลื่อน · หัวอ่าน · ซับ) ยังอยู่ที่ pvTick บน
+// timeupdate ตามเดิม เพราะวาดใหม่ 60 ครั้งต่อวินาทีจะกระตุกทั้งหน้า
+let pvEdgeRaf = 0;
+
+function pvEdge(){
+  if (!PV || !PV.el || PV.mode === 'file' || pvStreaming()) return false;
+  const cs = pvChunks(), ch = cs[PV.ci], v = pvActive();
+  if (!ch || !v || v.currentTime < ch.to - 0.02) return false;
+  pvAdvance();
+  return true;
+}
+
+function pvEdgeWatch(){
+  if (pvEdgeRaf || !PV || !PV.playing || PV.mode === 'file' || pvStreaming()) return;
+  pvEdgeRaf = requestAnimationFrame(() => {
+    pvEdgeRaf = 0;
+    if (!PV || !PV.node || !PV.node.isConnected) return;   // ตัวเล่นถูกถอดออกไปแล้ว
+    pvEdge();
+    pvEdgeWatch();                                          // วนต่อจนกว่าจะหยุดเล่น
+  });
+}
+
 // ── เครื่องยนต์ของโหมด "ต่อเนื่องจริง" ────────────────────────────
 //
 // ส่งลำดับชิ้นที่เห็นอยู่ตอนนี้ไปแลกโทเคน (รวมที่ลากสลับไว้แต่ยังไม่บันทึก —
@@ -3778,6 +3824,7 @@ function pvLoadChunk(ci, off, autoplay){
   const go = () => { v.currentTime = ch.from + (off || 0);
                      if (autoplay) v.play().catch(() => {}); };
   if (v.readyState >= 1) go(); else v.addEventListener('loadedmetadata', go, {once: true});
+  pvHold(pvIdle());       // ตัวสำรองเป็นแค่ที่พักท่อนถัดไป ห้ามมีเสียงออกมาเด็ดขาด
   [pvActive(), pvIdle()].forEach((x, i) => x.classList.toggle('hide', i === 1));
   PV.el.vf.classList.add('hide');
   pvPreloadNext();
@@ -3802,6 +3849,7 @@ function pvAdvance(){
   const cs = pvChunks();
   if (PV.ci + 1 >= cs.length){ pvPause(); return; }
   PV.flip = !PV.flip;                      // ตัวที่ preload ไว้กลายเป็นตัวหลัก
+  pvHold(pvIdle());                        // ตัวที่เพิ่งเลิกฉาย — ซ่อนอย่างเดียวไม่พอ
   PV.ci += 1;
   const ch = cs[PV.ci], v = pvActive();
   PV.cp = ch.p; PV.cfrom = ch.from;
@@ -3830,8 +3878,10 @@ function pvTick(){
     return;
   }
   if (!cs.length) return;
+  // ยาม rAF ตรวจขอบให้อยู่แล้วตอนกำลังเล่น — ที่นี่รับหน้าที่ตอน *หยุดอยู่* แล้วมี
+  // คนลากแถบเลื่อน/ลากขอบชิ้นจนเลยปลาย ซึ่ง rAF ไม่ได้วนอยู่
+  if (pvEdge()) return;
   const ch = cs[PV.ci], v = pvActive();
-  if (v.currentTime >= ch.to - 0.02){ pvAdvance(); return; }
   const base = pvBase(cs)[PV.ci] + (v.currentTime - ch.from);
   const tot = pvTotal(cs);
   pvProgress(tot ? base / tot : 0, base, tot);
@@ -4358,6 +4408,11 @@ function pvSync(){
              : stream ? (!cs.length || !!pvStreamMissing())
              : !cs.length;
   [E.play, E.prev, E.next].forEach(b => b.disabled = dead);
+
+  // โหมดต่อชิ้นไม่ได้ฉายอยู่ = ตัวที่ต่อชิ้นทั้งสองต้องเงียบ ไม่ใช่แค่ถูกซ่อน
+  // (สลับไปโหมด "ไฟล์ที่ต่อแล้ว" หรือ "ต่อเนื่องจริง" ตอนกำลังเล่นค้างอยู่)
+  if (fileMode || stream){ pvHold(E.va); pvHold(E.vb); }
+  pvEdgeWatch();       // เริ่มเฝ้าขอบชิ้นถ้ากำลังเล่นอยู่ (ตัวมันเองกันเรียกซ้ำ)
 }
 
 function pvFoot(cs, ps){
