@@ -754,6 +754,9 @@ function render(){
   if (!talkOn) shutSide('#side-talk');
   if (step !== 1) clOpen = -1;
   if (step !== 2){ pcOpen = null; tkOpen = null; }
+  // ออกจากขั้น 3 = กล่องเพิ่มวิดีโอไม่ถูกวาดอีก ตัว <video> ข้างในต้องถูกสั่งหยุด
+  // ด้วยมือ เหมือนการ์ดดูคลิป/ดูชิ้นข้างบน ไม่งั้นเสียงดังต่อทั้งที่ไปหน้าอื่นแล้ว
+  if (step !== 3 && addOpen) addShut();
   // แก้ไทม์ไลน์ตอนหยุดนิ่ง ไม่มี timeupdate มาเรียกวาดข้อความใหม่ — เวลาของซับ
   // เพิ่งเปลี่ยนไปพร้อมกับชิ้นที่เพิ่งลาก ต้องวาดทับตัวเล่นใหม่ตรงนี้เอง
   // (เรียกในขั้น 3 ด้วย เพราะตัวเล่นเป็นตัวเดียวกัน — ต้องเก็บกวาดชั้นข้อความ
@@ -2176,6 +2179,11 @@ function stepCompose(box){
   } else if (items.length){
     box.appendChild(playerCard());
   }
+  // กล่องเพิ่มวิดีโอวางเหนือไทม์ไลน์ — ปุ่มที่เปิดมันอยู่หัวไทม์ไลน์พอดี และยัง
+  // เห็นชิ้นรอบ ๆ หัวอ่านอยู่ระหว่างเลือกช่วง  ล็อกอยู่เมื่อไรก็ปิดทิ้งเลย ไม่ใช่
+  // แค่ไม่วาด ไม่งั้นตัวเล่นในกล่องจะดังต่อทั้งที่กล่องหลุดออกจากหน้าไปแล้ว
+  if (lock && addOpen) addShut();
+  if (addOpen && items.length) box.appendChild(addCard());
   if (items.length) box.appendChild(timeline());
   box.appendChild(reviewCard());
 }
@@ -5058,10 +5066,14 @@ function stripView(){
     + 'D ลบชิ้นตรงหัวอ่าน · R คืนขอบเดิมของชิ้นตรงหัวอ่าน · '
     + 'F ย้อนการแก้ครั้งล่าสุด · G เอาที่เพิ่งย้อนกลับคืน '
     + '(ย้อน/ทำซ้ำได้ทั้งตัด ลบ ย้าย และย่อ-ขยาย ทีละครั้ง)'));
+  // ชิ้นที่เพิ่งเพิ่มจากโฟลเดอร์ฟุตเทจติดธง ▌ ด้วยเหตุผลเดียวกับชิ้นที่ลากขอบ
+  // (ยังไม่มีไฟล์ตัดรองรับ) แต่ไม่ได้ "แก้ขอบ" มา — แยกให้เห็นว่าอันไหนเป็นอันไหน
+  const fresh = items.filter(x => !x.off && !x.o).length;
   if (cut)
     c.append(el('p', 'note warnnote',
-      `▌ แก้ขอบไปแล้ว ${cut} ชิ้น — กด "สร้างไฟล์" จะตัดใหม่ ${cut} ชิ้น `
-      + `(~${mmss(Math.round(cut * 2.3))})`));
+      (fresh ? `▌ ยังไม่มีไฟล์ตัดรองรับ ${cut} ชิ้น (แก้ขอบ ${cut - fresh} · เพิ่มใหม่ ${fresh}) — `
+             : `▌ แก้ขอบไปแล้ว ${cut} ชิ้น — `)
+      + `กด "สร้างไฟล์" จะตัดใหม่ ${cut} ชิ้น (~${mmss(Math.round(cut * 2.3))})`));
 
   // ไม่มีกล่อง "เลือกอยู่ · …" ท้ายการ์ดแล้ว — มันโผล่มา หายไป และเปลี่ยนความสูงทุก
   // ครั้งที่ sel เปลี่ยน ซึ่งเกิดกับทุกท่าที่ใช้บ่อยที่สุด (คลิกบล็อก · C · D · F)
@@ -5117,8 +5129,20 @@ function tlHead(on, total){
     : 'ชิ้นตรงหัวอ่านยังไม่ได้ถูกลากขอบ — แป้น R';
   rsb.disabled = !canReset;
   rsb.onclick = tlResetHere;
-  bar.append(cutb, delb, unb, reb, rsb, el('span', 'spacer'));
-  if (lock) [cutb, delb, unb, reb, rsb].forEach(b => {
+  bar.append(cutb, delb, unb, reb, rsb);
+  // ปุ่มเพิ่มวิดีโออยู่เฉพาะขั้น 3 — ขั้น 4 กับ 5 ใช้ไทม์ไลน์ชุดเดียวกันก็จริง แต่
+  // สองขั้นนั้น "ไม่ตัดอะไรใหม่" ตามนิยามของมัน เพิ่มชิ้นตรงนั้นจึงผิดที่
+  let addb = null;
+  if (step === 3){
+    addb = el('button', 'sm', addOpen ? '＋ ปิดกล่องเพิ่มวิดีโอ' : '＋ เพิ่มวิดีโอ');
+    addb.title = 'หยิบคลิปจากโฟลเดอร์ฟุตเทจมาแทรกในไทม์ไลน์นี้ '
+      + 'โดยไม่ต้องกด "จัดใหม่" (ซึ่งจะล้างสิ่งที่แก้ไว้ทั้งหมด)';
+    addb.setAttribute('aria-pressed', addOpen);
+    addb.onclick = () => { if (addOpen) addShut(); else addOpen = true; render(); };
+    bar.append(addb);
+  }
+  bar.append(el('span', 'spacer'));
+  if (lock) [cutb, delb, unb, reb, rsb, addb].filter(Boolean).forEach(b => {
     b.disabled = true;
     b.title = `แก้ไม่ได้ตอนนี้ — ${lock}`;
   });
@@ -5282,6 +5306,291 @@ function tlSeek(t){
   const h = document.getElementById('tl-head');
   if (h) h.style.left = (t * tlZoom) + 'px';
   if (PV && PV.node && PV.mode !== 'joins') pvSeek(t);
+}
+
+// ── เพิ่มวิดีโอจากโฟลเดอร์ฟุตเทจเข้าไทม์ไลน์ ────────────────────────
+//
+// เดิมทางเดียวที่จะเอาคลิปเข้าหนังได้คือกด "จัดใหม่" ซึ่ง compose เขียน edl.json
+// ใหม่ทั้งไฟล์ — ลำดับที่ลากไว้ ขอบที่ลากไว้ ชิ้นที่ลบไว้ หายเรียบทั้งหมด แค่
+// อยากได้คลิปเพิ่มหนึ่งตัวก็ต้องยอมทิ้งงานที่นั่งแก้มาทั้งวัน
+//
+// ตรงนี้เป็นทางที่สอง: หยิบคลิปจากโฟลเดอร์ฟุตเทจมาแทรกลง items[] ตรง ๆ แล้ว
+// บันทึกผ่าน /api/edl เส้นเดียวกับการลากขอบ ซึ่ง apply_edit *อ่าน edl.json เดิม
+// เข้ามาแล้วเขียนทับเฉพาะ timeline กับ summary* — config · params · compose · ai
+// ที่อยู่ในไฟล์เดียวกันไม่ถูกแตะเลยสักคีย์ ค่าที่ตั้งไว้จึงไม่ถูกรีเซ็ต
+//
+// ชิ้นที่เพิ่งเพิ่มยังไม่มีไฟล์ segment รองรับ (o ว่าง → tlCut เป็นจริง) จึงติดธง ▌
+// และถูกนับรวมในบรรทัด "กดสร้างไฟล์จะตัดใหม่กี่ชิ้น" ให้เองโดยไม่ต้องทำอะไรเพิ่ม
+let addOpen = false;      // กล่องกางอยู่ไหม
+let addName = '';         // คลิปที่เลือกอยู่ในกล่อง
+let addQuery = '';        // คำค้นในรายการคลิป
+let addRange = null;      // ช่วงที่จะตัดเอา {start, end} — วินาทีของคลิปต้นฉบับ
+let addKind = 'BROLL';    // พูด/วิว ของชิ้นใหม่ — ตัวกำหนดเป้าความดังเสียง
+let addWhere = 'head';    // แทรกตรงหัวอ่าน หรือต่อท้ายไทม์ไลน์
+let addOnly = true;       // ตัวเล่นในกล่องหยุดที่ปลายช่วงที่เลือกไหม
+let addVid = null;        // <video> ของกล่อง — เก็บไว้ใช้ซ้ำข้ามการวาดใหม่
+
+// ปิดกล่อง — ต้องสั่งหยุดตัวเล่นด้วยมือ เพราะ render() แค่ถอดก้อน DOM ออกจากหน้า
+// ตัว <video> ที่หลุดออกไปยังเล่นเสียงต่อทั้งที่ไม่มีอะไรให้เห็นแล้ว
+function addShut(){
+  if (addVid){ try { addVid.pause(); } catch (_){} }
+  addVid = null; addOpen = false; addName = ''; addRange = null;
+}
+
+const addClip = () => ((CL && CL.clips) || []).find(c => c.name === addName) || null;
+
+// เลือกคลิปในกล่อง — ตั้งช่วงตั้งต้นเป็นทั้งคลิป แล้วค่อยหุบเอาทีหลัง
+// (คลิปคนละตัว = ตัวเล่นเดิมใช้ต่อไม่ได้ ต้องทิ้งแล้วสร้างใหม่)
+function addPick(cl){
+  if (addName !== cl.name && addVid){ try { addVid.pause(); } catch (_){} addVid = null; }
+  addName = cl.name;
+  addRange = {start: 0, end: +(+cl.dur).toFixed(3)};
+}
+
+// แทรกชิ้นใหม่ลงร่างไทม์ไลน์ — ผ่านประวัติเหมือนทุกท่า กด F ย้อนคืนได้ทันที
+function tlAddPiece(cl, kind, where){
+  if (!tlEditable()) return;
+  const a = Math.max(0, +addRange.start.toFixed(3));
+  const b = Math.min(+(+cl.dur).toFixed(3), +addRange.end.toFixed(3));
+  const dur = +(b - a).toFixed(3);
+  if (dur < TL_MIN)
+    return toast(`ช่วงที่เลือกสั้นเกินไป ${dur.toFixed(2)} วิ (อย่างน้อย ${TL_MIN} วิ)`, true);
+  tlSnap('เพิ่มวิดีโอ');
+  // แทรก *ต่อจาก* ชิ้นตรงหัวอ่าน ไม่ใช่แทนที่ — เป้าหมายเดียวกับปุ่ม C กับ D
+  const at = where === 'head' ? tlAt() : null;
+  const j = at ? items.indexOf(at) + 1 : items.length;
+  const prev = items[j - 1];
+  items.splice(j, 0, {
+    i: -1,                        // ยังไม่มีที่ในไฟล์ → tlDirty เห็นทันทีว่าร่างเปลี่ยน
+    name: cl.name, kind,
+    start: a, end: b, dur,
+    clip_dur: +cl.dur,            // เพดานของการลากขอบขวาในแถบ
+    orient: cl.orient, rot: cl.rot || '',
+    text: '', motion: cl.motion, bright: cl.bright,
+    // ตกอยู่ในบทเดียวกับชิ้นที่มันไปต่อท้าย ไม่งั้นรายการจะตัดหัวบทใหม่คั่นกลาง
+    chapter: prev ? prev.chapter : '', chapter_title: prev ? prev.chapter_title : '',
+    ai_score: null, gain: null, limiter: null,
+    seg: null,                    // ยังไม่มีไฟล์ตัด — ตัวเล่นจะเปิดไฟล์ต้นฉบับให้แทน
+    off: false,
+    o: null,                      // ไม่มีขอบเดิม = ชิ้นใหม่ ต้องตัดไฟล์ให้ตอน "สร้างไฟล์"
+  });
+  sel = j;
+  tlChanged();
+  toast(`แทรก ${cl.name} ${dur.toFixed(2)} วิ แล้ว — กด "บันทึกไทม์ไลน์" เพื่อเขียนลง edl.json`);
+}
+
+function addCard(){
+  const c = el('div', 'card');
+  const hd = el('div', 'hd');
+  hd.append(el('h3', null, 'เพิ่มวิดีโอจากโฟลเดอร์ฟุตเทจ'), el('span', 'spacer'));
+  const cls = el('button', 'ghost', '✕');
+  cls.title = 'ปิดกล่องนี้';
+  cls.onclick = () => { addShut(); render(); };
+  hd.append(cls);
+  c.append(hd);
+  c.append(el('p', 'note', 'แทรกคลิปเข้าไทม์ไลน์ที่แก้ค้างอยู่โดยไม่ต้องกด "จัดใหม่" '
+    + '— ค่าที่ตั้งไว้ใน edl.json ไม่ถูกแตะสักคีย์ · ชิ้นที่เพิ่มยังเป็นร่างจนกว่า'
+    + 'จะกด "บันทึกไทม์ไลน์"'));
+
+  const all = (CL && CL.clips) || [];
+  if (!all.length){
+    c.append(el('p', 'note warnnote',
+      'ยังไม่มีรายการคลิป — กด "อ่านคลิปทั้งโฟลเดอร์" ที่ขั้น 1 ก่อน'));
+    return c;
+  }
+
+  // ── ช่องค้น + ตารางคลิป ──
+  //
+  // ไม่เรียก render() ตอนพิมพ์ — วาดใหม่ทั้งหน้าทุกตัวอักษรจะแย่งโฟกัสออกจากช่อง
+  // และดึงตัวเล่นข้างล่างมาโหลดใหม่ทุกครั้ง วาดใหม่แค่ตารางกับกล่องรายละเอียดพอ
+  const bar = el('div', 'acts');
+  const q = el('input');
+  q.type = 'search'; q.value = addQuery; q.placeholder = 'ค้นชื่อคลิป เช่น 7070';
+  q.style.cssText = 'flex:1;min-width:11rem';
+  const cnt = el('span', 'note');
+  bar.append(q, cnt);
+  c.append(bar);
+
+  const grid = el('div', 'grid');
+  grid.style.maxHeight = '17em';
+  const detail = el('div');
+  c.append(grid, detail);
+
+  const shown = () => {
+    const s = addQuery.trim().toLowerCase();
+    return s ? all.filter(x => x.name.toLowerCase().includes(s)) : all;
+  };
+
+  function drawGrid(){
+    const list = shown();
+    grid.innerHTML = '';
+    cnt.textContent = list.length === all.length
+      ? `${all.length} คลิปในโฟลเดอร์`
+      : `เจอ ${list.length} จาก ${all.length} คลิป`;
+    if (!list.length){
+      grid.append(el('p', 'note', 'ไม่มีคลิปที่ชื่อตรงกับคำค้น'));
+      return;
+    }
+    list.forEach(x => {
+      const used = items.filter(p => !p.off && p.name === x.name).length;
+      const d = el('div', 'cl' + (x.name === addName ? ' sel' : ''));
+      const img = el('img'); img.loading = 'lazy'; img.src = `/thumb/${x.name}.jpg`;
+      img.alt = x.name; img.draggable = false;
+      d.append(img);
+      const tag = el('div', 'tag');
+      if (x.orient === 'V') tag.append(el('span', 'b v', 'ตั้ง'));
+      // คลิปที่ขั้น 1 ติ๊กออก ยังหยิบมาใส่ตรงนี้ได้ — ด่านตรวจของ /api/edl ถามแค่ว่า
+      // "มีอยู่ใน manifest ไหม" ไม่ได้ถามว่าถูกเลือกไว้ไหม แต่ต้องบอกให้รู้ตัว
+      if (!x.picked) tag.append(el('span', 'b', 'ไม่ได้เลือกไว้'));
+      if (used) tag.append(el('span', 'b r', `ใช้ ${used}`));
+      if (tag.children.length) d.append(tag);
+      const cap = el('div', 'cap');
+      cap.append(el('b', null, x.name.replace(/^IMG_/, '')),
+                 el('span', null, (+x.dur).toFixed(1) + 'ว'));
+      d.append(cap);
+      d.style.cursor = 'pointer';
+      d.title = `${x.name} · ยาว ${(+x.dur).toFixed(1)} วิ`
+        + (used ? ` · อยู่ในหนังแล้ว ${used} ชิ้น` : '');
+      d.onclick = () => { addPick(x); drawGrid(); drawDetail(); };
+      grid.append(d);
+    });
+  }
+
+  // ── กล่องรายละเอียด: ดูคลิป · เลือกช่วง · เลือกประเภท · เลือกจุดแทรก ──
+  function drawDetail(){
+    detail.innerHTML = '';
+    const cl = addClip();
+    if (!cl || !addRange){
+      detail.append(el('p', 'note', 'กดเลือกคลิปข้างบนก่อน แล้วค่อยเลือกช่วงที่จะเอา'));
+      return;
+    }
+    const total = +cl.dur;
+    const s = el('div', 'sect'); s.style.marginTop = '.9rem';
+    s.append(el('h4', null, `${cl.name} · ยาวทั้งคลิป ${total.toFixed(1)} วิ`));
+
+    // หมุนตามที่ตั้งไว้ในขั้น 1 — ไฟล์ต้นฉบับยังไม่ผ่านฟิลเตอร์หมุน ถ้าไม่พลิกเอง
+    // ตรงนี้ ภาพในกล่องจะตะแคงคนละทางกับที่จะได้จริงในหนัง
+    const spin = cl.rot === 'transpose=1' ? ' r90' : cl.rot === 'transpose=2' ? ' r270'
+               : cl.rot === 'transpose=1,transpose=1' ? ' r180' : '';
+    const w = el('div', 'vwrap' + spin);
+    if (!addVid){
+      const v = el('video');
+      v.controls = true; v.preload = 'metadata'; v.playsInline = true;
+      v.src = `/clip/${cl.name}`;
+      v.addEventListener('timeupdate', () => {
+        // หยุดที่ปลายช่วงแล้วถอยกลับไปต้นช่วง — กดเล่นซ้ำเพื่อตรวจช่วงเดิมได้เลย
+        // อ่านจาก addRange สด ๆ ไม่ใช่ค่าที่ปิดไว้ในคลอเชอร์ตอนสร้าง ไม่งั้นแก้
+        // ตัวเลขแล้วตัวเล่นยังหยุดที่จุดเก่า
+        if (addOnly && addRange && v.currentTime >= addRange.end){
+          v.pause(); v.currentTime = addRange.start;
+        }
+      });
+      v.onerror = () => { w.innerHTML = '';
+        w.append(el('p', 'note', `เบราว์เซอร์เล่นไฟล์นี้ไม่ได้ (codec ${cl.codec})`
+          + ' — เลือกช่วงด้วยตัวเลขข้างล่างได้ตามปกติ')); };
+      addVid = v;
+    }
+    w.append(addVid);
+    s.append(w);
+
+    // แถบบอกว่าช่วงที่เลือกอยู่ตรงไหนของคลิป — อ่านง่ายกว่าตัวเลขสองตัว
+    const tr = el('div', 'track');
+    const on = el('div', 'on');
+    on.style.left = (addRange.start / Math.max(total, 0.01) * 100) + '%';
+    on.style.width = ((addRange.end - addRange.start) / Math.max(total, 0.01) * 100) + '%';
+    tr.append(on); s.append(tr);
+
+    // ── ตัวเลขจุดเริ่ม/จุดจบ ──
+    const num = (v0, on0) => {
+      const i = el('input');
+      i.type = 'number'; i.step = '0.1'; i.min = '0'; i.max = String(total.toFixed(2));
+      i.value = v0.toFixed(2); i.style.width = '6.5rem';
+      i.onchange = () => on0(parseFloat(i.value));
+      return i;
+    };
+    const setStart = t => {
+      if (!isFinite(t)) return drawDetail();
+      addRange.start = Math.max(0, Math.min(addRange.end - TL_MIN, +t.toFixed(3)));
+      drawDetail();
+    };
+    const setEnd = t => {
+      if (!isFinite(t)) return drawDetail();
+      addRange.end = Math.min(total, Math.max(addRange.start + TL_MIN, +t.toFixed(3)));
+      drawDetail();
+    };
+    const rowA = el('div', 'acts');
+    rowA.append(el('span', 'note', 'เริ่มที่'), num(addRange.start, setStart),
+                el('span', 'note', 'วิ · จบที่'), num(addRange.end, setEnd),
+                el('span', 'note', 'วิ'));
+    s.append(rowA);
+
+    const rowB = el('div', 'acts');
+    const here = () => (addVid && isFinite(addVid.currentTime)) ? addVid.currentTime : null;
+    const b1 = el('button', 'sm', '⇤ ตั้งจุดเริ่มจากตัวเล่น');
+    b1.title = 'เอาเวลาที่ตัวเล่นค้างอยู่ตอนนี้เป็นจุดเริ่มของช่วง';
+    b1.onclick = () => { const t = here(); if (t != null) setStart(t); };
+    const b2 = el('button', 'sm', 'ตั้งจุดจบจากตัวเล่น ⇥');
+    b2.title = 'เอาเวลาที่ตัวเล่นค้างอยู่ตอนนี้เป็นจุดจบของช่วง';
+    b2.onclick = () => { const t = here(); if (t != null) setEnd(t); };
+    const b3 = el('button', 'sm', '⟲ ทั้งคลิป');
+    b3.onclick = () => { addRange = {start: 0, end: +total.toFixed(3)}; drawDetail(); };
+    const b4 = el('button', 'sm', '▶ เล่นช่วงที่เลือก');
+    b4.onclick = () => { if (!addVid) return;
+      try { addVid.currentTime = addRange.start; addVid.play(); } catch (_){} };
+    const lab = el('label', 'ck');
+    const ck = el('input'); ck.type = 'checkbox'; ck.checked = addOnly;
+    ck.onchange = () => { addOnly = ck.checked; };
+    lab.append(ck, document.createTextNode('หยุดที่ปลายช่วง'));
+    rowB.append(b1, b2, b3, b4, lab);
+    s.append(rowB);
+    s.append(el('p', 'note', `จะได้ชิ้นยาว ${(addRange.end - addRange.start).toFixed(2)} วิ`
+      + ` จากคลิปยาว ${total.toFixed(1)} วิ`));
+
+    // ── ประเภท · จุดแทรก ──
+    const opts = el('div', 'acts'); opts.style.marginTop = '.7rem';
+    const kseg = el('div', 'seg');
+    [['TALK', 'พูด'], ['BROLL', 'วิว']].forEach(([v, t]) => {
+      const b = el('button', null, t);
+      b.setAttribute('aria-pressed', addKind === v);
+      b.onclick = () => { addKind = v; drawDetail(); };
+      kseg.append(b);
+    });
+    const wseg = el('div', 'seg');
+    [['head', 'ต่อจากชิ้นตรงหัวอ่าน'], ['end', 'ต่อท้ายไทม์ไลน์']].forEach(([v, t]) => {
+      const b = el('button', null, t);
+      b.setAttribute('aria-pressed', addWhere === v);
+      b.onclick = () => { addWhere = v; drawDetail(); };
+      wseg.append(b);
+    });
+    opts.append(el('span', 'note', 'ประเภท'), kseg,
+                el('span', 'note', 'แทรกที่'), wseg);
+    s.append(opts);
+    // เป้าความดังคนละตัวกันจริง ๆ — เลือกผิดแล้วชิ้นจะถูกดันไปคนละระดับกับรอบข้าง
+    s.append(el('p', 'note', addKind === 'TALK'
+      ? `ชิ้น "พูด" จะถูกปรับไปที่ ${val('audio.target_lufs_talk')} LUFS`
+        + ' และถูกนับเป็นช่วงพูดตอนตรวจรอยต่อ'
+      : `ชิ้น "วิว" จะถูกปรับไปที่ ${val('audio.target_lufs_broll')} LUFS`));
+
+    const at = addWhere === 'head' ? tlAt() : null;
+    s.append(el('p', 'note', addWhere === 'head'
+      ? (at ? `แทรกต่อจาก "${at.name}" (ชิ้นที่หัวอ่านทาบอยู่ตอนนี้)`
+            : 'ยังไม่มีชิ้นตรงหัวอ่าน — จะไปต่อท้ายไทม์ไลน์ให้')
+      : `ไปต่อท้ายเป็นชิ้นที่ ${tlOn().length + 1}`));
+
+    const go = el('div', 'acts');
+    const add = el('button', 'primary',
+      `＋ แทรกเข้าไทม์ไลน์ (${(addRange.end - addRange.start).toFixed(2)} วิ)`);
+    add.onclick = () => { tlAddPiece(cl, addKind, addWhere); };
+    go.append(add);
+    go.append(el('span', 'note', 'ชิ้นที่เพิ่มยังไม่มีไฟล์ตัดรองรับ — '
+      + 'ติดธง ▌ ไว้ และจะถูกตัดให้ตอนกด "สร้างไฟล์"'));
+    s.append(go);
+    detail.append(s);
+  }
+
+  q.oninput = () => { addQuery = q.value; drawGrid(); };
+  drawGrid(); drawDetail();
+  return c;
 }
 
 function timeline(){

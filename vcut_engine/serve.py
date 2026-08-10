@@ -313,10 +313,15 @@ def apply_edit(ctx, payload):
         ชื่อคลิปต้องอยู่ใน manifest จริง · 0 ≤ start < end ≤ ความยาวคลิป
         ยาวอย่างน้อย MIN_PIECE · เหลืออย่างน้อย 1 ชิ้น
 
+    ด่านตรวจแบบนี้เปิดทางให้ *เพิ่มคลิปจากโฟลเดอร์ฟุตเทจ* เข้าไทม์ไลน์ได้ด้วย
+    (ปุ่ม "เพิ่มวิดีโอ" ที่ขั้น 3) โดยไม่ต้องกด "จัดใหม่" ซึ่ง compose จะเขียน
+    edl.json ใหม่ทั้งไฟล์ — ทางนี้อ่านของเดิมเข้ามาแล้วเขียนทับเฉพาะ timeline ·
+    summary · chapters ส่วน config · params · compose · ai ในไฟล์เดียวกันไม่ถูกแตะ
+
     คุณสมบัติที่เหลือ (orient · rot_override · full_range · achannels · src ·
     target_lufs) ลอกจากชิ้นเดิมของคลิปนั้นใน EDL — ค่าพวกนี้เป็นของ *คลิป* ไม่ใช่
     ของ *ช่วง* ขยับขอบแล้วจึงไม่เปลี่ยน ถ้าคลิปนั้นไม่เคยอยู่ใน EDL มาก่อนก็
-    ประกอบขึ้นใหม่จาก manifest ได้
+    ประกอบขึ้นใหม่จาก manifest ได้  ยกเว้น kind ที่หน้าเว็บสั่งมาได้เสมอ (ดูข้างล่าง)
 
     ชิ้นที่ขอบเปลี่ยนจะไม่มีไฟล์ segment รองรับ — ตั้งใจให้เป็นแบบนั้น หน้าเว็บ
     รู้อยู่แล้วว่าต้องบอกผู้ใช้ว่า "กดสร้างไฟล์แล้วต้องตัดใหม่กี่ชิ้น"
@@ -363,8 +368,24 @@ def apply_edit(ctx, payload):
                      "rot_override": cl.get("rot_override", ""),
                      "full_range": cl.get("full_range", False),
                      "achannels": cl.get("achannels", 2),
-                     "kind": it.get("kind", "BROLL"),
-                     "target_lufs": float(ctx.get("audio.target_lufs_broll", -26.0))}
+                     # ค่าที่ต้องพกไปให้ compose/ai อ่านต่อ — ของทั้งคลิป ไม่ใช่ของช่วง
+                     "motion": cl.get("motion"), "bright": cl.get("bright"),
+                     "kind": ""}
+
+        # ประเภทที่หน้าเว็บส่งมาเป็นใหญ่กว่าของชิ้นต้นแบบ
+        #
+        # เดิม kind ถูกลอกมาจาก tmpl เสมอ ซึ่งเป็น *ชิ้นแรกของคลิปนั้นใน EDL* —
+        # พอเปิดให้เพิ่มคลิปจากโฟลเดอร์ฟุตเทจได้ ค่าที่คนเพิ่งเลือกในหน้าเว็บจะถูก
+        # ทับทิ้งเงียบ ๆ ทันทีที่คลิปนั้นเคยมีชิ้นอยู่แล้ว  เป้าความดังต้องเปลี่ยน
+        # ตามประเภทด้วย ไม่งั้นชิ้น "พูด" จะถูกดันไปที่ระดับของวิวแล้วเบากว่าเพื่อน
+        kind = str(it.get("kind") or piece.get("kind") or "BROLL").upper()
+        if kind not in ("TALK", "BROLL"):
+            return None, f"{name}: ไม่รู้จักประเภท '{kind}' (ต้องเป็น TALK หรือ BROLL)"
+        if kind != piece.get("kind"):
+            piece["kind"] = kind
+            piece["target_lufs"] = float(ctx.get(
+                "audio.target_lufs_talk" if kind == "TALK" else "audio.target_lufs_broll",
+                -19.0 if kind == "TALK" else -26.0))
         n = used.get(name, 0)
         used[name] = n + 1
         piece.update({"start": a, "end": b, "dur": round(b - a, 3),
