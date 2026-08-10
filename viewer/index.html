@@ -449,6 +449,42 @@ dialog .df{padding:.7rem 1rem;border-top:1px solid var(--line);display:flex;gap:
 .tlh-l{left:0} .tlh-r{right:0}
 .tlhead{position:absolute;top:-26px;bottom:0;width:2px;background:var(--warn);z-index:4;
   pointer-events:none}
+/* ── ไทม์ไลน์หลายเลนของขั้น 5 ──
+   แถวคลิปอยู่บนสุดเป็นเส้นอ้างอิง แล้วชั้นที่ลอยอยู่เหนือมัน (ข้อความ · รูปทรง ·
+   ภาพซ้อน · เพลง) เรียงลงมาเป็นแถว ๆ ตามลำดับที่มันซ้อนกันจริงในหนัง — อ่านแถว
+   จากบนลงล่างแล้วได้ลำดับชั้นเดียวกับที่ finish.py ต่อฟิลเตอร์ */
+.fxtl{display:grid;grid-template-columns:86px 1fr;align-items:stretch}
+.fxlane{display:contents}
+.fxlname{display:flex;align-items:center;gap:.3rem;font-size:11px;color:var(--dim);
+  padding:.15rem .4rem;border-top:1px solid var(--off);white-space:nowrap}
+.fxlname b{color:var(--fg);font-size:11.5px;font-weight:600}
+.fxlrow{position:relative;border-top:1px solid var(--off);overflow:hidden}
+/* สูงขึ้น 30% จากเดิม (26→34 · คลิป 38→49) — บล็อกยึดด้วย top/bottom จึงยืดตามเอง */
+.fxlrow.clips{height:49px} .fxlrow{height:34px}
+.fxb{position:absolute;top:3px;bottom:3px;border-radius:3px;box-sizing:border-box;
+  border:1px solid rgba(0,0,0,.4);cursor:grab;overflow:hidden;touch-action:none;
+  font-size:10.5px;line-height:26px;color:#fff;padding:0 5px;white-space:nowrap;
+  min-width:3px}
+.fxb.text{background:#4a5aa8} .fxb.shape{background:#a8544a}
+.fxb.overlay{background:#7a4aa8} .fxb.music{background:#2f7a63}
+.fxb.clip{background:#2f6f4f;top:2px;bottom:2px} .fxb.clip.BROLL{background:#3a5a7a}
+.fxb.auto{background:#3d4257;color:#c9cfe0;cursor:default;border-style:dashed}
+.fxb.sel{outline:2px solid var(--accent);outline-offset:-2px;z-index:3}
+.fxb.orphan{background:repeating-linear-gradient(45deg,#5a4a4a,#5a4a4a 4px,#734 4px,#734 8px);
+  opacity:.75}
+.fxb .h{position:absolute;top:0;bottom:0;width:6px;cursor:ew-resize;z-index:2}
+.fxb .h.l{left:0} .fxb .h.r{right:0}
+.fxb .h:hover{background:rgba(255,255,255,.4)}
+.fxempty{position:absolute;left:6px;top:0;line-height:34px;font-size:10.5px;
+  color:var(--dim);pointer-events:none}
+/* ป้ายชื่อของแถวย่อย — ชั้นที่เพิ่มเองแยกแถวละชิ้น ชื่อจึงต้องบอกว่าแถวไหนคือชิ้นไหน */
+.fxlname.sub{font-size:10px;padding-left:.9rem;opacity:.85}
+.fxlname.sub b{font-weight:500;font-size:10.5px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.fxlname.on{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.fxlname .del{margin-left:auto;border:0;background:none;color:var(--dim);
+  cursor:pointer;padding:0 .2rem;font-size:11px}
+.fxlname .del:hover{color:var(--warn)}
 /* ตัวเล่นวิดีโอขั้น 3
    กรอบมีขนาดเท่า "หนังที่จะได้" พอดี แล้วจัดกึ่งกลางการ์ด — ไม่มีขอบดำเหลือ
    --pvr = สัดส่วนกว้าง/สูงของหนัง ตั้งจาก video.width/height ใน pvSync
@@ -2337,7 +2373,7 @@ const fxText  = () => fxData().text || {sub: {}, boxes: {}, plate: {}};
 const fxDefs  = () => (FX && FX.defaults) || {};
 const fxShapes = () => fxData().shapes || [];
 // แอนิเมชันของกล่องข้อความกล่องนี้ — ยังไม่เคยตั้ง = ใช้ของซับ (เหมือนที่เอนจินทำ)
-const fxBoxCfg = id => (fxText().boxes || {})[id] || fxText().sub;
+// (เลิกใช้แล้ว — กล่องข้อความของขั้น 4 ไม่ถูกดึงมาที่ขั้น 5 อีกต่อไป)
 
 function fxTouch(){ fxDirty = true; render(); capPaint(); }
 
@@ -2353,6 +2389,9 @@ async function fxSave(quiet){
   if (d.clips) body.clips = d.clips;
   if (d.overlays) body.overlays = d.overlays;
   if (d.music) body.music = d.music;
+  if (d.texts) body.texts = d.texts;
+  if (d.style) body.style = d.style;
+  if (d.auto_sub) body.auto_sub = d.auto_sub;
   try {
     const r = await post('/api/fx', body);
     FX = r.fx; fxDirty = false;
@@ -2397,11 +2436,13 @@ function fxAnimForm(cfg, put, opts){
 
 // ── รูปทรง ──────────────────────────────────────────────────────
 //
-// ผูกเวลากับ (คลิป, วินาทีในคลิป) เหมือนกล่องข้อความของขั้น 4 เป๊ะ — capWhere
-// เป็นตัวแปลง "วินาทีในหนัง → คลิปไหนวินาทีที่เท่าไร" ตัวเดียวกับที่ + Text ใช้
+// ผูกเวลากับ (คลิป, วินาทีในคลิป) เหมือนทุกชั้นของขั้น 5 — fxWhere เป็นตัวแปลง
+// "วินาทีในหนัง → คลิปไหนวินาทีที่เท่าไร" ตัวเดียวกับที่ปุ่มเพิ่มอื่นและการลากใช้
 
 function fxAddShape(){
-  const w = capWhere((PV && PV.gt) || 0);
+  // ถามจากไทม์ไลน์ของขั้น 5 เอง (fxWhere) ไม่ใช่ของขั้น 4 — ผลเท่ากันเมื่อไม่มี
+  // สโลว์โม แต่ขั้นนี้ไม่ควรพึ่งข้อมูลของขั้นนั้นอยู่แล้ว
+  const w = fxWhere(fxT5((PV && PV.gt) || 0));
   if (!w) return toast('ยังไม่มีไทม์ไลน์ให้วางรูปทรง', true);
   const d = fxDefs().shape || {};
   const id = 's' + Date.now().toString(36)
@@ -2505,6 +2546,7 @@ const fxClipHow = f => {
   if (f.zoom !== b.zoom) out.push(`ซูม ${(+f.zoom).toFixed(2)}`);
   if (f.grade) out.push((fxDefs().grade || {})[f.grade] || f.grade);
   if (f.mute) out.push('ปิดเสียง');
+  else if (Math.abs(+f.vol_db) > 0.01) out.push(`${+f.vol_db > 0 ? '+' : ''}${+f.vol_db} dB`);
   return out.join(' · ');
 };
 
@@ -2552,7 +2594,17 @@ function fxClipRow(s){
                                      fxDefs().grade)));
   g.append(capField('เสียง', capBool(() => f.mute, v => fxClipPut(s.key, 'mute', v),
                                     'ปิดเสียงชิ้นนี้', fxTouch)));
+  // ดัง/เบาของชิ้นนี้ — ปิดไว้ตอน mute เพราะสองอย่างนี้ทับกัน (mute ชนะเสมอ)
+  // ปล่อยให้ปรับได้ทั้งที่ไม่มีผลคือปุ่มที่หมุนแล้วไม่มีอะไรเกิดขึ้น
+  if (!f.mute)
+    g.append(capField('ความดังชิ้นนี้',
+      capNum(() => f.vol_db, v => fxClipPut(s.key, 'vol_db', v),
+             -30, 12, 0.5, 'dB', fxTouch)));
   row.append(g);
+  if (!f.mute && Math.abs(+f.vol_db) > 0.01)
+    row.append(el('p', 'note', `${+f.vol_db > 0 ? 'ดังขึ้น' : 'เบาลง'} `
+      + `${Math.abs(+f.vol_db).toFixed(1)} dB จากที่ขั้น 3 ปรับมาแล้ว `
+      + '— ชิ้นนี้จะถูกตัดใหม่หนึ่งรอบ'));
   if (+f.speed < 1)
     row.append(el('p', 'note',
       `ช้าลง ${(1 / +f.speed).toFixed(1)} เท่า — ชิ้นนี้จะยาวขึ้นเป็น `
@@ -2597,7 +2649,7 @@ async function fxDeleteAsset(name){
 }
 
 function fxAddOverlay(file){
-  const w = capWhere((PV && PV.gt) || 0);
+  const w = fxWhere(fxT5((PV && PV.gt) || 0));
   if (!w) return toast('ยังไม่มีไทม์ไลน์ให้วางภาพ', true);
   const d = fxDefs().overlay || {};
   const id = 'o' + Date.now().toString(36)
@@ -2715,7 +2767,36 @@ function fxOverlayRow(o){
 
 // ── เพลงประกอบ ──────────────────────────────────────────────────
 
-const fxMusic = () => fxData().music || (fxData().music = {});
+// เพลงเป็น *รายการแทร็ก* ตั้งแต่รุ่นนี้ — วางคนละช่วงกันได้หลายเพลง
+// (ไฟล์รุ่นเก่าที่เก็บเป็นก้อนเดียวถูกแปลงให้ตั้งแต่ฝั่งเอนจินแล้ว ดู fx._music_list)
+const fxMusics = () => Array.isArray(fxData().music) ? fxData().music
+                                                     : (fxData().music = []);
+const fxMusicOf = id => fxMusics().find(m => m.id === id);
+
+const fxNewId = pre => pre + Date.now().toString(36)
+                     + Math.floor(Math.random() * 1679616).toString(36);
+
+// วางแทร็กเพลงใหม่ — at/dur เป็นวินาทีของหนัง (dur 0 = จนจบเรื่อง)
+function fxAddMusic(file, at, dur){
+  const d = (FX.music || {}).defaults || {};
+  const id = fxNewId('m');
+  fxData().music = [...fxMusics(), {...d, id, file,
+    at: Math.max(0, +(at || 0).toFixed(3)), dur: Math.max(0, +(dur || 0).toFixed(3))}];
+  fxSel = id; fxSelKind = 'music'; fxTab = 'music';
+  fxTouch();
+  return id;
+}
+
+// ลบชิ้นจากชั้นไหนก็ได้ — ปุ่ม ✕ ที่ป้ายชื่อแถวในเลนใช้ตัวนี้ตัวเดียว
+function fxDropItem(lane, id){
+  if (lane === 'text') fxData().texts = fxTexts().filter(x => x.id !== id);
+  else if (lane === 'shapes') fxData().shapes = fxShapes().filter(x => x.id !== id);
+  else if (lane === 'overlays') fxData().overlays = fxOverlays().filter(x => x.id !== id);
+  else if (lane === 'music') fxData().music = fxMusics().filter(x => x.id !== id);
+  else return;
+  if (fxSel === id) fxSel = null;
+  fxTouch();
+}
 
 // ── ดึงเสียงจากลิงก์ YouTube ─────────────────────────────────────
 //
@@ -2752,12 +2833,13 @@ function fxMusicArrived(){
     return toast('โหลดเสร็จแล้ว แต่ไม่เจอไฟล์เสียงใหม่ในคลัง — ดูบันทึกการทำงาน', true);
   const name = add[add.length - 1];
   step = 5; fxTab = 'music';
-  if (!fxMusic().file){
-    fxMusic().file = name;
-    fxDirty = true;
-    toast(`ได้ ${name} — เลือกเป็นเพลงประกอบให้แล้ว กด "บันทึกเอฟเฟกต์" เพื่อยืนยัน`);
+  // ยังไม่มีเพลงสักแทร็ก = วางให้เลยคลอทั้งเรื่อง · มีอยู่แล้วไม่แตะของเดิม
+  // เพราะคนอาจโหลดมาเก็บไว้ก่อน ยังไม่ได้ตั้งใจใช้ตอนนี้
+  if (!fxMusics().length){
+    fxAddMusic(name, 0, 0);
+    toast(`ได้ ${name} — วางเป็นเพลงคลอทั้งเรื่องให้แล้ว กด "บันทึกเอฟเฟกต์" เพื่อยืนยัน`);
   } else {
-    toast(`ได้ ${name} — เลือกได้จากช่อง "เพลง"`);
+    toast(`ได้ ${name} — กด "＋ เพลง" เพื่อวางเป็นแทร็กใหม่`);
   }
   ytUrl = '';
   render();
@@ -2800,12 +2882,12 @@ function fxFetchPanel(){
 
 function fxMusicPanel(){
   const w = el('div');
-  const m = fxMusic();
   const M = FX.music || {};
   const tracks = M.tracks || [];
 
   w.append(fxFetchPanel());
 
+  // ── คลังไฟล์เพลง ──
   const drop = el('div', 'fxdrop');
   drop.append(el('div', 'fxwhat', 'ลากไฟล์เพลงมาวางที่นี่ หรือกดเพื่อเลือก'));
   drop.append(el('div', 'note', 'MP3 · M4A · WAV · FLAC · OGG'));
@@ -2826,51 +2908,537 @@ function fxMusicPanel(){
     return w;
   }
 
-  const g = el('div', 'capgrid');
-  g.append(capField('เพลง', fxSelect(() => m.file || '',
-                                    v => { m.file = v; }, [''].concat(tracks),
-                                    {'': '— ไม่ใส่เพลง —'})));
-  if (m.file){
-    g.append(capField('ความดังเพลง', capNum(() => m.gain_db,
-      v => { m.gain_db = v; }, -40, 0, 0.5, 'dB', fxTouch)));
-    g.append(capField('เฟดเข้า', capNum(() => m.fade_in,
-      v => { m.fade_in = v; }, 0, 8, 0.1, 'วิ', fxTouch)));
-    g.append(capField('เฟดออก', capNum(() => m.fade_out,
-      v => { m.fade_out = v; }, 0, 8, 0.1, 'วิ', fxTouch)));
-  }
-  w.append(g);
+  // ── แทร็กที่วางไว้ในหนังแล้ว ──
+  //
+  // เพลงเป็นรายการเหมือนข้อความ/รูปทรง/ภาพซ้อน — วางกี่ท่อนก็ได้ คนละช่วงกัน
+  // (เพลงเปิดเรื่อง · เพลงช่วงไฮไลต์ · เพลงจบ) แต่ละแทร็กมีความดัง เฟด และ
+  // การหลบเสียงพูดเป็นของตัวเอง
+  const list = fxMusics();
+  const add = el('div', 'acts');
+  const b = el('button', 'sm primary', '＋ วางแทร็กใหม่');
+  b.title = 'วางตรงหัวอ่าน — แทร็กแรกคลอทั้งเรื่อง';
+  b.onclick = () => {
+    const t5 = fxT5((PV && PV.gt) || 0);
+    fxAddMusic(tracks[0], list.length ? t5 : 0, 0);
+  };
+  add.append(b, el('span', 'note', `${list.length} แทร็ก`));
+  w.append(el('h4', 'caph', 'แทร็กที่วางไว้ในหนัง'), add);
 
-  if (!m.file){
-    w.append(el('p', 'note', 'เลือกเพลงจากรายการเพื่อตั้งค่าต่อ'));
-    return w;
-  }
-  if (m.file && M.found === false)
-    w.append(el('p', 'note warnnote', `ไม่พบไฟล์ ${m.file} ในคลังแล้ว — ชั้นเพลงจะถูกข้าม`));
+  if (!list.length)
+    w.append(el('p', 'note', 'ยังไม่ได้วางแทร็กไหนเลย — กด "＋ วางแทร็กใหม่" '
+      + 'หรือปุ่ม "＋ เพลง" เหนือไทม์ไลน์'));
+  list.forEach((m, i) => w.append(fxMusicRow(m, i, tracks)));
+  return w;
+}
+
+function fxMusicRow(m, i, tracks){
+  const total = fxTotal();
+  const wrap = el('div', 'capbox' + (fxSel === m.id ? ' on' : ''));
+  const hd = el('div', 'capbh');
+  const a0 = Math.max(0, +m.at || 0);
+  const b0 = +m.dur > 0 ? Math.min(total, a0 + +m.dur) : total;
+  hd.append(el('span', 'capt', mmss(a0)));
+  hd.append(el('span', 'note', `${mmss(a0)}–${mmss(b0)}`
+    + (+m.dur > 0 ? '' : ' (จนจบเรื่อง)')));
+  hd.append(el('span', 'spacer'));
+  const del = el('button', 'sm', '✕');
+  del.type = 'button'; del.title = 'เอาแทร็กนี้ออก';
+  del.onclick = () => fxDropItem('music', m.id);
+  hd.append(del);
+  wrap.append(hd);
+
+  if (tracks.indexOf(m.file) < 0)
+    wrap.append(el('p', 'note warnnote',
+      `ไม่พบไฟล์ ${m.file} ในคลังแล้ว — แทร็กนี้จะถูกข้ามไป`));
+
+  const g = el('div', 'capgrid');
+  g.append(capField('ไฟล์', fxSelect(() => m.file, v => { m.file = v; },
+                                    tracks.indexOf(m.file) < 0
+                                      ? [m.file].concat(tracks) : tracks)));
+  g.append(capField('เริ่มที่ (วินาทีในหนัง)',
+    capNum(() => m.at, v => { m.at = v; }, 0, Math.max(1, total), 0.5, 'วิ', fxTouch)));
+  g.append(capField('ยาว (0 = จนจบ)',
+    capNum(() => m.dur, v => { m.dur = v; }, 0, Math.max(1, total), 0.5, 'วิ', fxTouch)));
+  g.append(capField('ความดัง', capNum(() => m.gain_db, v => { m.gain_db = v; },
+                                     -40, 0, 0.5, 'dB', fxTouch)));
+  g.append(capField('เฟดเข้า', capNum(() => m.fade_in, v => { m.fade_in = v; },
+                                     0, 8, 0.1, 'วิ', fxTouch)));
+  g.append(capField('เฟดออก', capNum(() => m.fade_out, v => { m.fade_out = v; },
+                                    0, 8, 0.1, 'วิ', fxTouch)));
+  wrap.append(g);
+  wrap.append(capBool(() => m.loop, v => { m.loop = v; },
+                      'วนซ้ำถ้าเพลงสั้นกว่าช่วงที่วางไว้', fxTouch));
 
   const au = el('audio');
   au.controls = true; au.preload = 'none'; au.style.width = '100%';
   au.src = '/asset/' + encodeURIComponent(m.file);
-  w.append(au);
+  wrap.append(au);
 
-  w.append(el('h4', 'caph', 'หลบเสียงพูด'));
-  w.append(capBool(() => m.duck, v => { m.duck = v; },
-                   'ลดเพลงลงเองตอนมีเสียงในหนัง', fxTouch));
-  w.append(el('p', 'note',
-    'ฟังคลื่นเสียงจริงของหนังแล้วลดเพลงตามทุกมิลลิวินาที (sidechaincompress) '
-    + '— ไม่ได้อ่านบทพูด จึงไม่พังเมื่อแก้ไทม์ไลน์ และหลบให้เสียงหัวเราะ/น้ำตก'
-    + 'ด้วย ซึ่งเป็นสิ่งที่ต้องการอยู่แล้ว'));
+  wrap.append(el('h4', 'caph', 'หลบเสียงพูด'));
+  wrap.append(capBool(() => m.duck, v => { m.duck = v; },
+                      'ลดแทร็กนี้ลงเองตอนมีเสียงในหนัง', fxTouch));
   if (m.duck){
     const g2 = el('div', 'capgrid');
-    g2.append(capField('หลบลงประมาณ', capNum(() => m.duck_db,
-      v => { m.duck_db = v; }, 2, 24, 1, 'dB', fxTouch)));
-    g2.append(capField('กลับมาดังภายใน', capNum(() => m.duck_release,
-      v => { m.duck_release = v; }, 20, 2000, 20, 'ms', fxTouch)));
-    w.append(g2);
-    w.append(el('p', 'note',
-      'เป็นค่าประมาณ — ความลึกจริงขึ้นกับว่าเสียงในหนังตรงนั้นดังแค่ไหนด้วย '
-      + 'คนพูดเบาเพลงก็หลบน้อยลงตามจริง'));
+    g2.append(capField('หลบลงประมาณ', capNum(() => m.duck_db, v => { m.duck_db = v; },
+                                            2, 24, 1, 'dB', fxTouch)));
+    g2.append(capField('กลับมาดังภายใน',
+      capNum(() => m.duck_release, v => { m.duck_release = v; },
+             20, 2000, 20, 'ms', fxTouch)));
+    wrap.append(g2);
+    wrap.append(el('p', 'note',
+      'ฟังคลื่นเสียงจริงของหนังแล้วลดตามทุกมิลลิวินาที (sidechaincompress) — '
+      + 'ไม่ได้อ่านบทพูด จึงไม่พังเมื่อแก้ไทม์ไลน์ · เป็นค่าประมาณ ความลึกจริง'
+      + 'ขึ้นกับว่าเสียงในหนังตรงนั้นดังแค่ไหนด้วย'));
   }
-  return w;
+  return wrap;
+}
+
+// ── ไทม์ไลน์หลายเลนของขั้น 5 ────────────────────────────────────
+//
+// ก่อนหน้านี้ขั้น 5 ตั้งเวลาได้ทางเดียวคือพิมพ์ตัวเลข "เริ่มที่กี่วินาทีของคลิป"
+// ซึ่งตอบไม่ได้เลยว่าของที่วางไปแล้วมันไปตกตรงไหนของหนัง ทับกันอยู่ไหม หรือหลุด
+// ออกไปนอกช่วงที่ยังเหลืออยู่หรือเปล่า — ต้อง render จบก่อนถึงจะรู้
+//
+// เลนพวกนี้ไม่ได้คิดเวลาเอง มันวาดจากตัวเลขชุดเดียวกับที่จะกลายเป็นไฟล์จริง
+// (FX.view.cues · FX.view.shapes · FX.overlay.cues ที่เอนจินคำนวณมาให้แล้ว)
+// เห็นอะไรบนจอ = ได้อย่างนั้นในไฟล์
+//
+// **เวลาที่ใช้วาดเป็นเวลาของหนังขั้น 5** (หลังสโลว์โม) ส่วนตัวเล่นเดินด้วยเวลา
+// ของขั้น 3 สองอย่างนี้เท่ากันเป๊ะตราบใดที่ไม่มีชิ้นไหนถูกเปลี่ยนความเร็ว —
+// ถ้ามี ต้องแปลงกลับไปมา (fxT5/fxT3) ไม่งั้นหัวอ่านจะชี้คนละที่กับที่กำลังเล่น
+let fxZoom = 12, fxScroll = 0, fxDrag = null;
+let fxSelKind = '';          // เลนของสิ่งที่เลือกอยู่ — id ซ้ำข้ามเลนได้
+
+const fxSegs5 = () => (FX && FX.view && FX.view.segments) || [];
+const fxTotal = () => (FX && FX.view && FX.view.total)
+  || fxSegs5().reduce((a, s) => a + s.len, 0);
+
+// เวลาในตัวเล่น (ขั้น 3) ↔ เวลาในหนังของขั้น 5
+//
+// ชิ้นที่ i เริ่มที่ at3 = ผลรวมของ dur ก่อนหน้า และที่ at5 = s.at ที่เอนจินให้มา
+// ข้างในชิ้นเดียวกันยืด/หดเป็นสัดส่วน  จำนวนชิ้นไม่ตรงกัน (แก้ไทม์ไลน์ค้างไว้)
+// = ไม่มีอะไรให้เทียบ ตกไปใช้เวลาเดียวกันตรง ๆ ซึ่งถูกอยู่แล้วเมื่อไม่มีสโลว์โม
+function fxMap(t, to5){
+  const segs = fxSegs5();
+  if (!segs.length) return t;
+  let at3 = 0;
+  for (let i = 0; i < segs.length; i++){
+    // ความยาวจริงของชิ้นบนไทม์ไลน์ขั้น 3 คือ exact_dur (คิดจากจำนวนเฟรม) ไม่ใช่
+    // dur ที่ปัดมาจาก EDL — ใช้ผิดตัวแล้วหัวอ่านจะเลื่อนสะสมไปเรื่อย ๆ ทั้งเรื่อง
+    const s = segs[i], d3 = s.exact_dur || s.dur, d5 = s.len;
+    const from = to5 ? at3 : s.at, len = to5 ? d3 : d5;
+    if (t < from + len || i === segs.length - 1){
+      const off = Math.max(0, Math.min(len, t - from));
+      const k = len > 0 ? (to5 ? d5 : d3) / len : 1;
+      return +((to5 ? s.at : at3) + off * k).toFixed(3);
+    }
+    at3 += d3;
+  }
+  return t;
+}
+const fxT5 = t => fxMap(t, true);       // ตัวเล่น → ขั้น 5
+const fxT3 = t => fxMap(t, false);      // ขั้น 5 → ตัวเล่น
+
+// วินาทีที่ N ของหนังขั้น 5 = คลิปไหน วินาทีที่เท่าไรของคลิปนั้น
+//
+// คู่ตรงข้ามของ fxSpans และเป็นตัวที่ทำให้ "ลากข้ามคลิป" เป็นไปได้ — ของทุกชั้น
+// เกาะกับ (คลิป, วินาทีในคลิป) ลากบล็อกไปวางที่นาทีที่ 7 จึงต้องแปลงกลับว่านั่น
+// คือคลิปไหน ไม่ใช่แค่บวกเวลาเข้าไปในคลิปเดิมจนหลุดออกนอกช่วงแล้วกลายเป็นกำพร้า
+//
+// ใช้ FX.view.segments ของขั้น 5 เอง ไม่ใช่ capWhere ของขั้น 4 — ผลเท่ากันเมื่อ
+// ไม่มีสโลว์โม แต่ที่นี่ต้องไม่พึ่งข้อมูลของขั้นนั้นอยู่แล้ว
+function fxWhere(t5){
+  const segs = fxSegs5();
+  for (const s of segs)
+    if (t5 >= s.at && t5 < s.at + s.len)
+      return {name: s.name,
+              at: +(s.start + (t5 - s.at) * (+s.speed || 1)).toFixed(3)};
+  const last = segs[segs.length - 1];
+  return last ? {name: last.name, at: +last.start.toFixed(3)} : null;
+}
+
+const fxTexts = () => fxData().texts || (fxData().texts = []);
+const fxStyle = () => fxData().style || (fxData().style = {...(fxDefs().style || {})});
+const fxAuto = () => fxData().auto_sub || (fxData().auto_sub = {enabled: false});
+
+// ช่วง [at, at+dur] ของคลิปนี้ ไปโผล่ตรงไหนของหนังบ้าง
+//
+// **ต้องให้ผลตรงกับ fxtext.shape_spans() ฝั่งเอนจินเป๊ะ** — ที่ต้องมีสองที่เพราะ
+// ของที่เพิ่งวางหรือกำลังลากอยู่ยังไม่เคยผ่านเอนจิน ถ้ารอค่าจากเซิร์ฟเวอร์อย่าง
+// เดียว บล็อกจะไม่โผล่จนกว่าจะกดบันทึก ซึ่งทำให้เลนไม่มีประโยชน์ตอนที่ต้องใช้
+// มันที่สุด · ตัวเลขที่ตัดสินไฟล์จริงยังเป็นของเอนจินเสมอ อันนี้เป็นแค่ภาพร่าง
+// ที่ต้องตรงกัน (เกณฑ์ 0.20 วิ กับการหารด้วยความเร็ว ลอกมาทั้งคู่)
+function fxSpans(name, at, dur){
+  const out = [];
+  fxSegs5().forEach(s => {
+    if (s.name !== name) return;
+    const lo = Math.max(+at, s.start), hi = Math.min(+at + +dur, s.start + s.dur);
+    if (hi - lo <= 0) return;
+    // หารด้วยความเร็วที่เอนจินส่งมา ไม่ใช่เดาจาก len/dur — len คิดจากจำนวนเฟรม
+    // จริง สองทางจึงคลาดกันไม่กี่มิลลิวินาที ซึ่งพอให้บล็อกกระตุกตอนกดบันทึก
+    const sp = +s.speed || 1;
+    const a = s.at + (lo - s.start) / sp, b = s.at + (hi - s.start) / sp;
+    if (b - a >= 0.20) out.push([+a.toFixed(3), +b.toFixed(3)]);
+  });
+  return out;
+}
+
+// กระจายชิ้นหนึ่งเป็นบล็อกตามจำนวนที่มันโผล่ — ไม่โผล่เลย = กำพร้า วาดไว้ต้นราง
+function fxSpread(it, cls, label, out){
+  const sp = fxSpans(it.name, it.at, it.dur);
+  if (!sp.length){
+    out.push({id: it.id, a: null, b: null, orphan: true, cls, label, item: it});
+    return;
+  }
+  sp.forEach(([a, b], k) => out.push({id: it.id, a, b, cls, label, item: it, nth: k}));
+}
+
+// รายการที่จะวาดในแต่ละเลน — รูปแบบเดียวกันหมด {id, a, b, label, cls, item}
+function fxLaneRows(lane){
+  const v = FX.view || {};
+  const out = [];
+  if (lane === 'clips')
+    return fxSegs5().map((s, i) => ({id: s.key, a: s.at, b: s.at + s.len,
+      label: s.name.replace(/^IMG_/, ''), cls: 'clip ' + s.kind, item: s, i}));
+  if (lane === 'text'){
+    fxTexts().forEach(t => fxSpread(t, 'text', (t.text || '').slice(0, 30), out));
+    // ซับอัตโนมัติไม่มีตัวจริงให้แก้ เอาของที่เอนจินคำนวณมาแล้วตรง ๆ
+    if (fxAuto().enabled)
+      (v.cues || []).filter(c => c.kind === 'auto' && c.a != null).forEach(c =>
+        out.push({id: c.id, a: c.a, b: c.b, label: (c.text || '').slice(0, 30),
+                  cls: 'text auto', lock: true, item: c}));
+    return out;
+  }
+  if (lane === 'shapes'){
+    fxShapes().forEach(s => fxSpread(s, 'shape',
+      (fxDefs().shape_kind || {})[s.kind] || s.kind, out));
+    return out;
+  }
+  if (lane === 'overlays'){
+    fxOverlays().forEach(o => fxSpread(o, 'overlay', o.file, out));
+    return out;
+  }
+  if (lane === 'music'){
+    // เพลงผูกกับวินาทีในหนังตรง ๆ ไม่ต้องผ่าน fxSpans เหมือนชั้นที่เกาะคลิป
+    // (เหตุผลอยู่ที่ music.MUSIC) · dur = 0 แปลว่าคลอไปจนจบเรื่อง
+    const total = fxTotal();
+    return fxMusics().map(m => {
+      const a0 = Math.max(0, +m.at || 0);
+      const b0 = Math.min(total, +m.dur > 0 ? a0 + +m.dur : total);
+      return {id: m.id, a: a0, b: b0, cls: 'music', item: m,
+              orphan: b0 - a0 <= 0.05,
+              label: `${m.file} · ${(+m.gain_db).toFixed(1)} dB`
+                     + (m.duck ? ' · หลบ' : '')};
+    });
+  }
+  return [];
+}
+
+// ของที่อยู่ในเลนนี้แก้เวลาได้ไหม — ซับอัตโนมัติมาจากบทพูด เวลาของมันเป็นของ
+// คำพูดจริง ไม่ใช่ของที่ใครตั้ง · เพลงคลอทั้งเรื่องอยู่แล้ว ไม่มีขอบให้ลาก
+const FX_LANES = [
+  ['clips', 'คลิป', 'ชิ้นจากขั้น 3 — คลิกเพื่อตั้งความเร็ว/ซูม/สี/ความดัง'],
+  ['text', 'ข้อความ', 'ข้อความของขั้น 5 เอง'],
+  ['shapes', 'รูปทรง', 'ลูกศร · แถบ · จุด'],
+  ['overlays', 'ภาพซ้อน', 'ภาพ/วิดีโอโปร่งใสจากคลัง'],
+  ['music', 'เพลง', 'คลอทั้งเรื่อง'],
+];
+
+// หาตัวจริงใน fx.json จาก id ที่คลิกในเลน — เลนวาดจาก "ผลที่คำนวณแล้ว"
+// ซึ่งแก้ไม่ได้ ต้องย้อนกลับไปหาต้นฉบับก่อนเสมอ
+function fxItemOf(lane, id){
+  if (lane === 'text') return fxTexts().find(t => t.id === id);
+  if (lane === 'shapes') return fxShapes().find(s => s.id === id);
+  if (lane === 'overlays') return fxOverlays().find(o => o.id === id);
+  if (lane === 'music') return fxMusicOf(id);
+  return null;
+}
+
+function fxPick(lane, id){
+  fxSel = id; fxSelKind = lane;
+  fxTab = lane === 'clips' ? 'clips' : lane === 'text' ? 'text'
+        : lane === 'shapes' ? 'shapes' : lane === 'overlays' ? 'images' : 'music';
+  render();
+}
+
+// ลากบล็อกในเลน — ย้ายทั้งชิ้น หรือลากขอบเพื่อย่อ-ขยาย
+//
+// ย้าย = คำนวณ "จุดเริ่มใหม่ในหนัง" แล้วถามกลับว่าตรงนั้นคือคลิปไหนวินาทีที่เท่าไร
+// (fxWhere ตัวเดียวกับที่ปุ่มเพิ่มใช้) จึงลากข้ามคลิปได้ · ย่อ-ขยาย = แก้ dur
+// ตรง ๆ โดยหารด้วยความเร็วของชิ้นที่มันเกาะอยู่ ไม่งั้นลากบนชิ้นสโลว์โมจะได้
+// ความยาวไม่ตรงกับที่เห็น
+function fxBlockDrag(e, lane, id, side){
+  e.preventDefault(); e.stopPropagation();
+  const it = fxItemOf(lane, id);
+  if (!it) return;
+  fxPick(lane, id);
+  // เพลงผูกกับวินาทีในหนังตรง ๆ (ดู music.MUSIC) จึงลากง่ายกว่าชั้นอื่น: ไม่ต้อง
+  // แปลงเป็นวินาทีของคลิป และไม่มีทางกลายเป็นชิ้นกำพร้าเพราะไม่ได้เกาะคลิปไหน
+  if (lane === 'music'){
+    const total = fxTotal();
+    const st0 = {x0: e.clientX, at: +it.at || 0,
+                 dur: +it.dur > 0 ? +it.dur : Math.max(0.5, total - (+it.at || 0)),
+                 moved: false};
+    const mv = ev => {
+      const d = (ev.clientX - st0.x0) / fxZoom;
+      if (!st0.moved && Math.abs(ev.clientX - st0.x0) < 3) return;
+      st0.moved = true;
+      if (!side) it.at = Math.max(0, Math.min(total - 0.5, +(st0.at + d).toFixed(3)));
+      else if (side === 'l'){
+        const nd = Math.max(0.5, +(st0.dur - d).toFixed(3));
+        it.at = Math.max(0, +(st0.at + (st0.dur - nd)).toFixed(3));
+        it.dur = nd;
+      } else it.dur = Math.max(0.5, +(st0.dur + d).toFixed(3));
+      fxPaintLanes();
+    };
+    const up0 = () => {
+      window.removeEventListener('pointermove', mv);
+      window.removeEventListener('pointerup', up0);
+      if (st0.moved) fxTouch(); else render();
+    };
+    window.addEventListener('pointermove', mv);
+    window.addEventListener('pointerup', up0);
+    return;
+  }
+
+  const seg = fxSegs5().find(s => s.name === it.name) || {};
+  const sp = +seg.speed || 1;                 // หนังขั้น 5 → วินาทีของคลิป
+  const span0 = (fxSpans(it.name, it.at, it.dur) || [])[0];
+  const st = {x0: e.clientX, at: +it.at, dur: +it.dur, moved: false,
+              a5: span0 ? span0[0] : 0};
+  const move = ev => {
+    const d = (ev.clientX - st.x0) / fxZoom * sp;
+    if (!st.moved && Math.abs(ev.clientX - st.x0) < 3) return;
+    st.moved = true;
+    if (!side){
+      // ย้าย = ไปเกาะจุดใหม่ ซึ่งอาจเป็นคนละคลิป — ถามจากไทม์ไลน์ว่าตรงนั้น
+      // คืออะไร ไม่ใช่บวกเวลาเข้าไปในคลิปเดิมจนหลุดออกนอกช่วงกลายเป็นกำพร้า
+      const w = fxWhere(Math.max(0, st.a5 + (ev.clientX - st.x0) / fxZoom));
+      if (w){ it.name = w.name; it.at = w.at; }
+    } else if (side === 'l'){
+      const nd = Math.max(0.2, +(st.dur - d).toFixed(3));
+      it.at = Math.max(0, +(st.at + (st.dur - nd)).toFixed(3));
+      it.dur = nd;
+    } else {
+      it.dur = Math.max(0.2, +(st.dur + d).toFixed(3));
+    }
+    fxPaintLanes();
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    if (st.moved) fxTouch(); else render();
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
+
+// วาดใหม่เฉพาะบล็อกระหว่างลาก — render() ทั้งหน้าทุก pointermove หน่วงจนลากไม่ติดมือ
+// (เวลาในหนังของชิ้นที่กำลังลากยังไม่อัปเดตจนกว่าเอนจินจะคำนวณให้ใหม่ตอนบันทึก
+//  จึงประมาณเอาจากจุดเกาะปัจจุบันไปก่อน — พอปล่อยแล้ว fxTouch วาดของจริงทับ)
+function fxPaintLanes(){
+  const it = fxItemOf(fxSelKind, fxSel);
+  if (!it) return;
+  const nodes = [...document.querySelectorAll(
+    `.fxb[data-lane="${fxSelKind}"][data-id="${fxSel}"]`)];
+  const total = fxTotal();
+  const sp = fxSelKind === 'music'
+    ? [[Math.max(0, +it.at || 0),
+        +it.dur > 0 ? Math.min(total, (+it.at || 0) + +it.dur) : total]]
+    : fxSpans(it.name, it.at, it.dur);
+  nodes.forEach((n, k) => {
+    // ลากจนหลุดออกนอกช่วงที่เหลืออยู่ = ไม่มีที่ให้วาดแล้ว ซ่อนไว้ก่อน แล้ว
+    // ปล่อยให้ render() รอบหลังปล่อยวาดเป็นบล็อกกำพร้าให้เห็นว่ามันหลุดไปแล้ว
+    if (!sp[k]){ n.style.display = 'none'; return; }
+    n.style.display = '';
+    n.style.left = (sp[k][0] * fxZoom) + 'px';
+    n.style.width = Math.max(3, (sp[k][1] - sp[k][0]) * fxZoom) + 'px';
+  });
+}
+
+function fxTimeline(){
+  const c = el('div', 'card');
+  const total = fxTotal();
+  const hd = el('div', 'hd');
+  hd.append(el('h3', null, `ไทม์ไลน์แต่งหนัง — ${mmss(total)}`), el('span', 'spacer'));
+  const zo = el('button', 'ghost', '−'), zi = el('button', 'ghost', '+');
+  zo.title = 'ซูมออก'; zi.title = 'ซูมเข้า';
+  zo.onclick = () => { fxZoom = Math.max(2, fxZoom / 1.6); render(); };
+  zi.onclick = () => { fxZoom = Math.min(240, fxZoom * 1.6); render(); };
+  hd.append(el('span', 'note', 'ซูม'), zo, zi);
+  c.append(hd);
+
+  // ── ปุ่มเพิ่มของแต่ละชั้น — วางตรงวินาทีที่หัวอ่านค้างอยู่ ──
+  const bar = el('div', 'acts');
+  const at = mmss((PV && PV.gt) || 0);
+  const bt = el('button', 'sm', '＋ ข้อความ');
+  bt.title = `วางข้อความใหม่ตรงนาที ${at}`;
+  bt.onclick = fxAddText;
+  const bs = el('button', 'sm', '＋ รูปทรง');
+  bs.title = `วางลูกศร/แถบ/จุดตรงนาที ${at}`;
+  bs.onclick = fxAddShape;
+  const bo = el('button', 'sm', '＋ ภาพซ้อน');
+  bo.title = 'เลือกไฟล์จากคลังภาพซ้อน';
+  bo.onclick = () => { fxTab = 'images'; fxSel = null; render();
+    toast('เลือกไฟล์ในคลังแล้วกด "+ วางลงหนัง"'); };
+  const bm = el('button', 'sm', '＋ เพลง');
+  const lib = ((FX.music || {}).tracks || []);
+  bm.title = lib.length
+    ? `วางแทร็กเพลงใหม่ตรงนาที ${at} (คลอไปจนจบเรื่อง — ลากขอบเพื่อกำหนดช่วง)`
+    : 'ยังไม่มีไฟล์เพลงในคลัง — ลากไฟล์เข้ามาหรือโหลดจาก YouTube ในแท็บเพลง';
+  bm.onclick = () => {
+    if (!lib.length){ fxTab = 'music'; fxSel = null; render();
+      return toast('ยังไม่มีไฟล์เพลงในคลัง — ลากไฟล์เข้ามาหรือโหลดจาก YouTube ก่อน', true); }
+    // แทร็กแรกคลอทั้งเรื่อง · แทร็กถัด ๆ ไปเริ่มตรงหัวอ่านแล้วยาวจนจบ
+    // (ลากขอบซ้าย-ขวาในเลนเพื่อกำหนดช่วงเองได้ทันที)
+    const t5 = fxT5((PV && PV.gt) || 0);
+    fxAddMusic(lib[0], fxMusics().length ? t5 : 0, 0);
+    toast('วางแทร็กเพลงแล้ว — เลือกไฟล์/ตั้งช่วงข้างล่าง หรือลากขอบในเลน');
+  };
+  bar.append(bt, bs, bo, bm, el('span', 'spacer'),
+             el('span', 'note', `วางตรงหัวอ่าน · ตอนนี้ ${at}`));
+  c.append(bar);
+
+  // ── ราง ──
+  const wrap = el('div', 'tlwrap');
+  const inner = el('div', 'tlinner');
+  inner.style.width = Math.max(320, total * fxZoom + 90) + 'px';
+
+  const grid = el('div', 'fxtl');
+  // ไม้บรรทัดกินสองคอลัมน์ไม่ได้ในกริดแบบนี้ — ใส่ช่องว่างซ้ายไว้ให้ตรงกัน
+  grid.append(el('div', 'fxlname'));
+  const ruler = el('div', 'tlruler');
+  const stepSec = fxZoom >= 60 ? 1 : fxZoom >= 25 ? 5 : fxZoom >= 10 ? 15
+                : fxZoom >= 4 ? 60 : 300;
+  for (let t = 0; t <= total; t += stepSec){
+    const m = el('i'); m.style.left = (t * fxZoom) + 'px';
+    m.append(el('span', null, mmss(t)));
+    ruler.append(m);
+  }
+  ruler.onclick = e => {
+    const r = ruler.getBoundingClientRect();
+    tlSeek(Math.max(0, fxT3((e.clientX - r.left) / fxZoom)));
+  };
+  grid.append(ruler);
+
+  // แต่ละบล็อกในแถว — ใช้ซ้ำทั้งแถวรวมของคลิปและแถวย่อยของชั้นที่เพิ่มเอง
+  const blockOf = (lane, r) => {
+    // ชิ้นกำพร้าไม่มีที่อยู่ในหนังแล้ว วาดไว้ต้นรางให้เห็นว่ามีอยู่ ไม่ใช่หายไปเฉย ๆ
+    const a = r.a == null ? 0 : r.a, b = r.b == null ? a + 1 : r.b;
+    const d = el('div', 'fxb ' + r.cls + (r.orphan ? ' orphan' : '')
+                      + (fxSel === r.id && fxSelKind === lane ? ' sel' : ''));
+    d.dataset.lane = lane; d.dataset.id = r.id;
+    d.style.left = (a * fxZoom) + 'px';
+    d.style.width = Math.max(3, (b - a) * fxZoom) + 'px';
+    d.textContent = r.label || '';
+    d.title = (r.orphan ? '⚠ เกาะอยู่กับช่วงที่ไม่มีในหนังแล้ว — จะไม่โผล่ · ' : '')
+      + `${r.label || ''}${r.a != null ? ` · ${mmss(r.a)}–${mmss(r.b)}` : ''}`;
+    if (r.lock){
+      d.style.cursor = 'pointer';
+      d.onclick = () => fxPick(lane, r.id);
+    } else {
+      ['l', 'r'].forEach(side => {
+        const h = el('div', 'h ' + side);
+        h.onpointerdown = ev => fxBlockDrag(ev, lane, r.id, side);
+        d.append(h);
+      });
+      d.onpointerdown = ev => {
+        if (ev.target.classList.contains('h')) return;
+        if (lane === 'clips'){ fxPick(lane, r.id); return; }
+        fxBlockDrag(ev, lane, r.id, null);
+      };
+    }
+    return d;
+  };
+
+  FX_LANES.forEach(([lane, label, hint]) => {
+    const rows = fxLaneRows(lane);
+    // ── แถวคลิป: แถวเดียวเสมอ ──
+    //
+    // 208 ชิ้นถ้าแยกแถวละชิ้นจะสูงเป็นหมื่นพิกเซล และมันไม่ใช่ของที่ "เพิ่มเอง"
+    // อยู่แล้ว — เป็นเส้นอ้างอิงว่าหนังเดินถึงไหน ไม่ใช่ชั้นที่จัดวางทับกันได้
+    if (lane === 'clips'){
+      const nm = el('div', 'fxlname');
+      nm.append(el('b', null, label), el('span', null, String(rows.length || '')));
+      nm.title = hint;
+      const row = el('div', 'fxlrow clips');
+      if (!rows.length) row.append(el('div', 'fxempty', 'ยังไม่มี'));
+      rows.forEach(r => row.append(blockOf(lane, r)));
+      grid.append(nm, row);
+      return;
+    }
+
+    // ── ชั้นที่เพิ่มเอง: แถวละชิ้น ──
+    //
+    // ชิ้นเดียวโผล่ได้หลายที่ในหนัง (คลิปที่มันเกาะถูกใช้ซ้ำ) — ทุกช่วงของชิ้นนั้น
+    // ต้องอยู่ *แถวเดียวกัน* เพราะมันคือของชิ้นเดียว ลากอันไหนอีกอันก็ขยับตาม
+    // จึงจัดกลุ่มด้วย id ไม่ใช่นับบล็อก
+    const byId = [];
+    const seen = {};
+    rows.forEach(r => {
+      if (seen[r.id] === undefined){ seen[r.id] = byId.length; byId.push([r]); }
+      else byId[seen[r.id]].push(r);
+    });
+    if (!byId.length){
+      const nm = el('div', 'fxlname');
+      nm.append(el('b', null, label), el('span', null, ''));
+      nm.title = hint;
+      const row = el('div', 'fxlrow');
+      row.append(el('div', 'fxempty',
+        lane === 'music' ? 'ยังไม่ได้ใส่เพลง — กด ＋ เพลง'
+        : lane === 'text' ? 'ยังไม่มีข้อความ — กด ＋ ข้อความ'
+        : lane === 'shapes' ? 'ยังไม่มีรูปทรง — กด ＋ รูปทรง'
+        : 'ยังไม่มีภาพซ้อน — กด ＋ ภาพซ้อน'));
+      grid.append(nm, row);
+      return;
+    }
+    byId.forEach((group, k) => {
+      const r0 = group[0];
+      const on = fxSel === r0.id && fxSelKind === lane;
+      // แถวแรกของชั้นถือชื่อชั้น แถวถัด ๆ ไปย่อหน้าเข้าไปให้เห็นว่าเป็นพวกเดียวกัน
+      const nm = el('div', 'fxlname' + (k ? ' sub' : '') + (on ? ' on' : ''));
+      nm.title = hint;
+      if (!k) nm.append(el('b', null, `${label} ${byId.length}`));
+      else nm.append(el('b', null, r0.label || `#${k + 1}`));
+      if (!r0.lock || lane === 'music'){
+        const del = el('button', 'del', '✕');
+        del.title = 'ลบชิ้นนี้';
+        del.onclick = e => { e.stopPropagation(); fxDropItem(lane, r0.id); };
+        nm.append(del);
+      }
+      nm.onclick = () => fxPick(lane, r0.id);
+      const row = el('div', 'fxlrow');
+      group.forEach(r => row.append(blockOf(lane, r)));
+      grid.append(nm, row);
+    });
+  });
+  inner.append(grid);
+
+  // หัวอ่าน — แปลงเวลาของตัวเล่นเป็นเวลาของหนังขั้น 5 ก่อนเสมอ
+  const head = el('div', 'tlhead');
+  head.style.cssText = `left:${86 + fxT5((PV && PV.gt) || 0) * fxZoom}px;top:0;bottom:0`;
+  inner.append(head);
+  wrap.append(inner);
+  wrap.addEventListener('scroll', () => { fxScroll = wrap.scrollLeft; });
+  requestAnimationFrame(() => { wrap.scrollLeft = fxScroll; });
+  c.append(wrap);
+
+  c.append(el('p', 'note', 'คลิกบล็อก = เปิดค่าของชิ้นนั้นข้างล่าง · ลากตัวบล็อก = '
+    + 'ย้ายไปเกาะจุดใหม่ (ข้ามคลิปได้) · ลากขอบ = ย่อ-ขยายช่วง · คลิกไม้บรรทัด = '
+    + 'ย้ายหัวอ่าน'));
+  const orph = FX_LANES.reduce((n, [l]) => n + fxLaneRows(l).filter(r => r.orphan).length, 0);
+  if (orph)
+    c.append(el('p', 'note warnnote', `▨ ${orph} ชิ้นเกาะอยู่กับช่วงที่ถูกตัดออกจาก`
+      + 'หนังไปแล้ว — จะไม่โผล่ในไฟล์ ลากกลับเข้าช่วงที่ยังอยู่ หรือลบทิ้ง'));
+  // คลิปเดียวถูกหยิบมาใช้หลายท่อนได้ ของชิ้นเดียวจึงโผล่ได้หลายที่
+  const dup = {};
+  FX_LANES.forEach(([l]) => fxLaneRows(l).forEach(r => {
+    if (l !== 'clips') dup[r.id] = (dup[r.id] || 0) + 1; }));
+  const many = Object.values(dup).filter(n => n > 1).length;
+  if (many)
+    c.append(el('p', 'note', `${many} ชิ้นโผล่มากกว่าหนึ่งที่ เพราะคลิปที่มันเกาะอยู่`
+      + 'ถูกใช้หลายท่อน — ลากอันไหนก็ได้ อีกอันจะขยับตามเพราะเป็นชิ้นเดียวกัน'));
+  return c;
 }
 
 const FX_TABS = [['clips', 'คลิป'], ['text', 'ข้อความ'], ['shapes', 'รูปทรง'],
@@ -2883,8 +3451,10 @@ function fxEditor(){
   FX_TABS.forEach(([k, lab]) => {
     const n = k === 'shapes' ? fxShapes().length
             : k === 'images' ? fxOverlays().length
+            : k === 'text' ? fxTexts().length
+            : k === 'music' ? fxMusics().length
             : k === 'clips' ? ((FX.view || {}).touched || 0) : 0;
-    const on = k === 'music' && (fxMusic().file || '') !== '';
+    const on = false;
     const b = el('button', null, lab + (n ? ` ${n}` : on ? ' ●' : ''));
     b.setAttribute('aria-pressed', fxTab === k);
     b.onclick = () => { fxTab = k; fxSel = null; render(); };
@@ -2910,49 +3480,92 @@ function fxEditor(){
   return c;
 }
 
+function fxAddText(){
+  const t5 = fxT5((PV && PV.gt) || 0);
+  const w = fxWhere(t5);
+  if (!w) return toast('ยังไม่มีไทม์ไลน์ให้วางข้อความ', true);
+  const d = fxDefs().text_item || {};
+  const base = {};
+  (fxDefs().text_style_keys || []).forEach(k => {
+    if (fxStyle()[k] !== undefined) base[k] = fxStyle()[k];
+  });
+  const id = 't' + Date.now().toString(36)
+           + Math.floor(Math.random() * 1679616).toString(36);
+  // ใบใหม่ต้องไม่เกิดทับใบที่ขึ้นอยู่แล้ว — เกิดกลางจอทุกใบแปลว่ากดเพิ่มใบที่สอง
+  // แล้วดูเหมือนไม่มีอะไรเกิดขึ้น ทั้งที่มีสองใบซ้อนกันสนิท (ท่าเดียวกับขั้น 4)
+  // นับจากร่างที่กำลังแก้ ไม่ใช่จากที่เซิร์ฟเวอร์คำนวณไว้ — ไม่งั้นกดเพิ่มรัว ๆ
+  // ก่อนบันทึกจะได้ค่า busy เท่าเดิมทุกครั้ง แล้วทุกใบไปกองอยู่ที่เดียวกัน
+  const busy = fxTexts().filter(x =>
+    fxSpans(x.name, x.at, x.dur).some(([a, b]) => t5 >= a - 0.01 && t5 < b)).length;
+  fxData().texts = [...fxTexts(),
+    {...d, ...base, id, name: w.name, at: w.at, dur: 3,
+     y: Math.min(0.92, Math.max(0.08, 0.5 + CAP_STACK[busy % CAP_STACK.length]))}];
+  fxSel = id; fxSelKind = 'text'; fxTab = 'text';
+  fxTouch();
+  toast('วางข้อความแล้ว — พิมพ์ข้อความข้างล่าง แล้วลากบนตัวเล่นเพื่อจัดตำแหน่ง');
+}
+
+function fxTextCue(id){
+  return ((FX.view || {}).cues || []).find(c => c.id === id);
+}
+
+// ── แท็บข้อความ — ข้อความของขั้น 5 เอง ────────────────────────────
+//
+// เดิมแท็บนี้ตั้งได้แค่ *แอนิเมชัน* ให้ข้อความของขั้น 4 เพราะเนื้อข้อความเป็นของ
+// captions.json  ตอนนี้ขั้น 5 มีข้อความของตัวเอง (fx.json["texts"]) จึงพิมพ์
+// เนื้อ ตั้งหน้าตา และตั้งเวลาได้ครบในที่เดียว โดยไม่แตะขั้น 4 เลย
 function fxTextForm(){
   const w = el('div');
-  const t = fxText();
+  const list = fxTexts();
 
-  w.append(el('h4', 'caph', 'ซับจากบทพูด — ทั้งกองใช้แบบเดียวกัน'));
-  w.append(fxAnimForm(t.sub, (k, v) => { t.sub[k] = v; },
-                      {plate: true, warnPos: true}));
-  w.append(el('p', 'note',
-    'ตั้งตัวเดียวคุมทุกบรรทัด — ซับที่เคลื่อนไหวไม่เหมือนกันทีละบรรทัดอ่านแล้ว'
-    + 'เหมือนหนังพัง ไม่ใช่เหมือนตั้งใจ'));
+  w.append(el('p', 'note', 'ข้อความของขั้น 5 ล้วน ๆ — ไม่ได้ดึงซับหรือกล่องข้อความ'
+    + 'ของขั้น 4 มาใส่ ไฟล์ของขั้น 4 จึงไม่ถูกแตะ และเปลี่ยนที่นี่ก็ไม่กระทบขั้นนั้น'));
 
-  const boxes = FX.view.boxes || [];
-  w.append(el('h4', 'caph', `กล่องข้อความที่ใส่เองในขั้น 4 — ${boxes.length} กล่อง`));
-  if (!boxes.length){
-    w.append(el('p', 'note',
-      'ยังไม่มีกล่องข้อความ — ไปเพิ่มที่ขั้น 4 (ปุ่ม + Text บนตัวเล่น) '
-      + 'แล้วกลับมาตั้งแอนิเมชันให้ทีละกล่องที่นี่'));
-  } else {
-    boxes.forEach(b => {
-      const row = el('div', 'fxbox');
-      const hd = el('div', 'fxboxhd');
-      hd.append(el('b', null, b.text || '(ว่าง)'), el('span', 'spacer'),
-                el('span', 'note', b.name || ''));
-      const open = fxSel === b.id;
-      const tog = el('button', 'sm', open ? 'ปิด' : (fxBoxCfg(b.id).anim || 'none'));
-      tog.onclick = () => { fxSel = open ? null : b.id; render(); };
-      hd.append(tog);
-      row.append(hd);
-      if (open){
-        const cur = {...fxText().sub, ...((fxText().boxes || {})[b.id] || {})};
-        row.append(fxAnimForm(cur, (k, v) => {
-          const bx = fxText().boxes || (fxText().boxes = {});
-          bx[b.id] = {...cur, [k]: v};
-        }, {plate: true}));
-      }
-      w.append(row);
-    });
+  const add = el('div', 'acts');
+  const b = el('button', 'sm primary', '＋ ข้อความตรงหัวอ่าน');
+  b.onclick = fxAddText;
+  add.append(b, el('span', 'note', `${list.length} ชิ้น`));
+  w.append(add);
+
+  list.forEach(t => w.append(fxTextRow(t)));
+
+  // ── ซับอัตโนมัติจากบทพูด — สวิตช์ของขั้น 5 เอง ──
+  const au = fxAuto();
+  w.append(el('h4', 'caph', 'ซับอัตโนมัติจากบทพูด'));
+  w.append(capBool(() => au.enabled, v => { au.enabled = v; },
+                   'เขียนบทพูดที่ถอดไว้ในขั้น 2 ลงภาพทั้งกอง', fxTouch));
+  w.append(el('p', 'note', au.enabled
+    ? 'อ่านจาก transcript ของขั้น 2 โดยตรง ไม่ผ่าน captions.json ของขั้น 4 — '
+      + 'ทุกบรรทัดใช้แอนิเมชันชุดเดียวกันข้างล่าง'
+    : 'ปิดอยู่ — ไฟล์ของขั้น 5 จะมีเฉพาะข้อความที่ใส่เองข้างบน '
+      + '(ขั้น 4 ยังทำซับของมันได้ตามปกติ คนละไฟล์กัน)'));
+  if (au.enabled){
+    const t = fxText();
+    w.append(fxAnimForm(t.sub, (k, v) => { t.sub[k] = v; },
+                        {plate: true, warnPos: true}));
   }
 
-  // กล่องพื้นหลังโผล่เฉพาะตอนมีคนเปิดใช้ — ไม่งั้นเป็นฟอร์มที่ปรับแล้วไม่มีอะไรเกิดขึ้น
-  const anyPlate = t.sub.plate
-    || Object.values(t.boxes || {}).some(x => x && x.plate)
-    || boxes.some(b => fxBoxCfg(b.id).plate);
+  // ── สไตล์กลาง ──
+  const st = fxStyle();
+  w.append(el('h4', 'caph', 'สไตล์กลางของขั้น 5'));
+  const g0 = el('div', 'capgrid');
+  g0.append(capField('ฟอนต์', fxSelect(() => st.font, v => { st.font = v; },
+                                      (FX.fonts && FX.fonts.length ? FX.fonts
+                                        : [st.font]))));
+  g0.append(capField('ขนาด', capNum(() => st.size, v => { st.size = v; },
+                                   12, 200, 1, 'px', fxTouch)));
+  g0.append(capField('สี', capColour(() => st.color, v => { st.color = v; }, fxTouch)));
+  g0.append(capField('สีขอบ', capColour(() => st.outline,
+                                       v => { st.outline = v; }, fxTouch)));
+  g0.append(capField('ความหนาขอบ', capNum(() => st.border, v => { st.border = v; },
+                                         0, 12, 0.5, 'px', fxTouch)));
+  w.append(g0);
+  w.append(el('p', 'note', 'ใช้เป็นค่าตั้งต้นของข้อความชิ้นใหม่ และเป็นสไตล์ของซับ'
+    + 'อัตโนมัติ — ชิ้นที่วางไปแล้วเก็บหน้าตาของตัวเองไว้ ไม่เปลี่ยนตาม'));
+
+  // ── กล่องพื้นหลัง ──
+  const t = fxText();
+  const anyPlate = list.some(x => x.plate) || (au.enabled && t.sub.plate);
   if (anyPlate){
     w.append(el('h4', 'caph', 'หน้าตาของกล่องพื้นหลัง'));
     const g = el('div', 'capgrid');
@@ -2967,6 +3580,55 @@ function fxTextForm(){
       'ค่ากลางตัวเดียวทั้งเรื่อง — กล่องที่หน้าตาไม่เป็นชุดเดียวกันอ่านแล้วรก'));
   }
   return w;
+}
+
+function fxTextRow(t){
+  const cue = fxTextCue(t.id);
+  const wrap = el('div', 'capbox' + (fxSel === t.id ? ' on' : ''));
+  const hd = el('div', 'capbh');
+  hd.append(el('span', 'capt', cue && cue.a != null ? mmss(cue.a) : '—'));
+  hd.append(el('span', 'note', `${t.name} @ ${(+t.at).toFixed(2)} วิ · ${(+t.dur).toFixed(1)} วิ`));
+  hd.append(el('span', 'spacer'));
+  const del = el('button', 'sm', '✕');
+  del.type = 'button'; del.title = 'ลบข้อความนี้';
+  del.onclick = () => {
+    fxData().texts = fxTexts().filter(x => x !== t);
+    if (fxSel === t.id) fxSel = null;
+    fxTouch();
+  };
+  hd.append(del);
+  wrap.append(hd);
+
+  if (cue && cue.orphan)
+    wrap.append(el('p', 'note warnnote',
+      'ช่วงที่ข้อความนี้เกาะอยู่ถูกตัดออกจากหนังไปแล้ว — จะไม่โผล่ในไฟล์'));
+
+  const ta = el('textarea'); ta.rows = 2; ta.value = t.text || '';
+  ta.placeholder = 'พิมพ์ข้อความ';
+  // ไม่วาดใหม่ทุกตัวอักษร — โฟกัสจะหลุดจากช่อง แต่ต้องอัปเดตพรีวิวบนตัวเล่นให้ทัน
+  ta.oninput = () => { t.text = ta.value; fxDirty = true; capPaint(); };
+  ta.onchange = () => { t.text = ta.value; fxTouch(); };
+  wrap.append(ta);
+
+  const put = (k, v) => { t[k] = v; };
+  const g = el('div', 'capgrid');
+  g.append(capField('เริ่มที่ (วินาทีในคลิป)',
+    capNum(() => t.at, v => put('at', v), 0, 3600, 0.05, 'วิ', fxTouch)));
+  g.append(capField('ยาว', capNum(() => t.dur, v => put('dur', v),
+                                 0.2, 60, 0.1, 'วิ', fxTouch)));
+  g.append(capField('ขนาด', capNum(() => t.size, v => put('size', v),
+                                  12, 200, 1, 'px', fxTouch)));
+  g.append(capField('สี', capColour(() => t.color, v => put('color', v), fxTouch)));
+  g.append(capField('สีขอบ', capColour(() => t.outline,
+                                      v => put('outline', v), fxTouch)));
+  g.append(capField('ความหนาขอบ', capNum(() => t.border, v => put('border', v),
+                                        0, 12, 0.5, 'px', fxTouch)));
+  g.append(capField('หมุน', capNum(() => t.angle, v => put('angle', v),
+                                  -180, 180, 1, '°', fxTouch)));
+  wrap.append(g);
+  wrap.append(fxAnimForm(t, put, {plate: true}));
+  wrap.append(el('p', 'note', 'ลากข้อความบนตัวเล่นเพื่อจัดตำแหน่ง'));
+  return wrap;
 }
 
 function stepFx(box){
@@ -3075,7 +3737,11 @@ function stepFx(box){
   box.appendChild(c);
 
   if (items.length) box.appendChild(playerCard());
+  // เลนของชั้นแต่ง อยู่ *เหนือ* ฟอร์ม — เห็นภาพรวมก่อนว่าของอยู่ตรงไหน แล้วค่อย
+  // ลงรายละเอียดของชิ้นที่คลิกเลือก (เลนเป็นตัวเปลี่ยนแท็บให้เองด้วย)
+  if (items.length && FX.view && FX.view.ready) box.appendChild(fxTimeline());
   if (items.length && FX.view && FX.view.ready) box.appendChild(fxEditor());
+  // ไทม์ไลน์คลิปของขั้น 3 ยังอยู่ท้ายสุดตามเดิม — ขั้นนี้ไม่ได้แก้มัน แค่ดูอ้างอิง
   if (items.length) box.appendChild(timeline());
 }
 
@@ -4111,7 +4777,12 @@ function capPaint(){
   const t = PV.gt || 0;
   const H = +val('video.height') || 1080;
   const k = box.clientHeight / H;              // ย่อจากพิกเซลหนังจริงเป็นพิกเซลจอ
-  const now = capRows().filter(c => c.a != null && t >= c.a - 0.01 && t < c.b);
+  // ขั้น 4 วาดข้อความของขั้น 4 · ขั้น 5 วาดข้อความของขั้น 5 — คนละกองกันแล้ว
+  // (ขั้น 5 ไม่ได้ยืม captions.json มาใส่อีกต่อไป ดู fx.TEXT_ITEM) เวลาของขั้น 5
+  // เป็นเวลาหลังสโลว์โม จึงต้องเทียบด้วย fxT5 ไม่ใช่เวลาของตัวเล่นตรง ๆ
+  const now = step === 5
+    ? fxTextsNow(fxT5(t))
+    : capRows().filter(c => c.a != null && t >= c.a - 0.01 && t < c.b);
   // ขั้น 5 วาดรูปทรงเพิ่มบนชั้นเดียวกัน — ตำแหน่งของลูกศรต้องเห็นตอนลาก ไม่งั้น
   // ตั้งค่าอย่างเดียวแล้วรอ render จบถึงจะรู้ว่ามันชี้ไปที่อะไร
   const shapes = step === 5 ? fxShapesNow(t) : [];
@@ -4121,7 +4792,8 @@ function capPaint(){
   const key = now.map(c => c.id).join('|') + '@' + capSel + '@' + capStamp()
             + '@' + capMemo.key
             + (step === 5 ? '@' + fxSel
-                          + '@' + JSON.stringify([fxText(), fxShapes(), fxOverlays()])
+                          + '@' + JSON.stringify([fxTexts(), fxStyle(), fxText(),
+                                                  fxShapes(), fxOverlays()])
                           : '');
   if (box.dataset.key === key) return;
   box.dataset.key = key;
@@ -4129,6 +4801,26 @@ function capPaint(){
   now.forEach(c => box.append(capNode(c, k)));
   shapes.forEach(s => box.append(fxShapeNode(s, k)));
   if (step === 5) fxOverlaysNow(t).forEach(o => box.append(fxOverlayNode(o)));
+}
+
+// ข้อความของขั้น 5 ที่กำลังขึ้นตอนนี้ — เวลามาจากเอนจิน (คำนวณจากไทม์ไลน์ที่
+// บันทึกแล้ว) ส่วนเนื้อกับหน้าตาเอาของสดจากร่างที่กำลังแก้ พิมพ์แล้วเห็นทันที
+// โดยไม่ต้องรอบันทึก — ท่าเดียวกับ fxOverlaysNow ข้างล่าง
+function fxTextsNow(t5){
+  const live = {};
+  fxTexts().forEach(x => { live[x.id] = x; });
+  return ((FX.view || {}).cues || [])
+    .filter(c => c.a != null && t5 >= c.a - 0.01 && t5 < c.b)
+    .map(c => {
+      const x = live[c.id];
+      if (!x) return c;                    // ซับอัตโนมัติ — ไม่มีตัวจริงให้แก้
+      const st = {...c.style};
+      (FX.defaults.text_style_keys || []).forEach(k => {
+        if (x[k] !== undefined) st[k] = x[k];
+      });
+      return {...c, text: x.text, x: x.x, y: x.y, style: st,
+              fx: {...c.fx, ...x}};
+    });
 }
 
 // ภาพซ้อนที่กำลังขึ้นตอนนี้ — เวลามาจากเอนจิน หน้าตา/ตำแหน่งเอาของสด
@@ -4174,9 +4866,9 @@ function fxOverlayNode(o){
 
 // รูปทรงที่กำลังขึ้นตอนนี้ — ผสมค่าที่ยังไม่บันทึกทับของที่เซิร์ฟเวอร์คำนวณเวลามา
 // (เวลามาจากเอนจินเสมอ · หน้าตากับตำแหน่งเอาของสด จะได้เห็นผลทันทีที่ลาก)
-// ชิ้นนี้เปิดกล่องพื้นหลังไว้ไหม — ตอบเหมือนที่ fxtext.cues() ตัดสิน (ซับใช้ของกลาง
-// กล่องข้อความใช้ของตัวเองถ้าตั้งไว้ ไม่งั้นตกกลับมาใช้ของซับ)
-const fxCuePlate = c => !!(c.kind === 'box' ? fxBoxCfg(c.id) : fxText().sub).plate;
+// ชิ้นนี้เปิดกล่องพื้นหลังไว้ไหม — ตอบเหมือนที่ fxtext.cues() ตัดสิน (ข้อความที่
+// ใส่เองพกค่าของตัวเองมา · ซับอัตโนมัติใช้ค่ากลางของทั้งกอง)
+const fxCuePlate = c => !!(c.kind === 'auto' ? fxText().sub : (c.fx || c)).plate;
 
 const fxRgba = (hex, a) => {
   const h = String(hex || '#000000').replace('#', '');
@@ -4241,6 +4933,8 @@ const capStamp = () => JSON.stringify([CAP.style, CAP.auto.styles,
 // สไตล์ที่ใช้วาดจริงตอนนี้ — ผสมสดจากของที่ยังไม่บันทึก ไม่ใช่ของที่เซิร์ฟเวอร์
 // ผสมมาให้ตอนโหลด (นั่นเก่าไปแล้วทันทีที่มีคนเลื่อนแถบสักตัว)
 function capLive(c){
+  // ขั้น 5 มีสไตล์ของตัวเอง และแถวที่ fxTextsNow ส่งมาผสมค่าสดให้แล้ว
+  if (step === 5) return {...fxStyle(), ...(c.style || {})};
   const over = c.kind === 'box'
     ? ((CAP.boxes || []).find(b => (b.id || '') === c.id) || {}).style
     : (CAP.auto.styles || {})[c.id];
@@ -4249,7 +4943,7 @@ function capLive(c){
 
 function capNode(c, k){
   const s = capLive(c);
-  const bx = c.kind === 'box'
+  const bx = step !== 5 && c.kind === 'box'
     ? (CAP.boxes || []).find(b => (b.id || '') === c.id) : null;
   if (bx){ c = {...c, text: bx.text, x: bx.x, y: bx.y}; }
   const d = el('div', 'cp' + (c.kind === 'box' ? ' bx' : '') + (capSel === c.id ? ' on' : ''));
@@ -4346,6 +5040,14 @@ function capDragTo(e, id, put, done){
 }
 
 function capDragBox(e, id){
+  // ขั้น 5 ลากข้อความของขั้น 5 · ขั้น 4 ลากกล่องของขั้น 4 — คนละกองกัน
+  if (step === 5){
+    const t = fxTexts().find(x => x.id === id);
+    if (!t) return;                       // ซับอัตโนมัติ ไม่มีตัวจริงให้ย้าย
+    fxSel = id; fxSelKind = 'text';
+    capDragTo(e, id, (x, y) => { t.x = x; t.y = y; }, fxTouch);
+    return;
+  }
   const b = (CAP.boxes || []).find(x => (x.id || '') === id);
   if (!b) return;
   capSel = id;

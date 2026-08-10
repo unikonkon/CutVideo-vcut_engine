@@ -33,10 +33,10 @@ def out_path(ctx):
 
 
 def build_ass(ctx, W, H, data=None, man=None):
-    """ไฟล์ ASS ของขั้น 5 — ข้อความเคลื่อนไหว + กล่องพื้นหลัง + รูปทรงเวกเตอร์
+    """ไฟล์ ASS ของขั้น 5 — ข้อความ + กล่องพื้นหลัง + รูปทรงเวกเตอร์
 
-    เนื้อข้อความกับหน้าตานิ่ง ๆ ยังมาจาก captions.json ของขั้น 4 ทั้งหมด ที่นี่
-    เติมแค่การเคลื่อนไหวกับของที่วาดเอง (ดู fxtext.py)
+    ทุกอย่างมาจาก fx.json ของขั้น 5 เอง **ไม่อ่าน captions.json ของขั้น 4 แล้ว**
+    ขั้นนี้ต่อจากขั้น 3 อย่างเดียว (ดู fx.TEXT_ITEM สำหรับเหตุผลเต็ม)
     """
     return fxtext.build_ass(ctx, W, H, fxdata=data, man=man)
 
@@ -49,8 +49,12 @@ def run(ctx, out=None):
         die("ยังเขียนตัวหนังสือลงภาพไม่ได้ — ติดตั้ง ffmpeg-full ก่อน\n"
             "   brew install ffmpeg-full")
 
-    # ขั้น 5 ต่อจาก render.json เหมือนขั้น 4 และคิดเวลาข้อความจากไทม์ไลน์เหมือนกัน
-    # — ด่านเดียวกันจึงต้องอยู่ที่นี่ด้วย (ดู caption.stale)
+    # ขั้น 5 ต่อจาก render.json ของขั้น 3 และคิดเวลาข้อความจาก edl.json — ถ้าสอง
+    # อย่างไม่ตรงกัน ข้อความจะถูกเผาลงภาพผิดช่วงแบบกู้ไม่ได้ ด่านนี้จึงต้องมี
+    #
+    # ยืมตัวตรวจของ caption.py มาใช้ ไม่ได้แปลว่าขั้น 5 พึ่งขั้น 4: มันอ่านแค่
+    # edl.json กับ render.json ซึ่งเป็นของขั้น 3 ทั้งคู่ ไม่ได้แตะ captions.json
+    # (เนื้อข้อความของขั้น 5 มาจาก fx.json ล้วน ๆ — ดู build_ass ข้างบน)
     why = caption.stale(ctx)
     if why:
         die(why)
@@ -104,7 +108,9 @@ def run(ctx, out=None):
     if n_ov:
         how += f" · ภาพซ้อน {n_ov} ชิ้น"
     if alabel:
-        how += " · เพลง" + (" (หลบเสียงพูด)" if data["music"].get("duck") else "")
+        mus = music.spans(data, total)
+        n_duck = sum(1 for m, _, _ in mus if m.get("duck"))
+        how += f" · เพลง {len(mus)} แทร็ก" + (f" (หลบเสียงพูด {n_duck})" if n_duck else "")
     info(f"FINISH  {len(files)} ชิ้น · {how} → {dst.name}  "
          f"{c('(เข้ารหัสภาพใหม่หนึ่งรอบ)', 'd')}")
 
@@ -187,7 +193,10 @@ def status(ctx):
                      "text": fx.TEXT, "plate": fx.PLATE, "shape": fx.SHAPE,
                      "anim": fx.ANIM, "needs_pos": list(fx.NEEDS_POS),
                      "shape_kind": fx.SHAPE_KIND, "grade": fx.GRADE,
-                     "overlay": fx.OVERLAY, "overlay_anim": fx.OVERLAY_ANIM},
+                     "overlay": fx.OVERLAY, "overlay_anim": fx.OVERLAY_ANIM,
+                     # ชั้นข้อความของขั้น 5 เอง — หน้าเว็บสร้างชิ้นใหม่จากค่าพวกนี้
+                     "style": fx.STYLE, "text_item": fx.TEXT_ITEM,
+                     "text_style_keys": list(fx.TEXT_STYLE_KEYS)},
         # ข้อความ/รูปทรงพร้อมเวลาที่คำนวณแล้ว — หน้าเว็บวาดพรีวิวจากตัวเลขชุด
         # เดียวกับที่จะกลายเป็นไฟล์จริง ไม่ให้เบราว์เซอร์คิดเอง
         # (ชื่อ "view" ไม่ใช่ "text" เพราะ fx["text"] คือ *ค่าที่ตั้งไว้* ส่วนนี่คือ
@@ -203,6 +212,9 @@ def status(ctx):
         "pending": _pending_labels(data, segs),
         "ffmpeg": {"ok": bool(caption.text_ffmpeg(ctx, quiet=True)),
                    "how": "brew install ffmpeg-full"},
+        # รายชื่อฟอนต์ในเครื่อง — ขั้น 5 มีสไตล์ของตัวเองแล้ว จึงต้องมีรายการให้
+        # เลือกเองด้วย (caption.fonts() แค่ไล่ฟอนต์ในระบบ ไม่ได้อ่าน captions.json)
+        "fonts": caption.fonts(),
         "out": {"path": str(o), "name": o.name, "exists": o.exists(),
                 "size": o.stat().st_size if o.exists() else 0,
                 "mtime": int(o.stat().st_mtime) if o.exists() else 0},

@@ -23,7 +23,18 @@ from urllib.parse import urlparse
 from . import fx
 from .util import warn
 
-# ── เพลงประกอบ ──
+# ── เพลงประกอบ · หนึ่งแทร็ก ──
+#
+# **ผูกเวลากับวินาทีในหนังตรง ๆ ไม่ใช่ (คลิป, วินาทีในคลิป) เหมือนชั้นอื่น**
+#
+# ชั้นที่เหลือของขั้น 5 (ข้อความ · รูปทรง · ภาพซ้อน) เกาะกับคลิป เพราะมันเป็นของ
+# ที่ "ชี้ไปที่สิ่งที่เห็นในช็อตนั้น" — ช็อตย้ายไปไหนก็ต้องตามไป  เพลงไม่ใช่แบบ
+# นั้น มันเป็นพื้นหลังที่คลุมหลายช็อตพร้อมกัน ถ้าผูกกับคลิปมันจะถูกตัดตามความยาว
+# ของคลิปที่มันบังเอิญเกาะอยู่ (คลิปยาว 2 วินาที = เพลงดัง 2 วินาที) ซึ่งไม่ใช่
+# สิ่งที่ใครต้องการเลย
+#
+# ราคาที่จ่าย: ไปแก้ไทม์ไลน์ที่ขั้น 3 แล้วเพลงไม่เลื่อนตาม ต้องมาเลื่อนเอง —
+# ยอมรับได้ เพราะเพลงมีไม่กี่ท่อน ไม่ใช่ร้อยชิ้นแบบข้อความ
 MUSIC = {
     "file": "",
     "gain_db": -18.0,      # ดังแค่ไหนเทียบกับต้นฉบับ
@@ -32,6 +43,9 @@ MUSIC = {
     "duck_release": 400,   # ms กว่าจะกลับมาดังเท่าเดิมหลังเงียบ
     "fade_in": 1.0,
     "fade_out": 2.0,
+    "at": 0.0,             # เริ่มที่วินาทีที่เท่าไรของหนัง
+    "dur": 0.0,            # ยาวกี่วินาที · 0 = ไปจนจบเรื่อง
+    "loop": True,          # เพลงสั้นกว่าช่วง = วนซ้ำ (ปิด = ปล่อยให้เงียบ)
 }
 AUDIO_EXT = (".mp3", ".m4a", ".aac", ".wav", ".flac", ".ogg", ".opus")
 
@@ -69,20 +83,47 @@ def is_audio(name):
     return Path(str(name or "")).suffix.lower() in AUDIO_EXT
 
 
-def track(ctx, data):
-    """ไฟล์เพลงที่จะใช้จริง — None ถ้าไม่ได้ตั้งหรือหาไฟล์ไม่เจอ"""
+def items_of(data):
+    """แทร็กเพลงทั้งหมดในรูปแบบ list เสมอ
+
+    fx.json รุ่นเก่าเก็บ music เป็น dict ก้อนเดียว (เพลงเดียวคลอทั้งเรื่อง) —
+    อ่านเป็นแทร็กเดียวที่ at=0 dur=0 ซึ่งแปลว่า "ทั้งเรื่อง" พอดี ไฟล์เก่าจึงให้
+    ผลลัพธ์เท่าเดิมเป๊ะโดยไม่ต้องมีตัวแปลงรุ่นไฟล์
+    """
+    m = data.get("music")
+    if isinstance(m, dict):
+        return [m] if m.get("file") else []
+    return [x for x in (m or []) if isinstance(x, dict) and x.get("file")]
+
+
+def track(ctx, m):
+    """ไฟล์จริงของแทร็กนี้ — None ถ้าหาไม่เจอหรือไม่ใช่ไฟล์เสียง"""
     from . import overlay
-    name = Path(str((data.get("music") or {}).get("file") or "")).name
+    name = Path(str((m or {}).get("file") or "")).name
     if not name:
         return None
     f = overlay.dir_of(ctx) / name
     if not f.is_file():
-        warn(f"ไม่พบไฟล์เพลง {name} ในโฟลเดอร์ assets — ข้ามชั้นเพลงไป")
+        warn(f"ไม่พบไฟล์เพลง {name} ในโฟลเดอร์ assets — ข้ามแทร็กนี้ไป")
         return None
     if not is_audio(name):
-        warn(f"{name} ไม่ใช่ไฟล์เสียง — ข้ามชั้นเพลงไป")
+        warn(f"{name} ไม่ใช่ไฟล์เสียง — ข้ามแทร็กนี้ไป")
         return None
     return f
+
+
+def spans(data, total):
+    """[(แทร็ก, เริ่ม, จบ)] ที่ตัดให้อยู่ในความยาวหนังแล้ว — เรียงตามเวลา"""
+    out = []
+    for m in items_of(data):
+        cfg = {**MUSIC, **m}
+        a = max(0.0, float(cfg.get("at", 0) or 0))
+        d = float(cfg.get("dur", 0) or 0)
+        b = min(float(total), a + d if d > 0 else float(total))
+        if b - a > 0.05:
+            out.append((cfg, round(a, 3), round(b, 3)))
+    out.sort(key=lambda x: x[1])
+    return out
 
 
 def build(ctx, data, total, master=0.0, idx=1):
@@ -91,44 +132,73 @@ def build(ctx, data, total, master=0.0, idx=1):
     คืนป้าย None เมื่อไม่มีเพลงและไม่ต้องปรับความดังรวม — ผู้เรียกจะได้ใช้ทาง
     `-map 0:a` เดิมซึ่งไม่แตะเสียงเลย (เร็วกว่าและพิสูจน์ได้ว่าเหมือนของขั้น 4)
 
-    `idx` = หมายเลข input ที่เพลงจะไปเป็น ต้องนับต่อจากภาพซ้อนที่ต่อไปก่อนแล้ว
+    `idx` = หมายเลข input ที่เพลงแทร็กแรกจะไปเป็น ต้องนับต่อจากภาพซ้อนที่ต่อไปก่อน
+
+    **หลายแทร็กผสมกันในพาสเดียว** — แต่ละแทร็กถูกตัดตามช่วงของตัวเอง เฟดเข้า/ออก
+    ของตัวเอง แล้วเลื่อนไปวางที่วินาทีของตัวเองด้วย adelay จากนั้นค่อยผสมรวมกับ
+    เสียงหนังทีเดียว ไม่ได้ทำทีละชั้นทับกันไปเรื่อย ๆ (เหตุผลเดียวกับที่ finish.py
+    ต่อฟิลเตอร์ทั้งหมดในคำสั่งเดียว)
+
+    การหลบเสียงพูดเป็นของ *รายแทร็ก* ไม่ใช่ค่ากลาง — เพลงคลอกับเสียงเอฟเฟกต์
+    สั้น ๆ ไม่ควรถูกบังคับให้หลบเท่ากัน แทร็กที่เปิดหลบแต่ละตัวจึงต้องมีสำเนา
+    เสียงหนังเป็นตัวสั่งของตัวเอง (asplit ตามจำนวนที่เปิดไว้ + 1 สำหรับตัวเสียงเอง)
     """
-    m = {**MUSIC, **(data.get("music") or {})}
-    f = track(ctx, data)
-    if not f:
+    rate = int(ctx.get("encode", {}).get("arate", 48000))
+    rows = []
+    for m, a, b in spans(data, total):
+        f = track(ctx, m)
+        if f:
+            rows.append((m, a, b, f))
+    if not rows:
         return [], "", None
 
-    ins = ["-stream_loop", "-1", "-i", str(f)]
-    g = float(m.get("gain_db", -18.0))
-    fin = max(0.0, float(m.get("fade_in", 1.0)))
-    fout = max(0.0, float(m.get("fade_out", 2.0)))
+    ins, parts, labels = [], [], []
+    n_duck = sum(1 for m, _, _, _ in rows if m.get("duck"))
+    for n, (m, a, b, f) in enumerate(rows):
+        # วนซ้ำเฉพาะที่สั่งไว้ — `-stream_loop -1` ทำให้ input ไม่มีวันจบเอง
+        # ซึ่งไม่เป็นไรเพราะ atrim ข้างล่างตัดให้เท่าช่วงพอดีอยู่แล้ว
+        ins += (["-stream_loop", "-1"] if m.get("loop", True) else []) + ["-i", str(f)]
+        span = b - a
+        fin = max(0.0, float(m.get("fade_in", 1.0)))
+        fout = max(0.0, float(m.get("fade_out", 2.0)))
+        seg = [f"volume={float(m.get('gain_db', -18.0)):.2f}dB",
+               f"atrim=0:{span:.3f}", "asetpts=N/SR/TB",
+               f"aresample={rate}"]
+        if fin > 0:
+            seg.append(f"afade=t=in:st=0:d={min(fin, span):.2f}")
+        if fout > 0 and span > fout:
+            seg.append(f"afade=t=out:st={span - fout:.3f}:d={fout:.2f}")
+        # เลื่อนไปวางที่วินาทีของมันในหนัง — all=1 เพื่อให้เลื่อนทุกช่องเสียง
+        # ไม่ต้องรู้ล่วงหน้าว่าไฟล์เป็นโมโนหรือสเตอริโอ
+        if a > 0.0005:
+            seg.append(f"adelay=delays={int(round(a * 1000))}:all=1")
+        parts.append(f"[{idx + n}:a]" + ",".join(seg) + f"[m{n}]")
+        labels.append(f"m{n}")
 
-    bg = [f"volume={g:.2f}dB",
-          # ตัดให้ยาวเท่าหนังพอดี — `-stream_loop -1` ทำให้ input ไม่มีวันจบเอง
-          f"atrim=0:{total:.3f}", "asetpts=N/SR/TB",
-          f"aresample={int(ctx.get('encode', {}).get('arate', 48000))}"]
-    if fin > 0:
-        bg.append(f"afade=t=in:st=0:d={fin:.2f}")
-    if fout > 0 and total > fout:
-        bg.append(f"afade=t=out:st={total - fout:.3f}:d={fout:.2f}")
-    parts = [f"[{idx}:a]" + ",".join(bg) + "[bg]"]
-
-    if m.get("duck"):
-        th = duck_threshold(m.get("duck_db", 12.0))
-        rel = min(4000, max(20, int(m.get("duck_release", 400))))
-        # asplit เพราะเสียงหนังถูกใช้สองที่: เป็นตัวเสียงเอง และเป็นตัวสั่งให้
-        # เพลงหลบ · ต่อ [0:a] เข้าสองฟิลเตอร์ตรง ๆ ไม่ได้ ffmpeg จะฟ้องทันที
-        parts.append("[0:a]asplit=2[voice][key]")
-        parts.append(f"[bg][key]sidechaincompress=threshold={th:.5f}"
-                     f":ratio={DUCK_RATIO:g}:attack=20:release={rel}[duck]")
-        voice, music_lbl = "voice", "duck"
+    if n_duck:
+        # เสียงหนังถูกใช้หลายที่: เป็นตัวเสียงเอง + เป็นตัวสั่งให้แต่ละแทร็กหลบ
+        # ต่อ [0:a] เข้าหลายฟิลเตอร์ตรง ๆ ไม่ได้ ffmpeg จะฟ้องทันที
+        parts.append("[0:a]asplit=" + str(n_duck + 1) + "[voice]"
+                     + "".join(f"[k{j}]" for j in range(n_duck)))
+        voice = "voice"
+        j = 0
+        for n, (m, _, _, _) in enumerate(rows):
+            if not m.get("duck"):
+                continue
+            th = duck_threshold(m.get("duck_db", 12.0))
+            rel = min(4000, max(20, int(m.get("duck_release", 400))))
+            parts.append(f"[m{n}][k{j}]sidechaincompress=threshold={th:.5f}"
+                         f":ratio={DUCK_RATIO:g}:attack=20:release={rel}[d{n}]")
+            labels[n] = f"d{n}"
+            j += 1
     else:
-        voice, music_lbl = "0:a", "bg"
+        voice = "0:a"
 
     # normalize=0 สำคัญ — ค่าตั้งต้นของ amix คือหารความดังด้วยจำนวน input
-    # ใส่เพลงเข้าไปแล้วเสียงพูดจะเบาลงครึ่งหนึ่งทันทีโดยไม่มีอะไรบอก
+    # ใส่เพลงเข้าไปแล้วเสียงพูดจะเบาลงตามจำนวนแทร็กทันทีโดยไม่มีอะไรบอก
     # duration=first = จบพร้อมเสียงหนัง ไม่ใช่รอเพลงที่วนไม่รู้จบ
-    parts.append(f"[{voice}][{music_lbl}]amix=inputs=2:duration=first"
+    parts.append(f"[{voice}]" + "".join(f"[{l}]" for l in labels)
+                 + f"amix=inputs={len(labels) + 1}:duration=first"
                  f":dropout_transition=0:normalize=0[amix]")
     last = "amix"
     if master >= -70.0 and master != 0.0:
@@ -216,16 +286,21 @@ def fetch_cmd(ctx, url):
 
 
 def summary(ctx, data=None):
-    """สรุปชั้นเพลงให้หน้าเว็บ"""
+    """สรุปชั้นเพลงให้หน้าเว็บ
+
+    `tracks` = ไฟล์เสียงที่มีอยู่ในคลัง (ของให้เลือก) · `items` = แทร็กที่วางลง
+    หนังไปแล้ว — สองอย่างนี้คนละเรื่องกัน ชื่อจึงต้องไม่ปนกัน
+    """
     from . import overlay
     data = data if data is not None else fx.load(ctx)
-    m = {**MUSIC, **(data.get("music") or {})}
-    name = Path(str(m.get("file") or "")).name
     d = overlay.dir_of(ctx)
     tracks = sorted(p.name for p in d.iterdir()
                     if p.is_file() and is_audio(p.name)) if d.exists() else []
+    items = [{**MUSIC, **m} for m in items_of(data)]
     exe = ytdlp()
-    return {"music": m, "tracks": tracks,
-            "found": bool(name) and name in tracks,
+    return {"items": items, "tracks": tracks,
+            "missing": sorted({Path(str(m.get("file") or "")).name
+                               for m in items
+                               if Path(str(m.get("file") or "")).name not in tracks}),
             "fetch": {"ok": bool(exe), "path": exe or "", "how": YT_HOW},
             "defaults": MUSIC}

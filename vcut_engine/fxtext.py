@@ -61,27 +61,56 @@ def remap(t, s4, s5):
     return t
 
 
-def cues(ctx, capdata=None, fxdata=None, man=None):
-    """ข้อความทุกชิ้นพร้อมเวลาบนไทม์ไลน์ของขั้น 5 + ชั้นเอฟเฟกต์ของแต่ละชิ้น"""
-    from . import caption
-    capdata = capdata if capdata is not None else caption.load(ctx)
+def cues(ctx, fxdata=None, man=None):
+    """ข้อความทุกชิ้นของ *ขั้น 5 เอง* พร้อมเวลาบนไทม์ไลน์ของขั้น 5
+
+    **ไม่อ่าน captions.json อีกแล้ว** — ขั้น 5 ต่อจากขั้น 3 อย่างเดียว ของที่โผล่
+    ในไฟล์จึงมาจาก fx.json["texts"] ที่คนกดสั่งเองในขั้นนี้เท่านั้น (เหตุผลเต็ม
+    อยู่ที่ fx.TEXT_ITEM) · ซับจากบทพูดยังทำได้ผ่านสวิตช์ auto_sub ของขั้น 5 เอง
+    ซึ่งอ่าน transcript ของขั้น 2 ตรง ๆ และปิดไว้เป็นค่าตั้งต้น
+
+    รูปร่างของแถวยังเหมือนที่ caption.cues() เคยส่งมาเป๊ะ (id · kind · a · b ·
+    text · name · clip_a · style · x · y) เพราะตัวประกอบสตริงที่ยืมมาจาก
+    caption.py อ่านจากคีย์พวกนี้ — เปลี่ยนแค่ *ที่มาของข้อมูล* ไม่ใช่รูปแบบ
+    """
     fxdata = fxdata if fxdata is not None else fx.load(ctx)
     man = man if man is not None else fx.plan(ctx, fxdata)
-
-    rows, _ = caption.cues(ctx, capdata)
-    s4, s5 = timelines(man["segments"])
-    sub = fxdata["text"]["sub"]
-    per = fxdata["text"]["boxes"]
-
+    base = fxdata["style"]
     out = []
-    for r in rows:
-        # ชิ้นกำพร้า (ช่วงที่มันเกาะอยู่ถูกตัดออกจากหนังไปแล้ว) ส่งต่อไปตามเดิม
-        # ให้หน้าเว็บบอกคนเขียนได้ — ตัวเขียนไฟล์ข้ามมันอยู่แล้ว
-        anim = dict(per.get(r["id"]) or sub) if r["kind"] == "box" else dict(sub)
-        out.append({**r,
-                    "a": remap(r["a"], s4, s5),
-                    "b": remap(r["b"], s4, s5),
-                    "fx": anim})
+
+    for k, t in enumerate(fxdata["texts"]):
+        tid = t.get("id") or f"t{k}"
+        st = {**base, **{key: t[key] for key in fx.TEXT_STYLE_KEYS if key in t}}
+        anim = {key: t.get(key, fx.TEXT[key]) for key in fx.TEXT}
+        row = {"id": tid, "kind": "box", "text": str(t.get("text", "")),
+               "name": t.get("name", ""), "clip_a": float(t.get("at", 0) or 0),
+               "style": st, "x": t.get("x"), "y": t.get("y"), "fx": anim}
+        spans = shape_spans(man, t.get("name", ""), t.get("at", 0), t.get("dur", 3))
+        if not spans:
+            # ชิ้นกำพร้า — ช่วงที่มันเกาะอยู่ถูกตัดออกจากหนังไปแล้ว ส่งต่อให้
+            # หน้าเว็บบอกคนเขียนได้ ตัวเขียนไฟล์ข้ามมันอยู่แล้ว
+            out.append({**row, "a": None, "b": None, "orphan": True})
+            continue
+        for a, b in spans:
+            out.append({**row, "a": a, "b": b})
+
+    if fxdata["auto_sub"]["enabled"]:
+        tr = (read_json(ctx.transcript, {}) or {}).get("clips", {})
+        sub = fxdata["text"]["sub"]
+        # ไล่ทีละคลิปที่ถูกใช้จริง ไม่ใช่ทั้ง transcript — คลิปที่ไม่ได้อยู่ในหนัง
+        # ไม่มีช่วงให้เกาะอยู่แล้ว shape_spans จะคืนว่างทุกบรรทัด
+        for name in sorted({s["name"] for s in man["segments"]}):
+            for i, line in enumerate(tr.get(name, [])):
+                a0, b0, text = line[0], line[1], line[2]
+                if not str(text).strip():
+                    continue
+                for a, b in shape_spans(man, name, a0, b0 - a0):
+                    out.append({"id": f"{name}#{i}", "kind": "auto",
+                                "a": a, "b": b, "text": str(text), "name": name,
+                                "clip_a": float(a0), "style": dict(base),
+                                "x": None, "y": None, "fx": dict(sub)})
+
+    out.sort(key=lambda r: (r["a"] is None, r["a"] or 0))
     return out, float(man["total"])
 
 
@@ -305,15 +334,14 @@ def _style_line(name, base, border_style):
     ])
 
 
-def build_ass(ctx, W, H, capdata=None, fxdata=None, man=None):
-    from . import caption
-    capdata = capdata if capdata is not None else caption.load(ctx)
+def build_ass(ctx, W, H, fxdata=None, man=None):
     fxdata = fxdata if fxdata is not None else fx.load(ctx)
     man = man if man is not None else fx.plan(ctx, fxdata)
 
-    base = capdata["style"]
+    # สไตล์กลางเป็นของขั้น 5 เอง ไม่ได้ยืมของขั้น 4 มาแล้ว (ดู fx.STYLE)
+    base = fxdata["style"]
     plate = fxdata["text"]["plate"]
-    rows, _ = cues(ctx, capdata, fxdata, man)
+    rows, _ = cues(ctx, fxdata, man)
     shapes = [s for s in shape_cues(ctx, fxdata, man) if not s.get("orphan")]
 
     # สไตล์กล่องมีเฉพาะตอนที่มีคนใช้จริง — ไฟล์ที่ไม่มีกล่องจะได้เหมือนของขั้น 4
@@ -383,28 +411,26 @@ def build_ass(ctx, W, H, capdata=None, fxdata=None, man=None):
 
 def summary(ctx, fxdata=None):
     """สรุปชั้นข้อความของขั้น 5 ให้หน้าเว็บ — ไม่เขียนไฟล์อะไรทั้งนั้น"""
-    from . import caption
     if not read_json(ctx.work / "render.json"):
-        return {"ready": False, "cues": [], "shapes": [], "boxes": []}
-    capdata = caption.load(ctx)
+        return {"ready": False, "cues": [], "shapes": [], "segments": []}
     fxdata = fxdata if fxdata is not None else fx.load(ctx)
     man = fx.plan(ctx, fxdata)
-    rows, total = cues(ctx, capdata, fxdata, man)
+    rows, total = cues(ctx, fxdata, man)
     return {
         "ready": True,
         "total": round(total, 3),
         "cues": rows,
         "shapes": shape_cues(ctx, fxdata, man),
-        # กล่องข้อความของขั้น 4 — หน้าเว็บเอาไปทำรายการ "ตั้งแอนิเมชันทีละกล่อง"
-        "boxes": [{"id": b.get("id") or f"box{i}",
-                   "text": str(b.get("text", ""))[:60],
-                   "name": b.get("name", "")}
-                  for i, b in enumerate(capdata["boxes"])],
         # ชิ้นในไทม์ไลน์ + เอฟเฟกต์ที่ตั้งไว้ — แท็บ "คลิป" ของขั้น 5 ใช้ตัวนี้
         # กุญแจมาจากเอนจิน ไม่ให้หน้าเว็บประกอบเอง ไม่งั้นวันหนึ่งจะประกอบคนละ
         # แบบแล้วตั้งค่าไว้กับชิ้นที่ไม่มีอยู่จริง
+        # speed/exact_dur ต้องส่งไปด้วย ไม่ใช่ให้หน้าเว็บเดาจาก len/dur — เลนของ
+        # ขั้น 5 คำนวณช่วงเองตอนที่ของยังไม่ผ่านเอนจิน (เพิ่งวาง/กำลังลาก) ถ้าใช้
+        # สูตรคนละตัวจะคลาดกันหลักมิลลิวินาที แล้วบล็อกจะขยับตอนกดบันทึกทุกครั้ง
         "segments": [{"name": s["name"], "kind": s["kind"],
                       "start": s["start"], "dur": s["dur"],
+                      "speed": s.get("speed", 1.0),
+                      "exact_dur": s.get("exact_dur", s["dur"]),
                       "at": s["at"], "len": s["len"],
                       "key": fx.clip_key(s), "fx": s["fx"],
                       "effects": s["effects"]} for s in man["segments"]],

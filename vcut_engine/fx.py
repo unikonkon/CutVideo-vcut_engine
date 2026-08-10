@@ -56,6 +56,10 @@ CLIP = {
     "zoom": 1.0,      # 1.0 = เต็มเฟรมตามเดิม
     "grade": "",      # ชื่อโทนสี · "" = ไม่แตะสี
     "mute": False,    # ตัดเสียงของชิ้นนี้
+    # ดัง/เบาของชิ้นนี้เทียบกับที่ขั้น 3 ปรับมาแล้ว — คนละเรื่องกับ mute ซึ่งเป็น
+    # สวิตช์ปิดสนิท ช็อตที่ลมแรงเกินหรือเสียงพูดเบาไปนิดเดียวไม่ควรต้องเลือก
+    # ระหว่าง "เอาทั้งหมด" กับ "ไม่เอาเลย"
+    "vol_db": 0.0,
 }
 
 # เอฟเฟกต์รายชิ้นที่ทำงานได้จริงแล้ว (เฟส C)
@@ -119,6 +123,61 @@ PLATE = {
     "alpha": 0.45,     # 0 = ใส · 1 = ทึบ
     "pad": 14,         # พิกเซลรอบตัวหนังสือ
 }
+
+# ── ชั้นข้อความของขั้น 5 (เฟส D) ──
+#
+# **ขั้น 5 เป็นเจ้าของข้อความของตัวเอง ไม่ได้ยืมของขั้น 4 มาใส่อีกแล้ว**
+#
+# เดิมขั้น 5 เรียก caption.cues() มาทั้งกอง ซึ่งแปลว่าไฟล์ของขั้น 5 มีซับจาก
+# บทพูดติดมาด้วยเสมอ *แม้ไม่เคยเปิดขั้น 4 เลยสักครั้ง* (caption.load() มีค่า
+# ตั้งต้น auto.enabled = True) — วัดจริงกับโปรเจกต์ที่ไม่มี captions.json ได้ซับ
+# เขียนลงภาพ 179 บรรทัดโดยไม่มีใครสั่ง
+#
+# ตอนนี้ขั้น 5 อ่านจากขั้น 3 อย่างเดียว (render.json → fx.plan) แล้วข้อความเป็น
+# ของตัวเองใน fx.json["texts"] · ขั้น 4 ยังทำงานของมันได้ครบเหมือนเดิมทุกประการ
+# ไม่ถูกแก้แม้แต่บรรทัดเดียว — สองขั้นแค่ไม่ยุ่งกันแล้ว
+#
+# ผูกเวลากับ (คลิป, วินาทีในคลิป) เหมือนรูปทรงกับภาพซ้อน จึงใช้ shape_spans()
+# ตัวเดียวกันแปลงเป็นเวลาในหนังได้เลย ไม่ต้องมีตัวคำนวณชุดที่สอง
+STYLE = {
+    "font": "Sukhumvit Set",
+    "size": 54,
+    "color": "#FFFFFF",
+    "outline": "#000000",
+    "border": 3.0,
+    "shadow": 0.0,
+    "bold": False,
+    "italic": False,
+    "align": 5,          # เลขแป้นตัวเลข — 5 = กลางจอ (ข้อความขั้น 5 ตรึงพิกัดเสมอ)
+    "margin_v": 60,
+    "margin_h": 60,
+    "spacing": 0.0,
+    "angle": 0.0,
+}
+
+# ค่าที่ข้อความชิ้นหนึ่งทับสไตล์กลางได้ — ชื่อคีย์ตรงกับของ caption.py เป๊ะ
+# เพราะ _tags()/_place()/_style_line() ที่ยืมมาใช้อ่านจากชื่อพวกนี้
+TEXT_STYLE_KEYS = ("font", "size", "color", "outline", "border", "shadow",
+                   "bold", "italic", "spacing", "angle", "align")
+
+TEXT_ITEM = {
+    "text": "ข้อความใหม่",
+    "x": 0.5, "y": 0.5,
+    # หน้าตา — ว่าง/ศูนย์ไม่ได้แปลว่า "ตามสไตล์กลาง" เพราะจะแยกจาก "ตั้งใจสั่ง 0"
+    # ไม่ออก จึงลอกค่าจากสไตล์กลางมาทั้งชุดตอนสร้างชิ้นใหม่แทน (ดู new_text)
+    "font": "Sukhumvit Set", "size": 54,
+    "color": "#FFFFFF", "outline": "#000000",
+    "border": 3.0, "shadow": 0.0,
+    "bold": False, "italic": False,
+    "spacing": 0.0, "angle": 0.0, "align": 5,
+    # แอนิเมชัน — ของชิ้นนี้เอง ไม่ใช่ค่ากลางเหมือนสมัยที่ยืมข้อความขั้น 4 มา
+    "anim": "none", "in": 0.18, "out": 0.14, "plate": False,
+}
+
+# สวิตช์ซับอัตโนมัติของขั้น 5 เอง — อ่าน transcript ของขั้น 2 ตรง ๆ ไม่ผ่าน
+# captions.json  ปิดไว้เป็นค่าตั้งต้น: ขั้น 5 คือขั้น "แต่งหนัง" ของที่โผล่ในไฟล์
+# ต้องมาจากการกดสั่ง ไม่ใช่โผล่มาเองเพราะมีบทพูดอยู่ในโปรเจกต์
+AUTO_SUB = {"enabled": False}
 
 # ── รูปทรงเวกเตอร์ (เฟส A) ──
 #
@@ -195,15 +254,56 @@ def out_path(ctx, quiet=False):
 
 
 def _music_defaults():
-    """ค่าตั้งต้นของชั้นเพลง — อยู่ที่ music.py ที่เดียว นำเข้าตอนใช้เพื่อกันวงกลม
-    (music.py ต้อง import fx เพื่อใช้ตัวโหลด)"""
+    """ค่าตั้งต้นของแทร็กเพลงหนึ่งแทร็ก — อยู่ที่ music.py ที่เดียว นำเข้าตอนใช้
+    เพื่อกันวงกลม (music.py ต้อง import fx เพื่อใช้ตัวโหลด)"""
     from .music import MUSIC
     return dict(MUSIC)
 
 
+def _music(m):
+    """แทร็กเพลงหนึ่งแทร็ก — ผูกเวลากับวินาทีในหนัง ไม่ใช่กับคลิป (ดู music.MUSIC)"""
+    out = _pick(m, _music_defaults())
+    # dur = 0 ของเพลงแปลว่า "คลอไปจนจบเรื่อง" ซึ่งเป็นค่าที่ตั้งใจสั่ง แต่
+    # LIMITS["dur"] มีพื้นต่ำ 0.1 (ชั้นที่เกาะคลิปยาว 0 ไม่มีความหมาย ส่วนใหญ่
+    # เป็นค่าที่พิมพ์ผิด) — ปล่อยผ่านตัวดัดกลางแล้วเพลงคลอทั้งเรื่องจะถูกหั่น
+    # เหลือหนึ่งในสิบวินาทีเงียบ ๆ จึงต้องอ่านช่องนี้เองแยกต่างหาก
+    try:
+        d = float(m.get("dur", 0) or 0)
+    except (TypeError, ValueError):
+        d = 0.0
+    out["dur"] = round(min(86400.0, max(0.0, d)), 3)
+    out["id"] = str(m.get("id") or "")
+    out["file"] = Path(str(m.get("file") or "")).name
+    return out
+
+
+def _music_list(v):
+    """รับได้ทั้ง list (รูปแบบใหม่) และ dict ก้อนเดียว (ไฟล์รุ่นเก่า)
+
+    รุ่นเก่าเก็บเพลงเดียวคลอทั้งเรื่อง ซึ่งตรงกับแทร็กเดียวที่ at=0 dur=0 พอดี
+    จึงไม่ต้องมีตัวแปลงรุ่นไฟล์ แค่รับสองรูปแบบตรงนี้ที่เดียว
+    """
+    raw = [v] if isinstance(v, dict) else (v if isinstance(v, list) else [])
+    out = []
+    for i, m in enumerate(raw):
+        if not isinstance(m, dict) or not str(m.get("file") or ""):
+            continue
+        t = _music(m)
+        # ไฟล์ที่เขียนก่อนรุ่นนี้ (และไฟล์ที่คนพิมพ์เอง) ไม่มี id — ตั้งให้เลย
+        # เพราะหน้าเว็บใช้ id เป็นตัวชี้ว่ากำลังแก้/ลบแทร็กไหน id ว่างแปลว่า
+        # ทุกแทร็กเป็นตัวเดียวกันหมดในสายตาของหน้าเว็บ
+        if not t["id"]:
+            t["id"] = f"m{i}"
+        out.append(t)
+    return out
+
+
 def blank():
     return {"version": 1, "clips": {}, "overlays": [],
-            "music": _music_defaults(),
+            # เพลงเป็น *รายการ* ตั้งแต่รุ่นนี้ — หลายแทร็กวางคนละช่วงได้
+            "music": [],
+            # ชั้นข้อความของขั้น 5 เอง — ดูเหตุผลที่ TEXT_ITEM
+            "style": dict(STYLE), "texts": [], "auto_sub": dict(AUTO_SUB),
             # sub   = ซับจากบทพูดทั้งกอง (ตัวเดียวคุมหมด — ซับที่เคลื่อนไหวไม่
             #         เหมือนกันทีละบรรทัดอ่านแล้วเหมือนหนังพัง ไม่ใช่เหมือนตั้งใจ)
             # boxes = กล่องข้อความที่ใส่เองในขั้น 4 · ตั้งแยกทีละกล่องได้
@@ -222,6 +322,9 @@ LIMITS = {
     "angle": (-360.0, 360.0), "border": (0.0, 40.0),
     "x": (0.0, 1.0), "y": (0.0, 1.0),
     "at": (0.0, 86400.0), "dur": (0.1, 3600.0),
+    # \anN รับได้แค่ 1–9 · เลขนอกช่วงทำให้ libass ทิ้งทั้งบรรทัดเงียบ ๆ
+    "align": (1, 9), "vol_db": (-40.0, 12.0), "margin_v": (0, 600),
+    "margin_h": (0, 600), "shadow": (0.0, 20.0), "spacing": (-20.0, 40.0),
     "gain_db": (-60.0, 12.0), "duck_db": (0.0, 24.0),
     "duck_release": (20, 4000), "fade_in": (0.0, 10.0), "fade_out": (0.0, 10.0),
 }
@@ -282,9 +385,8 @@ def load(ctx):
                         for k, v in clips.items() if isinstance(v, dict)}
     if isinstance(d.get("overlays"), list):
         out["overlays"] = [_overlay(o) for o in d["overlays"] if isinstance(o, dict)]
-    if isinstance(d.get("music"), dict):
-        from .music import MUSIC
-        out["music"] = _pick(d["music"], MUSIC)
+    if d.get("music") is not None:
+        out["music"] = _music_list(d["music"])
 
     t = d.get("text") or {}
     if isinstance(t, dict):
@@ -297,7 +399,34 @@ def load(ctx):
 
     if isinstance(d.get("shapes"), list):
         out["shapes"] = [_shape(s) for s in d["shapes"] if isinstance(s, dict)]
+
+    if isinstance(d.get("style"), dict):
+        out["style"] = _pick(d["style"], STYLE)
+    if isinstance(d.get("texts"), list):
+        out["texts"] = [_text(t) for t in d["texts"] if isinstance(t, dict)]
+    if isinstance(d.get("auto_sub"), dict):
+        out["auto_sub"] = _pick(d["auto_sub"], AUTO_SUB)
     return out
+
+
+def _text(t):
+    """ข้อความหนึ่งชิ้นของขั้น 5 — ผูกเวลาแบบเดียวกับรูปทรงและภาพซ้อน"""
+    out = _pick(t, {**TEXT_ITEM, "at": 0.0, "dur": 3.0})
+    out["id"] = str(t.get("id") or "")
+    out["name"] = str(t.get("name") or "")
+    return out
+
+
+def new_text(style, name, at, tid):
+    """ชิ้นใหม่ที่ลอกหน้าตามาจากสไตล์กลาง — หน้าเว็บกับ CLI ใช้ตัวเดียวกัน
+
+    ลอกมาทั้งชุดตอนเกิด ไม่ใช่ปล่อยว่างไว้แล้วไปรวมกับสไตล์กลางตอนเขียนไฟล์ —
+    ไม่งั้น "แก้สไตล์กลางทีหลัง" จะไปเปลี่ยนหน้าตาของข้อความที่จัดไว้เรียบร้อย
+    แล้วทั้งเรื่องโดยไม่มีใครสั่ง ซึ่งเป็นเซอร์ไพรส์ที่ไม่มีใครอยากได้
+    """
+    base = {k: v for k, v in (style or {}).items() if k in TEXT_STYLE_KEYS}
+    return _text({**TEXT_ITEM, **base, "id": tid, "name": name,
+                  "at": round(float(at), 3), "dur": 3.0})
 
 
 def _shape(s):
@@ -350,9 +479,8 @@ def merge(data, payload):
     if isinstance(payload.get("overlays"), list):
         out["overlays"] = [_overlay(o) for o in payload["overlays"]
                            if isinstance(o, dict)]
-    if isinstance(payload.get("music"), dict):
-        from .music import MUSIC
-        out["music"] = _pick({**out["music"], **payload["music"]}, MUSIC)
+    if payload.get("music") is not None:
+        out["music"] = _music_list(payload["music"])
     t = payload.get("text")
     if isinstance(t, dict):
         txt = {k: dict(v) if isinstance(v, dict) else v for k, v in out["text"].items()}
@@ -366,6 +494,12 @@ def merge(data, payload):
         out["text"] = txt
     if isinstance(payload.get("shapes"), list):
         out["shapes"] = [_shape(s) for s in payload["shapes"] if isinstance(s, dict)]
+    if isinstance(payload.get("style"), dict):
+        out["style"] = _pick({**out["style"], **payload["style"]}, STYLE)
+    if isinstance(payload.get("texts"), list):
+        out["texts"] = [_text(t) for t in payload["texts"] if isinstance(t, dict)]
+    if isinstance(payload.get("auto_sub"), dict):
+        out["auto_sub"] = _pick({**out["auto_sub"], **payload["auto_sub"]}, AUTO_SUB)
     return out
 
 
@@ -482,6 +616,12 @@ def seg_afilter(f, dur):
     parts = []
     if f.get("mute"):
         parts.append("volume=0")
+    else:
+        # ปรับดัง/เบาก่อน atempo — atempo ไม่สนใจระดับ ลำดับจึงไม่มีผลต่อผลลัพธ์
+        # แต่วางไว้ต้นสายอ่านง่ายกว่า (และ mute ชนะเสมอ ไม่ต้องคูณสองชั้น)
+        vol = float(f.get("vol_db", 0.0) or 0.0)
+        if abs(vol) > 1e-6:
+            parts.append(f"volume={vol:.2f}dB")
     sp = float(f.get("speed", 1.0))
     if abs(sp - 1.0) > 1e-6:
         parts += _atempo(sp)
@@ -596,6 +736,8 @@ def _how(f):
         bits.append(str(f["grade"]))
     if f.get("mute"):
         bits.append("ปิดเสียง")
+    elif abs(float(f.get("vol_db", 0.0) or 0.0)) > 1e-6:
+        bits.append(f"{float(f['vol_db']):+g}dB")
     return " ".join(bits)
 
 
