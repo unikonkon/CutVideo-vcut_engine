@@ -46,6 +46,27 @@ def kind_of(name):
     return ""
 
 
+def upload_ok(name, want=None):
+    """นามสกุลนี้รับเข้าโฟลเดอร์ assets ได้ไหม — (ได้ไหม, รายการที่รับ)
+
+    กว้างกว่า kind_of เพราะโฟลเดอร์ assets เป็นคลังของ *ทั้งขั้น 5* ไม่ใช่ของชั้น
+    ภาพซ้อนอย่างเดียว — ไฟล์เพลงก็อยู่ที่นี่ (music.track อ่านจากที่เดียวกัน)
+    ก่อนหน้านี้ด่านนี้ใช้ kind_of ตรง ๆ ช่องลากไฟล์ในแท็บเพลงจึงเชิญให้ลาก
+    MP3/M4A/WAV เข้ามาแล้วถูกปฏิเสธทุกไฟล์ ทางเดียวที่เพลงเข้าคลังได้จริงคือ
+    โหลดจาก YouTube ซึ่งเขียนไฟล์ลงโฟลเดอร์เองโดยไม่ผ่านด่านนี้
+
+    `want` = ช่องที่ลากไฟล์เข้ามา ("media" = ภาพซ้อน · "audio" = เพลง) ปล่อยว่าง
+    คือรับหมด — ไฟล์ทั้งสองกลุ่มอยู่โฟลเดอร์เดียวกันก็จริง แต่คลังที่หน้าเว็บ
+    แสดงเป็นคนละรายการ ลากเพลงเข้าช่องภาพซ้อนแล้วผ่านจะได้ข้อความว่า "เพิ่มแล้ว"
+    ตามด้วยรายการที่ไม่มีไฟล์นั้นอยู่ ซึ่งอ่านว่าพังมากกว่าอ่านว่าลากผิดช่อง
+    """
+    from .music import AUDIO_EXT
+    media = tuple(fx.IMAGE_EXT) + tuple(fx.VIDEO_EXT)
+    audio = tuple(AUDIO_EXT)
+    ok = {"media": media, "audio": audio}.get(str(want or ""), media + audio)
+    return Path(name).suffix.lower() in ok, ok
+
+
 def safe_name(name):
     """ชื่อไฟล์ที่ยอมให้เขียนลงโฟลเดอร์ assets — ตัดเส้นทางทิ้งแล้วกรองตัวอักษร"""
     base = Path(str(name or "")).name
@@ -75,7 +96,7 @@ def assets(ctx):
     return out
 
 
-def save_asset(ctx, name, b64):
+def save_asset(ctx, name, b64, want=None):
     """รับไฟล์จากหน้าเว็บ (base64) — คืน (ชื่อที่บันทึกจริง, ข้อความผิดพลาด)
 
     ใช้ base64 บน JSON แทน multipart เพราะ http.server ของ stdlib ไม่มีตัวแกะ
@@ -85,8 +106,9 @@ def save_asset(ctx, name, b64):
     nm = safe_name(name)
     if not nm:
         return None, "ชื่อไฟล์ใช้ไม่ได้"
-    if not kind_of(nm):
-        return None, ("รองรับเฉพาะ " + " ".join(fx.IMAGE_EXT + fx.VIDEO_EXT)
+    ok, allowed = upload_ok(nm, want)
+    if not ok:
+        return None, ("รองรับเฉพาะ " + " ".join(allowed)
                       + f" — ไฟล์ที่ส่งมาเป็น {Path(nm).suffix or 'ไม่มีนามสกุล'}")
     raw = str(b64 or "")
     if "," in raw[:64]:                       # data:image/png;base64,....

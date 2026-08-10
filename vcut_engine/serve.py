@@ -1196,7 +1196,8 @@ def make_handler(ctx, job):
                         return self._json({"error": "ลบไม่ได้ — ไม่พบไฟล์"}, 400)
                     return self._json({"ok": True, "fx": build_fx(ctx)})
                 name, err = ovl.save_asset(ctx, payload.get("name"),
-                                           payload.get("data"))
+                                           payload.get("data"),
+                                           payload.get("want"))
                 if err:
                     return self._json({"error": err}, 400)
                 return self._json({"ok": True, "file": name, "fx": build_fx(ctx)})

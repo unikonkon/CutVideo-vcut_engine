@@ -2624,7 +2624,25 @@ const fxOverlays = () => fxData().overlays || (fxData().overlays = []);
 const fxAssets = () => ((FX.overlay || {}).assets) || [];
 const fxOvCue = id => ((FX.overlay || {}).cues || []).find(c => c.id === id);
 
-async function fxUpload(files){
+// รับสถานะชุดใหม่จากเซิร์ฟเวอร์ *โดยไม่ทับร่างที่ยังไม่บันทึก*
+//
+// เส้น /api/asset คืน FX ทั้งก้อนกลับมา (คลังไฟล์เปลี่ยน หน้าเว็บต้องรู้) แต่ก้อน
+// นั้นมี fx.json ฉบับ *ที่อยู่บนดิสก์* ติดมาด้วย — เอามาทับตรง ๆ แล้วของที่เพิ่งวาง
+// ลงไทม์ไลน์แต่ยังไม่ได้กดบันทึกจะหายเงียบ ๆ ทั้งชุด (แทร็กเพลงที่เพิ่งวาง ข้อความ
+// รูปทรง ภาพซ้อน) โดยที่ธง fxDirty ยังค้างอยู่ พอกดบันทึกทีหลังจึงเขียนของว่าง
+// ทับไฟล์ — อาการที่เห็นคือ "ใส่เพลงแล้วไม่มีเสียงเพลง"
+//
+// กฎเดียวกับ load(): ของบนดิสก์ชนะได้ก็ต่อเมื่อไม่มีร่างค้าง
+function fxAdopt(fresh){
+  const draft = fxDirty ? fxData() : null;
+  FX = fresh;
+  if (draft) FX.fx = draft;
+}
+
+// want = ช่องที่ลากไฟล์เข้ามา ('media' = ภาพซ้อน · 'audio' = เพลง) — ไฟล์สองกลุ่ม
+// อยู่โฟลเดอร์ assets เดียวกัน แต่คลังที่แสดงเป็นคนละรายการ ลากผิดช่องแล้วผ่าน
+// จะได้ "เพิ่มแล้ว" ตามด้วยคลังที่ไม่มีไฟล์นั้น ซึ่งอ่านว่าพังมากกว่าอ่านว่าลากผิด
+async function fxUpload(files, want){
   for (const f of files){
     try {
       const b64 = await new Promise((ok, no) => {
@@ -2633,8 +2651,8 @@ async function fxUpload(files){
         r.onerror = () => no(new Error('อ่านไฟล์ไม่ได้'));
         r.readAsDataURL(f);
       });
-      const r = await post('/api/asset', {name: f.name, data: b64});
-      FX = r.fx;
+      const r = await post('/api/asset', {name: f.name, data: b64, want});
+      fxAdopt(r.fx);
       toast(`เพิ่ม ${r.file} แล้ว`);
     } catch(e){ toast(`${f.name}: ${e.message}`, true); }
   }
@@ -2642,9 +2660,10 @@ async function fxUpload(files){
 }
 
 async function fxDeleteAsset(name){
-  const used = fxOverlays().filter(o => o.file === name).length;
+  const used = fxOverlays().filter(o => o.file === name).length
+             + fxMusics().filter(m => m.file === name).length;
   if (used && !confirm(`${name} ถูกใช้อยู่ ${used} ที่ในหนัง — ลบไฟล์ทิ้งเลยไหม`)) return;
-  try { FX = (await post('/api/asset', {delete: name})).fx; render(); }
+  try { fxAdopt(await post('/api/asset', {delete: name}).then(r => r.fx)); render(); }
   catch(e){ toast(e.message, true); }
 }
 
@@ -2671,13 +2690,13 @@ function fxOverlayPanel(){
     + 'เครื่องมืออื่นก็หย่อนเข้ามาทางนี้ได้'));
   const pick = el('input'); pick.type = 'file'; pick.multiple = true; pick.hidden = true;
   pick.accept = '.png,.jpg,.jpeg,.webp,.mov,.webm,.mp4';
-  pick.onchange = () => { if (pick.files.length) fxUpload([...pick.files]); };
+  pick.onchange = () => { if (pick.files.length) fxUpload([...pick.files], 'media'); };
   drop.onclick = () => pick.click();
   drop.ondragover = e => { e.preventDefault(); drop.classList.add('on'); };
   drop.ondragleave = () => drop.classList.remove('on');
   drop.ondrop = e => {
     e.preventDefault(); drop.classList.remove('on');
-    if (e.dataTransfer.files.length) fxUpload([...e.dataTransfer.files]);
+    if (e.dataTransfer.files.length) fxUpload([...e.dataTransfer.files], 'media');
   };
   w.append(drop, pick);
 
@@ -2890,16 +2909,16 @@ function fxMusicPanel(){
   // ── คลังไฟล์เพลง ──
   const drop = el('div', 'fxdrop');
   drop.append(el('div', 'fxwhat', 'ลากไฟล์เพลงมาวางที่นี่ หรือกดเพื่อเลือก'));
-  drop.append(el('div', 'note', 'MP3 · M4A · WAV · FLAC · OGG'));
+  drop.append(el('div', 'note', 'MP3 · M4A · AAC · WAV · FLAC · OGG · OPUS · ไม่เกิน 40 MB'));
   const pick = el('input'); pick.type = 'file'; pick.hidden = true;
   pick.accept = '.mp3,.m4a,.aac,.wav,.flac,.ogg,.opus';
-  pick.onchange = () => { if (pick.files.length) fxUpload([...pick.files]); };
+  pick.onchange = () => { if (pick.files.length) fxUpload([...pick.files], 'audio'); };
   drop.onclick = () => pick.click();
   drop.ondragover = e => { e.preventDefault(); drop.classList.add('on'); };
   drop.ondragleave = () => drop.classList.remove('on');
   drop.ondrop = e => {
     e.preventDefault(); drop.classList.remove('on');
-    if (e.dataTransfer.files.length) fxUpload([...e.dataTransfer.files]);
+    if (e.dataTransfer.files.length) fxUpload([...e.dataTransfer.files], 'audio');
   };
   w.append(drop, pick);
 
@@ -2978,6 +2997,8 @@ function fxMusicRow(m, i, tracks){
   wrap.append(capBool(() => m.duck, v => { m.duck = v; },
                       'ลดแทร็กนี้ลงเองตอนมีเสียงในหนัง', fxTouch));
   if (m.duck){
+    const M = FX.music || {};
+    const cap = +M.duck_max || 0;
     const g2 = el('div', 'capgrid');
     g2.append(capField('หลบลงประมาณ', capNum(() => m.duck_db, v => { m.duck_db = v; },
                                             2, 24, 1, 'dB', fxTouch)));
@@ -2987,8 +3008,19 @@ function fxMusicRow(m, i, tracks){
     wrap.append(g2);
     wrap.append(el('p', 'note',
       'ฟังคลื่นเสียงจริงของหนังแล้วลดตามทุกมิลลิวินาที (sidechaincompress) — '
-      + 'ไม่ได้อ่านบทพูด จึงไม่พังเมื่อแก้ไทม์ไลน์ · เป็นค่าประมาณ ความลึกจริง'
-      + 'ขึ้นกับว่าเสียงในหนังตรงนั้นดังแค่ไหนด้วย'));
+      + 'ไม่ได้อ่านบทพูด จึงไม่พังเมื่อแก้ไทม์ไลน์ · ช่วงที่ไม่มีใครพูด เพลงกลับ'
+      + 'มาดังเต็มระดับที่ตั้งไว้ ไม่ได้ถูกลดค้างไว้ทั้งเรื่อง'));
+    // ตัวอัดแยก "มีคนพูด" จาก "เงียบ" ด้วยความดังอย่างเดียว หลบลึกกว่าระยะห่าง
+    // ของสองอย่างนั้นไม่ได้ — บอกเพดานตรง ๆ ดีกว่าให้หมุนปุ่มแล้วสงสัยว่าทำไม
+    // เสียงไม่ต่างกัน
+    if (cap && +m.duck_db > cap)
+      wrap.append(el('p', 'note warnnote',
+        `หนังเรื่องนี้หลบได้ลึกสุด ${cap} dB (เสียงพูดดังกว่าเสียงพื้นหลังแค่นั้น) — `
+        + `ตั้งไว้ ${m.duck_db} dB ก็จะได้ ${(+M.duck_max).toFixed(1)} dB เท่ากัน`));
+    else if (cap)
+      wrap.append(el('p', 'note',
+        `ความลึกจริงกับหนังเรื่องนี้ ≈ ${Math.min(+m.duck_db || 0, cap).toFixed(1)} dB `
+        + `(ลึกสุดที่ทำได้ ${cap} dB)`));
   }
   return wrap;
 }
