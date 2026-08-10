@@ -2342,9 +2342,19 @@ const fxBoxCfg = id => (fxText().boxes || {})[id] || fxText().sub;
 function fxTouch(){ fxDirty = true; render(); capPaint(); }
 
 // บันทึกแล้วรับของที่คำนวณใหม่กลับมา — เวลาของทุกชิ้นมาจากเอนจินเสมอ เหมือนขั้น 4
+//
+// ต้องส่งให้ครบทุกแท็บที่แก้ได้ ไม่ใช่แค่ข้อความกับรูปทรง — fx.merge ฝั่งเซิร์ฟเวอร์
+// รับ clips · overlays · music มาตั้งแต่แรกแล้ว แต่หน้าเว็บไม่เคยส่งไปให้ ค่าที่
+// ตั้งในแท็บเพลง/ภาพซ้อน/คลิป จึงหายทุกครั้งที่กด "บันทึกเอฟเฟกต์" อย่างเงียบ ๆ
+// (คีย์ที่ยังไม่มีในร่างจะไม่ถูกส่ง merge จึงไม่ไปล้างของเดิมในไฟล์ทิ้ง)
 async function fxSave(quiet){
+  const d = fxData();
+  const body = {text: fxText(), shapes: fxShapes()};
+  if (d.clips) body.clips = d.clips;
+  if (d.overlays) body.overlays = d.overlays;
+  if (d.music) body.music = d.music;
   try {
-    const r = await post('/api/fx', {text: fxText(), shapes: fxShapes()});
+    const r = await post('/api/fx', body);
     FX = r.fx; fxDirty = false;
     if (!quiet) toast('บันทึกชั้นเอฟเฟกต์แล้ว');
     render(); capPaint();
@@ -2707,11 +2717,94 @@ function fxOverlayRow(o){
 
 const fxMusic = () => fxData().music || (fxData().music = {});
 
+// ── ดึงเสียงจากลิงก์ YouTube ─────────────────────────────────────
+//
+// อยู่บนสุดของแท็บเพลง เหนือช่องลากไฟล์ เพราะเป็นทางที่ *เริ่มต้นจากมือเปล่า*
+// ได้จริง — ช่องลากไฟล์ต้องมีไฟล์อยู่ในเครื่องอยู่แล้วถึงจะใช้ได้
+//
+// งานวิ่งผ่านคิวเดียวกับขั้นอื่น log จึงไหลเข้าแผง "บันทึกการทำงาน" และปุ่มถูก
+// ขีดเส้นกะพริบให้เองโดย poll() — ไม่ต้องทำแถบความคืบหน้าของตัวเองอีกชุด
+let ytUrl = '';
+let ytBefore = null;      // รายชื่อเพลงก่อนกดโหลด — ใช้หาว่าได้ไฟล์ไหนใหม่มา
+
+async function fxFetchMusic(){
+  const u = (ytUrl || '').trim();
+  if (!u) return toast('ใส่ลิงก์ YouTube ก่อน', true);
+  // งานจบแล้ว poll() จะเรียก load() ซึ่งทับ FX ด้วยของจากดิสก์ได้ — ร่างที่ยังไม่
+  // บันทึกต้องลงไฟล์ก่อน ไม่งั้นค่าที่เพิ่งตั้งไว้จะหายไปพร้อมกับเพลงที่เพิ่งได้มา
+  if (fxDirty) await fxSave(true);
+  ytBefore = new Set((FX.music || {}).tracks || []);
+  try {
+    await post('/api/music', {url: u});
+    logSince = 0; $('#log').textContent = '';
+    toast('กำลังดาวน์โหลด — ดูความคืบหน้าที่ "บันทึกการทำงาน"');
+    poll();
+  } catch(e){ ytBefore = null; toast(e.message, true); }
+}
+
+// เรียกหลัง load() ตอนงานโหลดเสียงจบ — บอกว่าได้ไฟล์ไหนมา แล้วเลือกให้เลยถ้ายัง
+// ไม่ได้เลือกเพลงไว้ (ถ้าเลือกไว้แล้วไม่แตะ — คนตั้งใจใช้เพลงเดิมอยู่)
+function fxMusicArrived(){
+  const tracks = (FX.music || {}).tracks || [];
+  const add = ytBefore ? tracks.filter(t => !ytBefore.has(t)) : [];
+  ytBefore = null;
+  if (!add.length)
+    return toast('โหลดเสร็จแล้ว แต่ไม่เจอไฟล์เสียงใหม่ในคลัง — ดูบันทึกการทำงาน', true);
+  const name = add[add.length - 1];
+  step = 5; fxTab = 'music';
+  if (!fxMusic().file){
+    fxMusic().file = name;
+    fxDirty = true;
+    toast(`ได้ ${name} — เลือกเป็นเพลงประกอบให้แล้ว กด "บันทึกเอฟเฟกต์" เพื่อยืนยัน`);
+  } else {
+    toast(`ได้ ${name} — เลือกได้จากช่อง "เพลง"`);
+  }
+  ytUrl = '';
+  render();
+}
+
+function fxFetchPanel(){
+  const f = (FX.music || {}).fetch || {};
+  const w = el('div', 'sect');
+  w.append(el('h4', 'caph', 'ดาวน์โหลดเสียงจาก YouTube'));
+  const row = el('div', 'acts');
+  const inp = el('input');
+  inp.type = 'url'; inp.value = ytUrl;
+  inp.placeholder = 'https://www.youtube.com/watch?v=…';
+  inp.style.cssText = 'flex:1;min-width:15rem';
+  // ไม่เรียก render() ตอนพิมพ์ — วาดใหม่ทั้งหน้าจะแย่งโฟกัสออกจากช่องทุกตัวอักษร
+  inp.oninput = () => { ytUrl = inp.value; };
+  inp.onkeydown = e => { if (e.key === 'Enter'){ e.preventDefault(); fxFetchMusic(); } };
+  const go = el('button', 'primary runbtn', '⤓ ดาวน์โหลดเสียง');
+  go.dataset.step = 'music';        // poll() ขีดเส้นกะพริบใต้ปุ่มนี้ตอนงานวิ่ง
+  go.onclick = fxFetchMusic;
+  if (!f.ok){
+    // locked = poll() จะไม่ปลดปุ่มนี้ให้ตอนงานว่าง — ยังไม่มีเครื่องมือให้เรียก
+    go.disabled = true; go.classList.add('locked');
+  }
+  row.append(inp, go);
+  w.append(row);
+  if (!f.ok)
+    w.append(el('p', 'note warnnote',
+      `ยังไม่มี yt-dlp ในเครื่อง — ติดตั้งด้วย \`${f.how || 'brew install yt-dlp'}\` `
+      + 'แล้วรีเฟรชหน้านี้ ปุ่มจะใช้ได้เอง'));
+  else
+    w.append(el('p', 'note', 'ได้ไฟล์ .m4a เข้าคลังเพลงโดยตรง — หยิบแทร็กเสียงที่ '
+      + 'YouTube มีให้อยู่แล้วมาตรง ๆ ไม่เข้ารหัสใหม่ จึงเร็วและไม่เสียคุณภาพ · '
+      + 'ลิงก์ที่พ่วงเพลย์ลิสต์มาจะโหลดเฉพาะคลิปเดียว'));
+  w.append(el('p', 'note warnnote', '⚠ ใช้กับเสียงที่คุณมีสิทธิ์ใช้เท่านั้น — '
+    + 'การโหลดคลิปของคนอื่นลงเครื่องขัดกับเงื่อนไขการใช้งานของ YouTube '
+    + 'เว้นแต่เป็นคลิปของคุณเองหรือเพลงที่เจ้าของอนุญาตไว้'));
+  return w;
+}
+
 function fxMusicPanel(){
   const w = el('div');
   const m = fxMusic();
   const M = FX.music || {};
   const tracks = M.tracks || [];
+
+  w.append(fxFetchPanel());
 
   const drop = el('div', 'fxdrop');
   drop.append(el('div', 'fxwhat', 'ลากไฟล์เพลงมาวางที่นี่ หรือกดเพื่อเลือก'));
@@ -5986,9 +6079,14 @@ async function poll(){
   $('#stop').hidden = !j.running;
   $('#stop').disabled = false;
   if (j.running) polling = setTimeout(poll, 800);
-  else if (j.stopped){ toast('หยุดแล้ว — ของที่ทำไปก่อนหน้ายังอยู่ครบ'); load(true); }
+  else if (j.stopped){ ytBefore = null;
+    toast('หยุดแล้ว — ของที่ทำไปก่อนหน้ายังอยู่ครบ'); load(true); }
+  // งานโหลดเสียงบอกผลด้วยตัวเอง (ได้ไฟล์ไหนมา · เลือกให้หรือยัง) จึงไม่เด้ง
+  // "เสร็จแล้ว" ซ้ำ — ต้องรอ load() ก่อนเสมอ เพราะรายชื่อเพลงใหม่มากับรอบนั้น
+  else if (j.code === 0 && j.step === 'music') load(true).then(fxMusicArrived);
   else if (j.code === 0){ toast('เสร็จแล้ว'); load(true); }
-  else if (j.code != null) toast('งานล้มเหลว — ดูบันทึกการทำงาน', true);
+  else if (j.code != null){ ytBefore = null;
+    toast('งานล้มเหลว — ดูบันทึกการทำงาน', true); }
 }
 
 // ── AI ติชมหนังที่ตัดแล้ว ────────────────────────────────────────

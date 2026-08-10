@@ -1172,6 +1172,22 @@ def make_handler(ctx, job):
             if p == "/api/fx":
                 return self._json({"ok": True, "fx": save_fx(ctx, payload)})
 
+            if p == "/api/music":
+                # ผ่านคิวงานเดียวกับขั้นอื่น ไม่ใช่รันคาคำขอ HTTP ไว้ — เพลงยาว
+                # ห้านาทีใช้เวลาไม่กี่วินาทีก็จริง แต่เน็ตช้าหรือคลิปยาวเป็นชั่วโมง
+                # จะกลายเป็นคำขอที่ค้างไม่มีกำหนดโดยไม่มีอะไรบอกว่าไปถึงไหน และ
+                # กดหยุดไม่ได้  ทางนี้ log ไหลเข้าแผง "บันทึกการทำงาน" ให้เอง
+                from . import music as music_mod
+                argv, err = music_mod.fetch_cmd(ctx, payload.get("url"))
+                if err:
+                    return self._json({"error": err}, 400)
+                if job.running:
+                    return self._json({"error": "มีงานกำลังรันอยู่"}, 409)
+                # names ต้องส่งเอง — Job เดาชื่อขั้นจาก argv[2] ซึ่งของ yt-dlp
+                # เป็นตัวเลือกบรรทัดคำสั่ง ไม่ใช่ชื่องาน
+                job.start(argv, "music", ctx.launcher.parent, names=["music"])
+                return self._json({"ok": True})
+
             if p == "/api/asset":
                 from . import overlay as ovl
                 if payload.get("delete"):

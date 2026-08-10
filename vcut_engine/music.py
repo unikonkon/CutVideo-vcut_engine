@@ -16,7 +16,9 @@ transcript ที่แม่นและพังทันทีที่มี
 (ปรับความดังรวมทั้งเรื่อง) เข้ามาอยู่ในสายเดียวกัน — ทำทีหลังแยกต่างหากไม่ได้
 เพราะความดังรวมต้องวัดจากเสียงที่ *ผสมเพลงแล้ว* ไม่ใช่จากเสียงพูดอย่างเดียว
 """
+import shutil
 from pathlib import Path
+from urllib.parse import urlparse
 
 from . import fx
 from .util import warn
@@ -135,6 +137,84 @@ def build(ctx, data, total, master=0.0, idx=1):
     return ins, ";".join(parts), last
 
 
+# ─────────────────────── ดึงเสียงจากลิงก์ YouTube ───────────────────────
+#
+# เพลงประกอบต้องมาเป็น *ไฟล์ในโฟลเดอร์ assets* เท่านั้น (ดู track() ข้างบน) ซึ่ง
+# เดิมมีทางเดียวคือลากไฟล์มาวางในหน้าเว็บ — คนที่เจอเพลงบน YouTube จึงต้องออกไป
+# หาเครื่องมือข้างนอกโหลดเองแล้วค่อยลากกลับเข้ามา
+#
+# ทางนี้ยืมมือ yt-dlp ที่ติดตั้งไว้ในเครื่อง ไม่ได้เขียนตัวโหลดเอง: เว็บฝั่งโน้น
+# เปลี่ยนวิธีส่งไฟล์อยู่ตลอด โค้ดที่ไล่ตามเองจะพังเงียบ ๆ ทุกไม่กี่เดือน
+#
+# **ใช้กับเสียงที่มีสิทธิ์ใช้เท่านั้น** — การโหลดคลิปของคนอื่นลงเครื่องขัดกับ
+# เงื่อนไขการใช้งานของ YouTube เว้นแต่เป็นคลิปของตัวเองหรือเพลงที่อนุญาตไว้
+YT_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com",
+            "music.youtube.com", "youtu.be", "www.youtu.be"}
+YT_HOW = "brew install yt-dlp"
+
+
+def ytdlp():
+    """ที่อยู่ของ yt-dlp ในเครื่อง — None ถ้ายังไม่ได้ติดตั้ง"""
+    return shutil.which("yt-dlp")
+
+
+def check_url(url):
+    """(ลิงก์ที่ใช้ได้, ข้อความผิดพลาด) — ผ่านเฉพาะ YouTube
+
+    ตรวจที่ *โฮสต์ที่แกะจาก URL แล้ว* ไม่ใช่ด้วยการหาคำว่า "youtube" ในสตริง —
+    อย่างหลังปล่อยผ่านทั้ง youtube.evil.example และ path ที่มีคำนั้นอยู่ข้างใน
+    """
+    u = str(url or "").strip()
+    if not u:
+        return None, "ยังไม่ได้ใส่ลิงก์"
+    try:
+        p = urlparse(u)
+    except ValueError:
+        return None, "อ่านลิงก์นี้ไม่ออก"
+    if p.scheme not in ("http", "https"):
+        return None, "ลิงก์ต้องขึ้นต้นด้วย https:// (คัดลอกมาจากช่องที่อยู่ของเบราว์เซอร์)"
+    host = (p.hostname or "").lower()
+    if host not in YT_HOSTS:
+        return None, (f"รับเฉพาะลิงก์ YouTube — ลิงก์นี้มาจาก {host or 'ที่ไหนไม่รู้'}")
+    return u, None
+
+
+def fetch_cmd(ctx, url):
+    """คำสั่ง yt-dlp ที่จะเอาไปเข้าคิวงาน — (argv, ข้อความผิดพลาด)
+
+    ไม่ผ่านเชลล์ (Job ใช้ Popen กับ list ตรง ๆ) ลิงก์จึงเป็นอาร์กิวเมนต์ตัวเดียว
+    เสมอ ไม่มีทางแตกเป็นคำสั่งอื่นได้ และด่านตรวจข้างบนบังคับให้ขึ้นต้นด้วย
+    http(s) อยู่แล้ว จึงไม่มีทางถูกอ่านเป็นตัวเลือกบรรทัดคำสั่ง
+    """
+    from . import overlay
+    exe = ytdlp()
+    if not exe:
+        return None, f"ยังไม่มี yt-dlp ในเครื่อง — ติดตั้งด้วย `{YT_HOW}` แล้วกดใหม่"
+    u, err = check_url(url)
+    if err:
+        return None, err
+    d = overlay.dir_of(ctx)
+    d.mkdir(parents=True, exist_ok=True)
+    return [
+        exe,
+        # YouTube มีแทร็กเสียง m4a (AAC) แยกให้อยู่แล้ว หยิบตัวนั้นมาตรง ๆ จึง
+        # ไม่ต้องเข้ารหัสใหม่สักรอบ — เร็วกว่าและไม่เสียคุณภาพจากการแปลงซ้ำ
+        # ("-x --audio-format m4a" เป็นตาข่ายรับกรณีที่มีแต่ opus ให้เลือก)
+        "-f", "bestaudio[ext=m4a]/bestaudio",
+        "-x", "--audio-format", "m4a",
+        # ลิงก์เพลงมักพ่วง &list=... มาด้วย ถ้าไม่ห้ามไว้จะโหลดทั้งเพลย์ลิสต์
+        "--no-playlist",
+        # ชื่อไฟล์ต้องอยู่ในชุดตัวอักษรที่ overlay.safe_name ยอม ไม่งั้นเส้น
+        # /asset/<ชื่อ> จะหาไฟล์ไม่เจอ แล้วฟังตัวอย่างในหน้าเว็บไม่ได้
+        "--restrict-filenames",
+        # Job อ่าน log ทีละบรรทัด — ค่าปกติของ yt-dlp คือทับบรรทัดเดิมด้วย \r
+        # ซึ่งจะไม่มีอะไรโผล่ในแผงบันทึกเลยจนกว่าจะโหลดเสร็จ
+        "--newline",
+        "-o", str(d / "%(title).50s-%(id)s.%(ext)s"),
+        u,
+    ], None
+
+
 def summary(ctx, data=None):
     """สรุปชั้นเพลงให้หน้าเว็บ"""
     from . import overlay
@@ -144,6 +224,8 @@ def summary(ctx, data=None):
     d = overlay.dir_of(ctx)
     tracks = sorted(p.name for p in d.iterdir()
                     if p.is_file() and is_audio(p.name)) if d.exists() else []
+    exe = ytdlp()
     return {"music": m, "tracks": tracks,
             "found": bool(name) and name in tracks,
+            "fetch": {"ok": bool(exe), "path": exe or "", "how": YT_HOW},
             "defaults": MUSIC}
