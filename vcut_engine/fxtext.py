@@ -24,11 +24,23 @@ caption.cues() ตอบว่า "ข้อความชิ้นไหนข
 merge-style ชุดที่สองขึ้นมา — สั้นกว่ามาก และไม่มีทางที่ "ข้อความชิ้นไหนโผล่บ้าง"
 จะตอบไม่ตรงกันระหว่างสองขั้น เพราะมันมาจากฟังก์ชันเดียวกัน
 """
-from . import fx
+from . import fx, journey
 # ตัวประกอบสตริงของขั้น 4 — ยืมมาใช้ทั้งหมด ดูเหตุผลใน docstring ข้างบน
 from .caption import _clock as clock, _colour as colour, _esc as esc
 from .caption import _place as place_of, _tags as tags_of
 from .util import read_json
+
+
+# ── ลำดับชั้นของทุกอย่างที่ ASS วาด ──
+#
+# เลขมากอยู่บน · เลขเท่ากันตัวที่มาทีหลังในไฟล์อยู่บน  รวมไว้ที่เดียวเพราะลำดับ
+# ของชั้นคือ "อะไรบังอะไร" ซึ่งเป็นเรื่องที่ต้องมองเห็นทั้งกองพร้อมกันถึงจะตัดสิน
+# ได้ ไม่ใช่เลขที่ฝังอยู่ในสตริงคนละที่แล้วมาเดาเอาทีหลังว่าทำไมของหาย
+L_BACK = 0      # รูปทรงที่สั่งให้อยู่ข้างหลัง — พื้นของชิป/ป้าย
+L_AUTO = 1      # ซับจากบทพูด
+L_TEXT = 2      # ข้อความกับการ์ดที่วางเอง
+L_SHAPE = 3     # รูปทรงปกติ — ของที่ชี้ไปที่อะไรสักอย่าง ต้องไม่ถูกบัง
+L_JOURNEY = journey.LAYER   # แผนที่เส้นทาง ใช้ 4 ขึ้นไป (ดู journey.ass_events)
 
 
 # ─────────────────────────── ฐานเวลา ───────────────────────────
@@ -84,7 +96,10 @@ def cues(ctx, fxdata=None, man=None):
         anim = {key: t.get(key, fx.TEXT[key]) for key in fx.TEXT}
         row = {"id": tid, "kind": "box", "text": str(t.get("text", "")),
                "name": t.get("name", ""), "clip_a": float(t.get("at", 0) or 0),
-               "style": st, "x": t.get("x"), "y": t.get("y"), "fx": anim}
+               "style": st, "x": t.get("x"), "y": t.get("y"), "fx": anim,
+               # การ์ดหลายบรรทัด — ส่งดิบ ๆ ให้ตัวเขียน ASS กับหน้าเว็บกางเอง
+               # ทั้งคู่ต้องรู้ความสูงรวมเพื่อวาดให้ตรงกัน (ดู stack_lines)
+               "lines": list(t.get("lines") or [])}
         spans = shape_spans(man, t.get("name", ""), t.get("at", 0), t.get("dur", 3))
         if not spans:
             # ชิ้นกำพร้า — ช่วงที่มันเกาะอยู่ถูกตัดออกจากหนังไปแล้ว ส่งต่อให้
@@ -196,6 +211,61 @@ def anim_tags(cue, cfg, W, H):
              rf"\fad({ti},{to})"], True)
 
 
+# ─────────────────────────── การ์ดหลายบรรทัด ───────────────────────────
+
+# ความสูงของหนึ่งบรรทัดเทียบกับขนาดตัวอักษร — ฟอนต์ไทยมีสระบนสองชั้นกับวรรณยุกต์
+# จึงกินที่สูงกว่าฟอนต์ละตินที่ 1.2 เท่าตามธรรมเนียม  1.42 คือค่าที่วัดจาก
+# Sukhumvit Set แล้วสระอึกับไม้โทไม่ชนบรรทัดบน
+LINE_H = 1.42
+
+
+def stack_lines(lines, cy, H):
+    """การ์ดหนึ่งใบ → (บรรทัด, พิกัด y กลางบรรทัด) เรียงจากบนลงล่าง
+
+    จัดโดยยึด **กึ่งกลางของทั้งกอง** ไว้ที่ y ที่คนลาก ไม่ใช่ยึดบรรทัดแรก —
+    ไม่งั้นการ์ดจะเลื่อนลงทุกครั้งที่เพิ่มบรรทัด ทั้งที่คนเพิ่มบรรทัดคาดหวังว่า
+    ของจะโตขึ้นรอบจุดเดิม
+
+    หน้าเว็บต้องใช้สูตรเดียวกันนี้วาดพรีวิว — ถ้าคำนวณคนละแบบ การ์ดในพรีวิวจะ
+    อยู่คนละที่กับในไฟล์ แล้วคนจะเชื่อพรีวิวจนกว่าจะเรนเดอร์เสร็จ
+    """
+    if not lines:
+        return []
+    hs = [float(v.get("size") or 54) * LINE_H for v in lines]
+    gaps = [0.0] + [float(v.get("gap", 0.30) or 0) * float(v.get("size") or 54)
+                    for v in lines[1:]]
+    total = sum(hs) + sum(gaps)
+    y = cy * H - total / 2.0
+    out = []
+    for v, h, g in zip(lines, hs, gaps):
+        y += g
+        out.append((v, y + h / 2.0))
+        y += h
+    return out
+
+
+def _line_tags(v, card, base):
+    """แท็กของบรรทัดหนึ่งในการ์ด — ทับทุกช่องเสมอ ไม่ใช่เฉพาะที่ต่างจากสไตล์กลาง
+
+    _tags() ของขั้น 4 ใส่เฉพาะช่องที่ต่างจากสไตล์กลาง ซึ่งประหยัดและถูกต้องเมื่อ
+    ทุกบรรทัดของชิ้นนั้นหน้าตาเดียวกัน  ในการ์ด บรรทัดถัดไปต้องล้างของบรรทัดก่อน
+    หน้าให้หมด (สามบรรทัดอยู่คนละ Dialogue ก็จริง แต่ค่าที่ไม่ได้สั่งจะตกกลับไป
+    เป็นของสไตล์ *กลาง* ไม่ใช่ของการ์ด) จึงต้องสั่งครบทุกช่อง
+    """
+    font = str(v.get("font") or "") or str(card.get("font") or base.get("font"))
+    return [
+        rf"\fn{font}",
+        rf"\fs{int(float(v.get('size') or 54))}",
+        rf"\c{colour(v.get('color') or '#FFFFFF')}&",
+        rf"\3c{colour(v.get('outline') or '#000000')}&",
+        rf"\bord{float(v.get('border', 3) or 0):g}",
+        rf"\b{1 if v.get('bold') else 0}",
+        rf"\i{1 if v.get('italic') else 0}",
+        rf"\fsp{float(v.get('spacing', 0) or 0):g}",
+        r"\shad0",
+    ]
+
+
 # ─────────────────────────── กล่องพื้นหลัง ───────────────────────────
 
 def plate_tags(plate):
@@ -231,6 +301,12 @@ def path_of(kind, size, thick):
     if kind == "bar":
         h = max(1.0, s * th) / 2.0
         return _pts([(-half, -h), (half, -h), (half, h), (-half, h)])
+
+    if kind == "rrect":
+        # ยืมตัววาดของแผนที่มาใช้ ไม่ก๊อป — สี่เหลี่ยมมุมมนต้องหน้าตาเดียวกัน
+        # ทั้งสองที่ ไม่งั้นชิปที่วางเองกับแผงแผนที่จะมนไม่เท่ากันในเฟรมเดียวกัน
+        h = max(2.0, s * th)
+        return journey.rrect(-half, -h / 2.0, s, h, min(h / 2.0, s * 0.18))
 
     if kind == "dot":
         r = half
@@ -296,10 +372,24 @@ def shape_cues(ctx, fxdata=None, man=None):
 
 
 def _shape_line(sh, W, H):
+    """รูปทรงหนึ่งชิ้น → บรรทัด Dialogue
+
+    **ยึดด้วย \\an7 ไม่ใช่ \\an5 ทั้งที่รูปถูกวาดโดยยึดกึ่งกลางเป็น (0,0)**
+
+    ฟังดูกลับหัวกลับหาง แต่เป็นสิ่งที่ libass ทำจริง: มันเลื่อนรูปตามการจัดวางด้วย
+    *ขนาด* ของกรอบรูป โดยไม่สนว่าพิกัดต่ำสุดของรูปอยู่ที่เท่าไร  \\an5 จึงเลื่อน
+    รูปไปอีก −(กว้าง/2, สูง/2) ทั้งที่รูปคร่อมศูนย์อยู่แล้ว ผลคือรูปไปโผล่เยื้อง
+    ขึ้นซ้ายเท่ากับครึ่งขนาดของมันเอง — วัดจริง: จุดขนาด 160 px ที่สั่งไว้ที่
+    (400,200) ไปอยู่ที่ (320,120) ส่วนหน้าเว็บวาดพรีวิวไว้ตรงกลางตามที่สั่ง
+    สองอย่างจึงไม่ตรงกันมาตลอดโดยไม่มีอะไรฟ้อง
+
+    \\an7 เลื่อนเป็นศูนย์ พิกัดในรูปจึงถูกใช้ตรง ๆ และรูปที่คร่อม (0,0) ก็ไปอยู่
+    กลาง \\pos พอดี — และ \\frz ยังหมุนรอบจุดเดียวกันนั้น (ตรวจแล้วด้วยภาพ)
+    """
     cue = {"kind": "box", "a": sh["a"], "b": sh["b"], "x": sh["x"], "y": sh["y"],
            "style": {"size": sh["size"], "align": 5}}
     tags, moved = anim_tags(cue, sh, W, H)
-    pre = [r"\an5"]
+    pre = [r"\an7"]
     if not moved:
         pre.append(rf"\pos({float(sh['x']) * W:.0f},{float(sh['y']) * H:.0f})")
     pre += [rf"\c{colour(sh['color'])}&",
@@ -366,6 +456,11 @@ def build_ass(ctx, W, H, fxdata=None, man=None):
     ]
     if want_plate:
         head.append(_style_line("subplate", base, 3))
+    # แผนที่เส้นทางมีสไตล์ของตัวเอง — ฟอนต์กับขนาดของป้ายชื่อจุดเป็นคนละเรื่อง
+    # กับซับ ถ้าใช้สไตล์เดียวกัน คนที่ขยายซับให้อ่านง่ายจะทำป้ายในแผนที่ล้นกล่อง
+    jour = fxdata.get("journey") or {}
+    if jour.get("enabled"):
+        head.append(journey.style_line(jour))
     head += [
         "",
         "[Events]",
@@ -377,6 +472,34 @@ def build_ass(ctx, W, H, fxdata=None, man=None):
     for cue in rows:
         if cue.get("orphan") or cue["a"] is None:
             continue
+
+        # การ์ดหลายบรรทัด — หนึ่งชิ้นในไฟล์ กลายเป็นหลาย Dialogue ตรงนี้ที่เดียว
+        # ทุกบรรทัดใช้เวลาและแอนิเมชันชุดเดียวกัน จึงเข้า-ออกพร้อมกันเสมอ
+        if cue.get("lines"):
+            al = int(cue["style"].get("align", 5) or 5)
+            cx = float(cue.get("x") if cue.get("x") is not None else 0.5) * W
+            for v, ly in stack_lines(cue["lines"], float(
+                    cue.get("y") if cue.get("y") is not None else 0.5), H):
+                ltxt = esc(v.get("text", ""))
+                if not ltxt:
+                    continue
+                # จุดยึดของแอนิเมชันคือที่ของ *บรรทัดนี้* ไม่ใช่กลางการ์ด —
+                # ไม่งั้น rise/slide จะไถลไปจบที่กลางการ์ดทุกบรรทัด แล้วสามบรรทัด
+                # จะกองทับกันตอนจบ  ขนาดตัวอักษรก็ต้องเป็นของบรรทัดนี้ เพราะ
+                # ระยะไถลคิดจากขนาดตัวอักษร
+                anim, moved = anim_tags(
+                    {**cue, "y": ly / H,
+                     "style": {**cue["style"], "size": v.get("size")}},
+                    cue["fx"], W, H)
+                pre = [rf"\an{al}"]
+                if not moved:
+                    pre.append(rf"\pos({cx:.0f},{ly:.0f})")
+                tags = pre + _line_tags(v, cue["style"], base) + anim
+                body.append(f"Dialogue: {L_TEXT},{clock(cue['a'])},{clock(cue['b'])},"
+                            f"sub,,0,0,0,,{'{' + ''.join(tags) + '}'}{ltxt}")
+                n += 1
+            continue
+
         txt = esc(cue["text"])
         if not txt:
             continue
@@ -394,17 +517,23 @@ def build_ass(ctx, W, H, fxdata=None, man=None):
                     if not t.startswith(r"\3c") and not t.startswith(r"\bord")]
         tags = pl + over + (plate_tags(plate) if on_plate else []) + anim
         pre = "{" + "".join(tags) + "}" if tags else ""
-        body.append(f"Dialogue: {0 if cue['kind'] == 'auto' else 1},"
+        body.append(f"Dialogue: {L_AUTO if cue['kind'] == 'auto' else L_TEXT},"
                     f"{clock(cue['a'])},{clock(cue['b'])},"
                     f"{'subplate' if on_plate else 'sub'},,"
                     f"{ml},{mr},{mv},,{pre}{txt}")
         n += 1
 
     for sh in shapes:
-        # ชั้น 2 — รูปทรงเป็นของที่ตั้งใจชี้ไปที่อะไรสักอย่าง ต้องอยู่บนสุดเสมอ
-        body.append(f"Dialogue: 2,{clock(sh['a'])},{clock(sh['b'])},sub,,"
+        lay = L_BACK if sh.get("behind") else L_SHAPE
+        body.append(f"Dialogue: {lay},{clock(sh['a'])},{clock(sh['b'])},sub,,"
                     f"0,0,0,,{_shape_line(sh, W, H)}")
         n += 1
+
+    # แผนที่เส้นทางอยู่บนสุดของทุกอย่างที่ ASS วาด แต่ยังอยู่ *ใต้* ภาพซ้อน
+    # เพราะภาพซ้อนถูกต่อทีหลังในสายฟิลเตอร์ (ดู finish.py)
+    jev = journey.ass_events(fxdata, W, H, man)
+    body += jev
+    n += len(jev)
 
     return "\n".join(head + body) + "\n", n
 

@@ -45,6 +45,7 @@ captions.json ไม่ต้องถูกแตะเลย และไฟ�
 import re
 from pathlib import Path
 
+from .journey import JOURNEY, STOP
 from .util import die, part_path, read_json, warn, write_json
 
 FX = "fx.json"
@@ -174,6 +175,31 @@ TEXT_ITEM = {
     "anim": "none", "in": 0.18, "out": 0.14, "plate": False,
 }
 
+# ── การ์ดหลายบรรทัดที่แต่ละบรรทัดหน้าตาไม่เหมือนกัน ──
+#
+# ข้อความชิ้นหนึ่งขึ้นบรรทัดใหม่ได้อยู่แล้วด้วย \N แต่ทั้งกล่องใช้สีเดียวขนาดเดียว
+# ซึ่งพอสำหรับซับ ไม่พอสำหรับการ์ดชื่อสถานที่ — แบบที่ใช้กันคือหัวเรื่องเล็กสีเน้น
+# วางบนชื่อใหญ่สีขาว แล้วมีบรรทัดอังกฤษเล็ก ๆ ปิดท้าย สามขนาดสามสีในการ์ดเดียว
+#
+# **ทำไมเป็นช่องในข้อความชิ้นเดียว ไม่ใช่ให้วางข้อความสามชิ้นซ้อนกันเอง**
+#
+# วางสามชิ้นก็ได้หน้าตาเหมือนกันเป๊ะ — จนกระทั่งต้องเลื่อนการ์ดไปอีกช็อต ตอนนั้น
+# ต้องลากสามชิ้นให้ระยะห่างเท่าเดิมทุกครั้ง และถ้าลืมชิ้นใดชิ้นหนึ่งจะได้การ์ดที่
+# หัวเรื่องค้างอยู่คนละที่กับชื่อ โดยไม่มีอะไรเตือน  การ์ดคือของชิ้นเดียวในหัวคน
+# ทำ จึงควรเป็นของชิ้นเดียวในไฟล์ด้วย
+LINE = {
+    "text": "",
+    "size": 54,
+    "color": "#FFFFFF",
+    "outline": "#000000",
+    "border": 3.0,
+    "bold": False,
+    "italic": False,
+    "spacing": 0.0,
+    "font": "",          # ว่าง = ใช้ฟอนต์ของการ์ด
+    "gap": 0.30,         # ช่องไฟเหนือบรรทัดนี้ เทียบกับขนาดตัวอักษรของมันเอง
+}
+
 # สวิตช์ซับอัตโนมัติของขั้น 5 เอง — อ่าน transcript ของขั้น 2 ตรง ๆ ไม่ผ่าน
 # captions.json  ปิดไว้เป็นค่าตั้งต้น: ขั้น 5 คือขั้น "แต่งหนัง" ของที่โผล่ในไฟล์
 # ต้องมาจากการกดสั่ง ไม่ใช่โผล่มาเองเพราะมีบทพูดอยู่ในโปรเจกต์
@@ -184,7 +210,7 @@ AUTO_SUB = {"enabled": False}
 # libass วาดเส้นเองได้ด้วยโหมด \p — ลูกศร/แถบ/จุด จึงไม่ต้องพึ่งไฟล์ภาพจากข้างนอก
 # (ซึ่งเป็นงานของเฟส B) และไม่ต้องเพิ่มฟิลเตอร์อะไรในสายเลย
 SHAPE = {
-    "kind": "arrow",   # arrow | bar | dot
+    "kind": "arrow",   # arrow | bar | dot | rrect
     "x": 0.5, "y": 0.5,
     "size": 160,       # พิกเซลของหนังจริง
     "thick": 0.28,     # ความหนาเทียบกับ size
@@ -193,8 +219,16 @@ SHAPE = {
     "outline": "#000000",
     "border": 0.0,
     "anim": "pop", "in": 0.18, "out": 0.14,
+    # วาดไว้ *ข้างหลัง* ข้อความแทนที่จะทับ — รูปทรงส่วนใหญ่คือของที่ชี้ไปที่อะไร
+    # สักอย่างจึงต้องอยู่บนสุด แต่แถบมุมมนที่ทำหน้าที่เป็นพื้นของชิปตัวเลขต้องอยู่
+    # ล่างสุด ไม่งั้นมันบังตัวเลขที่มันมีไว้รองพอดี (เจอตอนวางชิปเวลาอันแรก:
+    # แถบขึ้นครบ ตัวเลขหายสนิท โดยไม่มีอะไรฟ้องว่าอะไรบังอะไร)
+    "behind": False,
 }
-SHAPE_KIND = {"arrow": "ลูกศร", "bar": "แถบ", "dot": "จุด"}
+# rrect เป็นแถบมุมมน ไม่ใช่รูปทรงชี้อะไร — มันคือพื้นหลังของชิปตัวเลข/เวลา/ป้าย
+# ชื่อ ที่การ์ดสไตล์วล็อกใช้ตลอด  ทำด้วย plate ของข้อความไม่ได้ เพราะ plate เป็น
+# กล่องเหลี่ยมที่รัดตามความยาวข้อความ ไม่ใช่แถบที่คุมขนาดเองได้
+SHAPE_KIND = {"arrow": "ลูกศร", "bar": "แถบ", "dot": "จุด", "rrect": "แถบมุมมน"}
 
 # ── ภาพซ้อน (เฟส B) ──
 #
@@ -302,6 +336,9 @@ def blank():
     return {"version": 1, "clips": {}, "overlays": [],
             # เพลงเป็น *รายการ* ตั้งแต่รุ่นนี้ — หลายแทร็กวางคนละช่วงได้
             "music": [],
+            # แผนที่เส้นทางที่มีคนเดิน — ชั้นเดียวทั้งเรื่อง ไม่ใช่รายการ เพราะ
+            # หนังเรื่องหนึ่งเล่าเส้นทางเดียว (ดู journey.JOURNEY)
+            "journey": blank_journey(),
             # ชั้นข้อความของขั้น 5 เอง — ดูเหตุผลที่ TEXT_ITEM
             "style": dict(STYLE), "texts": [], "auto_sub": dict(AUTO_SUB),
             # sub   = ซับจากบทพูดทั้งกอง (ตัวเดียวคุมหมด — ซับที่เคลื่อนไหวไม่
@@ -330,11 +367,14 @@ LIMITS = {
 }
 # คีย์ที่ค่าต้องเป็นหนึ่งในรายการที่กำหนดไว้เท่านั้น
 ENUMS = {"anim": ANIM, "kind": SHAPE_KIND, "grade": GRADE}
-COLOURS = ("color", "outline")
+# ชื่อคีย์ทุกตัวที่ค่าเป็นสี #RRGGBB — รวมของแผนที่ด้วย เพื่อให้ค่าที่สะกดผิด
+# ตกกลับไปเป็นค่าตั้งต้นเหมือนกันหมด ไม่ใช่ถูกเก็บดิบ ๆ ลงไฟล์แล้วไปเงียบ
+# ตอนวาด (libass เจอสีที่อ่านไม่ออกแล้วใช้ขาวแทนโดยไม่บอกใคร)
+COLOURS = ("color", "outline", "line", "trail", "walker", "panel_color")
 _HEX = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 
-def _pick(src, spec):
+def _pick(src, spec, limits=None):
     """เอาเฉพาะคีย์ที่รู้จัก แล้วบังคับให้เป็นค่าที่ใช้ได้จริง
 
     ไฟล์นี้คนแก้ด้วยมือได้และต่อไป AI จะเขียนให้ — ค่าที่ผิดต้องถูกดัดให้ใช้ได้
@@ -345,7 +385,14 @@ def _pick(src, spec):
     **รายการที่มี** (anim ที่ไม่รู้จัก → ค่าตั้งต้น) — สองชั้นหลังสำคัญพอกับ
     ชั้นแรก เพราะค่าที่ชนิดถูกแต่เกินช่วงจะถูกเก็บลงไฟล์แล้วโผล่กลับมาในฟอร์ม
     เป็นเลขที่แถบเลื่อนแสดงไม่ได้ ส่วน anim ที่สะกดผิดจะเงียบไปเฉย ๆ
+
+    limits ทับตาราง LIMITS เฉพาะการเรียกครั้งนั้น — ชื่อคีย์เดียวกันหมายถึงของ
+    อย่างเดียวกัน *เกือบ* ทุกที่ ข้อยกเว้นคือหน่วย: thick ของรูปทรงเป็นสัดส่วน
+    ของขนาดรูป (0.03–0.9) ส่วน thick ของแผนที่เป็นหน่วยพิกัดในกล่องเส้นทาง (หลัก
+    หน่วยถึงหลักสิบ) ใช้ช่วงเดียวกันไม่ได้ และการตั้งชื่อคีย์ใหม่แค่เพราะเรื่องนี้
+    จะทำให้หน้าเว็บมีสองชื่อสำหรับสิ่งที่คนใช้เรียกว่า "ความหนา" เหมือนกัน
     """
+    tab = LIMITS if not limits else {**LIMITS, **limits}
     out = dict(spec)
     for k, base in spec.items():
         if k not in (src or {}):
@@ -367,10 +414,59 @@ def _pick(src, spec):
                 out[k] = str(v)
         except (TypeError, ValueError):
             continue
-        lo, hi = LIMITS.get(k, (None, None))
+        lo, hi = tab.get(k, (None, None))
         if lo is not None and isinstance(out[k], (int, float)) \
                 and not isinstance(out[k], bool):
             out[k] = type(base)(min(hi, max(lo, out[k])))
+    return out
+
+
+# ── แผนที่เส้นทาง ──
+#
+# หน่วยของ thick/pad/figure/size เป็นพิกัดใน *กล่องเส้นทาง* (ปกติ 1000×550)
+# ไม่ใช่พิกเซลของหนัง — ค่าที่ตั้งไว้จึงยังถูกอยู่เมื่อย่อ/ขยายแผงหรือเปลี่ยน
+# ความละเอียดหนัง ช่วงที่ยอมรับได้จึงคนละชุดกับคีย์ชื่อเดียวกันของชั้นอื่น
+J_LIMITS = {
+    "thick": (0.5, 60.0), "pad": (0.0, 200.0), "figure": (6.0, 400.0),
+    "size": (6, 300), "walk": (0.0, 30.0), "panel": (0.0, 1.0),
+    "dur": (0.3, 60.0), "in": (0.0, 3.0), "out": (0.0, 3.0),
+}
+S_LIMITS = {"px": (-9999.0, 9999.0), "py": (-9999.0, 9999.0),
+            "lx": (-9999.0, 9999.0), "ly": (-9999.0, 9999.0),
+            "dist": (0.0, 1e7)}
+
+
+def _stop(s):
+    return _pick(s, STOP, S_LIMITS)
+
+
+def blank_journey():
+    return {**{k: (list(v) if isinstance(v, list) else v)
+               for k, v in JOURNEY.items()}, "stops": []}
+
+
+def _journey(v):
+    """แผนที่หนึ่งชุด — เส้นทาง · หมุด · หน้าตา
+
+    stops ไม่ถูกจัดเรียงใหม่ตามระยะทาง **ลำดับในไฟล์คือลำดับการเดิน** เพราะสิ่ง
+    ที่กำหนดว่าคนเดินจากไหนไปไหนคือลำดับ ไม่ใช่ตัวเลข dist (ซึ่งเป็นแค่ตัวเลข
+    ที่เอาไปแสดง และเส้นทางที่วนกลับจะมี dist ลดลงได้โดยไม่ผิดอะไร)
+    """
+    if not isinstance(v, dict):
+        return blank_journey()
+    out = _pick(v, {k: b for k, b in JOURNEY.items()
+                    if not isinstance(b, list)}, J_LIMITS)
+    box = v.get("box")
+    if isinstance(box, (list, tuple)) and len(box) >= 2:
+        try:
+            out["box"] = [max(1.0, float(box[0])), max(1.0, float(box[1]))]
+        except (TypeError, ValueError):
+            out["box"] = list(JOURNEY["box"])
+    else:
+        out["box"] = list(JOURNEY["box"])
+    stops = v.get("stops")
+    out["stops"] = [_stop(s) for s in stops if isinstance(s, dict)] \
+        if isinstance(stops, list) else []
     return out
 
 
@@ -387,6 +483,8 @@ def load(ctx):
         out["overlays"] = [_overlay(o) for o in d["overlays"] if isinstance(o, dict)]
     if d.get("music") is not None:
         out["music"] = _music_list(d["music"])
+    if d.get("journey") is not None:
+        out["journey"] = _journey(d["journey"])
 
     t = d.get("text") or {}
     if isinstance(t, dict):
@@ -409,11 +507,23 @@ def load(ctx):
     return out
 
 
+def _line(v):
+    return _pick(v, LINE, {"size": (6, 400), "gap": (-1.0, 4.0)})
+
+
 def _text(t):
-    """ข้อความหนึ่งชิ้นของขั้น 5 — ผูกเวลาแบบเดียวกับรูปทรงและภาพซ้อน"""
+    """ข้อความหนึ่งชิ้นของขั้น 5 — ผูกเวลาแบบเดียวกับรูปทรงและภาพซ้อน
+
+    lines ว่าง = ข้อความธรรมดาชิ้นเดียว (ใช้ช่อง text) · lines ไม่ว่าง = การ์ด
+    หลายบรรทัด แล้ว text ถูกมองข้าม  ไม่ลบ text ทิ้งตอนแปลงเป็นการ์ด เพราะคนที่
+    กดสลับกลับไปกลับมาจะเสียสิ่งที่พิมพ์ไว้ทุกครั้งที่กดผิด
+    """
     out = _pick(t, {**TEXT_ITEM, "at": 0.0, "dur": 3.0})
     out["id"] = str(t.get("id") or "")
     out["name"] = str(t.get("name") or "")
+    ln = t.get("lines")
+    out["lines"] = [_line(v) for v in ln if isinstance(v, dict)] \
+        if isinstance(ln, list) else []
     return out
 
 
@@ -481,6 +591,10 @@ def merge(data, payload):
                            if isinstance(o, dict)]
     if payload.get("music") is not None:
         out["music"] = _music_list(payload["music"])
+    if payload.get("journey") is not None:
+        # ทับทั้งก้อน ไม่ใช่ผสมทีละคีย์ — หน้าเว็บส่งแผนที่มาทั้งชุดเสมอ และการ
+        # ผสมจะทำให้ "ลบหมุดสุดท้ายทิ้ง" กลายเป็น "ไม่เปลี่ยนอะไร"
+        out["journey"] = _journey(payload["journey"])
     t = payload.get("text")
     if isinstance(t, dict):
         txt = {k: dict(v) if isinstance(v, dict) else v for k, v in out["text"].items()}

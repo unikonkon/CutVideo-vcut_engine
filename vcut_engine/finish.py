@@ -24,7 +24,7 @@
 """
 from pathlib import Path
 
-from . import caption, fx, fxtext, music, overlay
+from . import caption, fx, fxtext, journey, music, overlay
 from .util import c, die, info, part_path, read_json, run as sh, warn
 
 
@@ -181,6 +181,17 @@ def _text_view(ctx, data):
         return {"ready": False, "cues": [], "shapes": [], "boxes": []}
 
 
+def _journey_view(ctx, data):
+    """หมุดของแผนที่พร้อมเวลาในหนัง — พังเงียบได้ด้วยเหตุผลเดียวกับ _text_view"""
+    try:
+        return journey.summary(data, fx.plan(ctx, data))
+    except SystemExit:
+        raise
+    except Exception:
+        return {"enabled": False, "stops": [], "orphans": 0,
+                "points": 0, "length": 0.0}
+
+
 def status(ctx):
     """สรุปสถานะขั้น 5 ให้หน้าเว็บ — ไม่คำนวณอะไรหนักและไม่เขียนไฟล์"""
     data = fx.load(ctx)
@@ -196,13 +207,17 @@ def status(ctx):
                      "overlay": fx.OVERLAY, "overlay_anim": fx.OVERLAY_ANIM,
                      # ชั้นข้อความของขั้น 5 เอง — หน้าเว็บสร้างชิ้นใหม่จากค่าพวกนี้
                      "style": fx.STYLE, "text_item": fx.TEXT_ITEM,
-                     "text_style_keys": list(fx.TEXT_STYLE_KEYS)},
+                     "text_style_keys": list(fx.TEXT_STYLE_KEYS),
+                     "line": fx.LINE, "line_h": fxtext.LINE_H,
+                     "journey": fx.blank_journey(), "stop": journey.STOP},
         # ข้อความ/รูปทรงพร้อมเวลาที่คำนวณแล้ว — หน้าเว็บวาดพรีวิวจากตัวเลขชุด
         # เดียวกับที่จะกลายเป็นไฟล์จริง ไม่ให้เบราว์เซอร์คิดเอง
         # (ชื่อ "view" ไม่ใช่ "text" เพราะ fx["text"] คือ *ค่าที่ตั้งไว้* ส่วนนี่คือ
         #  *ผลที่คำนวณออกมาแล้ว* — สองอย่างนี้อยู่ในก้อนเดียวกันแล้วสับสนแน่)
         "view": _text_view(ctx, data),
         "overlay": overlay.summary(ctx, data),
+        # แผนที่เส้นทาง — หมุดพร้อมเวลาที่คำนวณแล้ว ท่าเดียวกับ view
+        "journey": _journey_view(ctx, data),
         "music": music.summary(ctx, data),
         "ready": bool(segs),
         "segments": len(segs),

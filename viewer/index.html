@@ -232,6 +232,8 @@ video{width:100%;border-radius:5px;background:#000;display:block}
 .pvcap .cp.sh svg{display:block;overflow:visible}
 /* ภาพซ้อนบนตัวเล่น */
 .pvcap .cp.ovl{pointer-events:auto;cursor:move;line-height:0}
+.pvcap .cp.jrn{pointer-events:auto;cursor:move;line-height:0}
+.pvcap .cp.jrn svg{display:block}
 .pvcap .cp.ovl img{display:block;width:100%;height:auto}
 .fxvid{display:grid;place-items:center;width:100%;height:100%;font-size:11px;
   color:var(--dim);border:1px dashed var(--line);border-radius:6px;
@@ -2400,6 +2402,31 @@ async function fxSave(quiet){
   } catch(e){ toast(e.message, true); }
 }
 
+// ตัวเลือกฟอนต์ของขั้น 5 — อ่านจาก FX.fonts ซึ่งเป็น {thai, other} ไม่ใช่รายการแบน
+//
+// เดิมตรงนี้เรียก fxSelect(..., FX.fonts.length ? FX.fonts : [ค่าปัจจุบัน]) ซึ่ง
+// ก้อน dict ไม่มี .length เงื่อนไขจึงเป็นเท็จเสมอ แล้วเมนูมีตัวเลือกเดียวคือฟอนต์
+// ที่ตั้งไว้อยู่แล้ว — กดเปลี่ยนฟอนต์ไม่ได้เลยโดยไม่มีอะไรฟ้อง
+function fxFontPick(get, set){
+  const s = el('select');
+  const add = (list, group) => {
+    if (!list || !list.length) return;
+    const g = el('optgroup'); g.label = group;
+    list.forEach(f => { const o = el('option', null, f); o.value = f; g.append(o); });
+    s.append(g);
+  };
+  add(((FX || {}).fonts || {}).thai, 'รองรับภาษาไทย');
+  add(((FX || {}).fonts || {}).other, 'อื่น ๆ');
+  const cur = get() || '';
+  s.value = cur;
+  if (s.value !== cur){          // ฟอนต์ที่ตั้งไว้ไม่มีในเครื่องนี้แล้ว
+    const o = el('option', null, `${cur} (ไม่พบในเครื่อง)`); o.value = cur;
+    s.insertBefore(o, s.firstChild); s.value = cur;
+  }
+  s.onchange = () => { set(s.value); fxTouch(); };
+  return s;
+}
+
 function fxSelect(get, set, options, labels){
   const s = el('select');
   options.forEach(o => {
@@ -2516,6 +2543,10 @@ function fxShapeRow(sh){
   g.append(capField('ยาว', capNum(() => sh.dur, v => put('dur', v),
                                  0.2, 30, 0.1, 'วิ', fxTouch)));
   wrap.append(g);
+  // แถบมุมมนมักถูกใช้เป็น *พื้น* ของชิปตัวเลข ไม่ใช่ของที่ชี้อะไร — สวิตช์นี้จึง
+  // อยู่ตรงนี้ ไม่ใช่ในเมนูขั้นสูงที่ไหน  ไม่มีมันแล้วแถบจะบังตัวเลขที่มันรองอยู่
+  wrap.append(capBool(() => !!sh.behind, v => put('behind', v),
+                      'วางไว้ข้างหลังข้อความ', fxTouch));
   wrap.append(fxAnimForm(sh, put, {}));
   wrap.append(el('p', 'note', 'ลากรูปบนตัวเล่นเพื่อจัดตำแหน่ง'));
   return wrap;
@@ -3474,7 +3505,7 @@ function fxTimeline(){
 }
 
 const FX_TABS = [['clips', 'คลิป'], ['text', 'ข้อความ'], ['shapes', 'รูปทรง'],
-                 ['images', 'ภาพซ้อน'], ['music', 'เพลง']];
+                 ['images', 'ภาพซ้อน'], ['music', 'เพลง'], ['journey', 'แผนที่']];
 
 function fxEditor(){
   const c = el('div', 'card');
@@ -3485,6 +3516,7 @@ function fxEditor(){
             : k === 'images' ? fxOverlays().length
             : k === 'text' ? fxTexts().length
             : k === 'music' ? fxMusics().length
+            : k === 'journey' ? (fxJourney().enabled ? fxStops().length : 0)
             : k === 'clips' ? ((FX.view || {}).touched || 0) : 0;
     const on = false;
     const b = el('button', null, lab + (n ? ` ${n}` : on ? ' ●' : ''));
@@ -3499,6 +3531,12 @@ function fxEditor(){
     plus.onclick = fxAddShape;
     bar.append(plus);
   }
+  if (fxTab === 'journey'){
+    const plus = el('button', 'sm', '+ หมุด');
+    plus.title = 'เพิ่มหมุดตรงวินาทีที่ตัวเล่นค้างอยู่';
+    plus.onclick = fxAddStop;
+    bar.append(plus);
+  }
   if (fxDirty){
     const sv = el('button', 'primary', 'บันทึกเอฟเฟกต์');
     sv.onclick = () => fxSave();
@@ -3508,8 +3546,190 @@ function fxEditor(){
   c.append(fxTab === 'shapes' ? fxShapeList()
          : fxTab === 'clips' ? fxClipList()
          : fxTab === 'images' ? fxOverlayPanel()
-         : fxTab === 'music' ? fxMusicPanel() : fxTextForm());
+         : fxTab === 'music' ? fxMusicPanel()
+         : fxTab === 'journey' ? fxJourneyPanel() : fxTextForm());
   return c;
+}
+
+// ── แท็บแผนที่ — เส้นทางที่มีคนเดินวิ่งตามคลิป ────────────────────
+//
+// ต่างจากชั้นอื่นตรงที่มัน **มีชุดเดียวทั้งเรื่อง** ไม่ใช่รายการของชิ้นที่วาง
+// ได้หลายอัน — หนังเรื่องหนึ่งเล่าเส้นทางเดียว หน้าตาจึงเป็นฟอร์มตั้งค่าชุดเดียว
+// แล้วมีรายการหมุดอยู่ข้างใน ไม่ใช่การ์ดต่อชิ้นเหมือนข้อความ/รูปทรง
+const fxJourney = () => (fxData().journey ||
+  (fxData().journey = JSON.parse(JSON.stringify(fxDefs().journey || {}))));
+const fxStops = () => (fxJourney().stops || (fxJourney().stops = []));
+const fxJourneyView = () => (FX.journey || {});
+
+function fxStopCue(i){
+  return (fxJourneyView().stops || []).find(s => s.idx === i);
+}
+
+function fxAddStop(){
+  const t5 = fxT5((PV && PV.gt) || 0);
+  const w = fxWhere(t5);
+  if (!w) return toast('ยังไม่มีไทม์ไลน์ให้วางหมุด', true);
+  const j = fxJourney();
+  const d = fxDefs().stop || {};
+  const box = j.box || [1000, 550];
+  const n = fxStops().length;
+  // หมุดใหม่เกิดบนเส้นทางท้ายสุด ไม่ใช่กลางกล่อง — ลำดับในรายการคือลำดับการเดิน
+  // หมุดที่เกิดนอกเส้นแล้วยังไม่ได้ลากจะทำให้คนเดินกระโดดออกนอกทางทันที
+  fxStops().push({...d, label: 'จุดใหม่', name: w.name, at: w.at,
+    px: box[0] * 0.5, py: box[1] * 0.5,
+    lx: box[0] * 0.5, ly: box[1] * 0.5 - 60,
+    dist: 0, color: '#E65100', id: 'j' + n});
+  j.enabled = true;
+  fxTouch();
+  toast('เพิ่มหมุดแล้ว — ตั้งชื่อกับระยะทาง แล้วลากหมุดบนแผนที่ให้อยู่บนเส้น');
+}
+
+function fxJourneyPanel(){
+  const w = el('div');
+  const j = fxJourney();
+  const view = fxJourneyView();
+
+  w.append(capBool(() => !!j.enabled, v => { j.enabled = v; },
+                   'เปิดแผนที่เส้นทาง', fxTouch));
+  if (!j.enabled){
+    w.append(el('p', 'note', 'ปิดอยู่ — เปิดแล้วแผงแผนที่จะโผล่ตอนถึงแต่ละหมุด '
+      + 'พร้อมคนเดินวิ่งจากหมุดก่อนหน้ามาถึงหมุดนั้น '
+      + 'เวลาผูกกับ (คลิป, วินาทีในคลิป) เหมือนชั้นอื่น แต่ความยาวนับเป็นวินาทีในหนัง'));
+    return w;
+  }
+
+  if (!(j.d || '').trim())
+    w.append(el('p', 'note warnnote',
+      'ยังไม่มีเส้นทาง — วางค่า d ของ <path> จากไฟล์ SVG ลงช่องข้างล่าง '
+      + 'แล้วหมุดถึงจะมีเส้นให้เกาะ'));
+  else
+    w.append(el('p', 'note', `เส้นทางยาว ${(+view.length || 0).toFixed(0)} หน่วย `
+      + `· ตัดเป็น ${view.points || 0} จุด`));
+  if (view.orphans)
+    w.append(el('p', 'note warnnote',
+      `หมุด ${view.orphans} จุดเกาะอยู่กับคลิปที่ไม่มีในหนังแล้ว — จะไม่โผล่`));
+
+  // ── หน้าตาของแผง ──
+  const put = (k, v) => { j[k] = v; };
+  w.append(el('h4', 'caph', 'แผง'));
+  const g = el('div', 'capgrid');
+  g.append(capField('กว้าง (ส่วนของจอ)', capNum(() => j.width, v => put('width', v),
+                                              0.1, 1, 0.01, '', fxTouch)));
+  g.append(capField('อยู่บนจอนาน', capNum(() => j.dur, v => put('dur', v),
+                                        0.5, 20, 0.1, 'วิ', fxTouch)));
+  g.append(capField('เวลาเดินต่อหมุด', capNum(() => j.walk, v => put('walk', v),
+                                            0, 10, 0.1, 'วิ', fxTouch)));
+  g.append(capField('ความทึบพื้นหลัง', capNum(() => j.panel, v => put('panel', v),
+                                             0, 1, 0.02, '', fxTouch)));
+  g.append(capField('สีพื้นหลัง', capColour(() => j.panel_color,
+                                          v => put('panel_color', v), fxTouch)));
+  g.append(capField('เฟดเข้า', capNum(() => j['in'], v => put('in', v),
+                                     0, 3, 0.05, 'วิ', fxTouch)));
+  g.append(capField('เฟดออก', capNum(() => j.out, v => put('out', v),
+                                    0, 3, 0.05, 'วิ', fxTouch)));
+  w.append(g);
+
+  w.append(el('h4', 'caph', 'เส้นทางกับคนเดิน'));
+  const g2 = el('div', 'capgrid');
+  g2.append(capField('สีช่วงที่เดินแล้ว', capColour(() => j.line,
+                                                  v => put('line', v), fxTouch)));
+  g2.append(capField('สีช่วงที่ยังไม่ถึง', capColour(() => j.trail,
+                                                   v => put('trail', v), fxTouch)));
+  g2.append(capField('สีคนเดิน', capColour(() => j.walker,
+                                          v => put('walker', v), fxTouch)));
+  g2.append(capField('ความหนาเส้น', capNum(() => j.thick, v => put('thick', v),
+                                          1, 40, 0.5, '', fxTouch)));
+  g2.append(capField('ความสูงคนเดิน', capNum(() => j.figure, v => put('figure', v),
+                                            10, 300, 2, '', fxTouch)));
+  g2.append(capField('ขนาดป้ายชื่อ', capNum(() => j.size, v => put('size', v),
+                                           8, 120, 1, '', fxTouch)));
+  g2.append(capField('ฟอนต์ป้าย', fxFontPick(() => j.font, v => put('font', v))));
+  const unit = el('input');
+  unit.value = j.unit || '';
+  unit.placeholder = 'ม.';
+  unit.onchange = () => { put('unit', unit.value); fxTouch(); };
+  g2.append(capField('หน่วยระยะทาง', unit));
+  w.append(g2);
+  w.append(capBool(() => !!j.show_dist, v => put('show_dist', v),
+                   'แสดงตัวเลขระยะทาง', fxTouch));
+  w.append(el('p', 'note', 'ความหนา/ความสูง/ขนาดป้าย เป็นหน่วยของ *กล่องเส้นทาง* '
+    + `(${(j.box || [1000, 550]).join('×')}) ไม่ใช่พิกเซลของหนัง — ย่อขยายแผงแล้ว`
+    + 'สัดส่วนจึงยังเท่าเดิม'));
+
+  // ── เส้นทาง ──
+  w.append(el('h4', 'caph', 'เส้นทาง (path d ของ SVG)'));
+  const ta = el('textarea'); ta.rows = 3; ta.value = j.d || '';
+  ta.placeholder = 'M 70,460 C 110,460 ... L 930,110';
+  ta.onchange = () => { j.d = ta.value; fxTouch(); };
+  w.append(ta);
+  w.append(el('p', 'note', 'รับ M · L · C · Z (ทั้งตัวใหญ่ตัวเล็ก) — ก๊อปมาจาก '
+    + 'แอตทริบิวต์ d ของ <path> ในไฟล์ SVG ได้ตรง ๆ พร้อมกับ viewBox ที่เป็นขนาดกล่อง'));
+
+  // ── หมุด ──
+  w.append(el('h4', 'caph', `หมุด ${fxStops().length} จุด`));
+  if (!fxStops().length)
+    w.append(el('p', 'note', 'ยังไม่มีหมุด — กด "+ หมุด" ตรงวินาทีที่ตัวเล่นค้างอยู่'));
+  fxStops().forEach((s, i) => w.append(fxStopRow(s, i)));
+  w.append(el('p', 'note', '**ลำดับในรายการคือลำดับการเดิน** ไม่ได้เรียงตามระยะทาง '
+    + '— คนเดินจะเดินจากหมุดที่อยู่เหนือมันมาหาหมุดนั้นเสมอ'));
+  return w;
+}
+
+function fxStopRow(s, i){
+  const cue = fxStopCue(i);
+  const j = fxJourney();
+  const wrap = el('div', 'capbox');
+  const hd = el('div', 'capbh');
+  hd.append(el('span', 'capt', cue && cue.a != null ? mmss(cue.a) : '—'));
+  hd.append(el('span', 'note', `${i + 1}. ${s.name || 'ยังไม่ผูกคลิป'} @ ${(+s.at).toFixed(2)} วิ`));
+  hd.append(el('span', 'spacer'));
+  const up = el('button', 'sm', '↑');
+  up.type = 'button'; up.title = 'ย้ายขึ้น'; up.disabled = i === 0;
+  up.onclick = () => {
+    const a = fxStops(); a.splice(i - 1, 0, a.splice(i, 1)[0]); fxTouch();
+  };
+  const dn = el('button', 'sm', '↓');
+  dn.type = 'button'; dn.title = 'ย้ายลง'; dn.disabled = i === fxStops().length - 1;
+  dn.onclick = () => {
+    const a = fxStops(); a.splice(i + 1, 0, a.splice(i, 1)[0]); fxTouch();
+  };
+  const del = el('button', 'sm', '✕');
+  del.type = 'button'; del.title = 'ลบหมุดนี้';
+  del.onclick = () => { fxStops().splice(i, 1); fxTouch(); };
+  hd.append(up, dn, del);
+  wrap.append(hd);
+
+  if (cue && cue.orphan)
+    wrap.append(el('p', 'note warnnote',
+      'คลิปที่หมุดนี้เกาะอยู่ถูกตัดออกจากหนังไปแล้ว — แผงของหมุดนี้จะไม่โผล่'));
+
+  const inp = el('input');
+  inp.value = s.label || '';
+  inp.placeholder = 'ชื่อจุด';
+  inp.oninput = () => { s.label = inp.value; fxDirty = true; };
+  inp.onchange = () => { s.label = inp.value; fxTouch(); };
+  wrap.append(inp);
+
+  const box = j.box || [1000, 550];
+  const p = (k, v) => { s[k] = v; };
+  const g = el('div', 'capgrid');
+  g.append(capField('ระยะทาง', capNum(() => s.dist, v => p('dist', v),
+                                     0, 1000000, 10, j.unit || '', fxTouch)));
+  g.append(capField('สี', capColour(() => s.color, v => p('color', v), fxTouch)));
+  g.append(capField('เริ่มที่ (วินาทีในคลิป)',
+    capNum(() => s.at, v => p('at', v), 0, 3600, 0.05, 'วิ', fxTouch)));
+  g.append(capField('จุดบนเส้น x', capNum(() => s.px, v => p('px', v),
+                                         0, box[0], 1, '', fxTouch)));
+  g.append(capField('จุดบนเส้น y', capNum(() => s.py, v => p('py', v),
+                                         0, box[1], 1, '', fxTouch)));
+  g.append(capField('ป้ายชื่อ x', capNum(() => s.lx, v => p('lx', v),
+                                        0, box[0], 1, '', fxTouch)));
+  g.append(capField('ป้ายชื่อ y', capNum(() => s.ly, v => p('ly', v),
+                                        0, box[1], 1, '', fxTouch)));
+  wrap.append(g);
+  wrap.append(el('p', 'note', 'จุดบนเส้นไม่ต้องตรงเป๊ะ — เอนจินจะเลื่อนไปหาจุดที่'
+    + 'ใกล้ที่สุดบนเส้นทางให้เอง คนเดินจึงไม่หลุดออกนอกเส้น'));
+  return wrap;
 }
 
 function fxAddText(){
@@ -3581,9 +3801,7 @@ function fxTextForm(){
   const st = fxStyle();
   w.append(el('h4', 'caph', 'สไตล์กลางของขั้น 5'));
   const g0 = el('div', 'capgrid');
-  g0.append(capField('ฟอนต์', fxSelect(() => st.font, v => { st.font = v; },
-                                      (FX.fonts && FX.fonts.length ? FX.fonts
-                                        : [st.font]))));
+  g0.append(capField('ฟอนต์', fxFontPick(() => st.font, v => { st.font = v; })));
   g0.append(capField('ขนาด', capNum(() => st.size, v => { st.size = v; },
                                    12, 200, 1, 'px', fxTouch)));
   g0.append(capField('สี', capColour(() => st.color, v => { st.color = v; }, fxTouch)));
@@ -3658,9 +3876,91 @@ function fxTextRow(t){
   g.append(capField('หมุน', capNum(() => t.angle, v => put('angle', v),
                                   -180, 180, 1, '°', fxTouch)));
   wrap.append(g);
+  wrap.append(fxCardForm(t));
   wrap.append(fxAnimForm(t, put, {plate: true}));
   wrap.append(el('p', 'note', 'ลากข้อความบนตัวเล่นเพื่อจัดตำแหน่ง'));
   return wrap;
+}
+
+// ── การ์ดหลายบรรทัด ──────────────────────────────────────────────
+//
+// บรรทัดในการ์ดมีหน้าตาของตัวเอง แต่ *เวลากับตำแหน่ง* เป็นของการ์ด — ฟอร์มนี้จึง
+// ให้ตั้งแค่หน้าตา ส่วนช่อง "เริ่มที่/ยาว/ลากบนตัวเล่น" ยังเป็นของชิ้นข้างบน
+// ตัวเดียว ไม่มีซ้ำในแต่ละบรรทัดให้สับสนว่าอันไหนคุมอะไร
+function fxCardForm(t){
+  const w = el('div', 'sect');
+  const lines = t.lines || (t.lines = []);
+  const hd = el('div', 'bar');
+  hd.append(el('h4', 'caph', 'การ์ดหลายบรรทัด'));
+  hd.append(el('span', 'spacer'));
+  const add = el('button', 'sm', '+ บรรทัด');
+  add.type = 'button';
+  add.title = 'เพิ่มบรรทัดที่ตั้งขนาด/สีแยกจากบรรทัดอื่นได้';
+  add.onclick = () => {
+    const d = fxDefs().line || {};
+    // บรรทัดแรกลอกหน้าตาจากตัวข้อความเอง — คนกดเพิ่มบรรทัดคาดหวังว่าของที่เห็น
+    // อยู่จะกลายเป็นบรรทัดแรก ไม่ใช่ถูกแทนที่ด้วยค่าโรงงานที่หน้าตาคนละเรื่อง
+    const first = !lines.length;
+    lines.push({...d,
+      text: first ? (t.text || '') : '',
+      size: first ? t.size : Math.round((+t.size || 54) * 0.62),
+      color: first ? t.color : '#FFC72C',
+      outline: t.outline, border: t.border, bold: first ? t.bold : true});
+    fxTouch();
+  };
+  hd.append(add);
+  w.append(hd);
+
+  if (!lines.length){
+    w.append(el('p', 'note', 'ว่างอยู่ = ข้อความธรรมดาชิ้นเดียวตามช่องข้างบน · '
+      + 'เพิ่มบรรทัดเมื่อต้องการหัวเรื่องเล็กกับชื่อใหญ่คนละสีในการ์ดใบเดียว '
+      + '(ตอนนั้นช่องข้อความข้างบนจะไม่ถูกใช้ แต่ยังเก็บไว้ให้)'));
+    return w;
+  }
+
+  lines.forEach((v, i) => {
+    const box = el('div', 'capbox');
+    const bh = el('div', 'capbh');
+    bh.append(el('span', 'capt', `บรรทัด ${i + 1}`));
+    bh.append(el('span', 'spacer'));
+    const up = el('button', 'sm', '↑');
+    up.type = 'button'; up.title = 'ย้ายขึ้น'; up.disabled = i === 0;
+    up.onclick = () => { lines.splice(i - 1, 0, lines.splice(i, 1)[0]); fxTouch(); };
+    const dn = el('button', 'sm', '↓');
+    dn.type = 'button'; dn.title = 'ย้ายลง'; dn.disabled = i === lines.length - 1;
+    dn.onclick = () => { lines.splice(i + 1, 0, lines.splice(i, 1)[0]); fxTouch(); };
+    const rm = el('button', 'sm', '✕');
+    rm.type = 'button'; rm.title = 'ลบบรรทัดนี้';
+    rm.onclick = () => { lines.splice(i, 1); fxTouch(); };
+    bh.append(up, dn, rm);
+    box.append(bh);
+
+    const inp = el('input');
+    inp.value = v.text || '';
+    inp.placeholder = 'ข้อความบรรทัดนี้';
+    inp.oninput = () => { v.text = inp.value; fxDirty = true; capPaint(); };
+    inp.onchange = () => { v.text = inp.value; fxTouch(); };
+    box.append(inp);
+
+    const p = (k, x) => { v[k] = x; };
+    const g = el('div', 'capgrid');
+    g.append(capField('ขนาด', capNum(() => v.size, x => p('size', x),
+                                    10, 300, 1, 'px', fxTouch)));
+    g.append(capField('สี', capColour(() => v.color, x => p('color', x), fxTouch)));
+    g.append(capField('สีขอบ', capColour(() => v.outline,
+                                        x => p('outline', x), fxTouch)));
+    g.append(capField('ความหนาขอบ', capNum(() => v.border, x => p('border', x),
+                                          0, 12, 0.5, 'px', fxTouch)));
+    if (i > 0)
+      g.append(capField('ช่องไฟเหนือบรรทัด',
+        capNum(() => v.gap, x => p('gap', x), -0.5, 2, 0.05, '×', fxTouch)));
+    box.append(g);
+    box.append(capBool(() => !!v.bold, x => p('bold', x), 'ตัวหนา', fxTouch));
+    w.append(box);
+  });
+  w.append(el('p', 'note', 'ทั้งการ์ดยึดกึ่งกลางไว้ที่จุดที่ลาก — เพิ่มบรรทัดแล้ว'
+    + 'การ์ดจะโตขึ้นรอบจุดเดิม ไม่ใช่ไหลลงข้างล่าง'));
+  return w;
 }
 
 function stepFx(box){
@@ -4825,14 +5125,152 @@ function capPaint(){
             + '@' + capMemo.key
             + (step === 5 ? '@' + fxSel
                           + '@' + JSON.stringify([fxTexts(), fxStyle(), fxText(),
-                                                  fxShapes(), fxOverlays()])
+                                                  fxShapes(), fxOverlays(),
+                                                  fxData().journey])
                           : '');
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   box.innerHTML = '';
   now.forEach(c => box.append(capNode(c, k)));
   shapes.forEach(s => box.append(fxShapeNode(s, k)));
-  if (step === 5) fxOverlaysNow(t).forEach(o => box.append(fxOverlayNode(o)));
+  if (step === 5){
+    fxOverlaysNow(t).forEach(o => box.append(fxOverlayNode(o)));
+    const jn = fxJourneyNode(fxT5(t));
+    if (jn) box.append(jn);
+  }
+}
+
+// ── พรีวิวแผนที่บนตัวเล่น ────────────────────────────────────────
+//
+// **วาดสถานะ "ถึงแล้ว" ไม่ใช่เล่นอนิเมชันการเดินซ้ำในเบราว์เซอร์**
+//
+// สิ่งที่คนต้องเห็นตอนตั้งค่าคือ *แผงใหญ่แค่ไหน วางตรงไหน หมุดอยู่บนเส้นหรือยัง
+// ป้ายชื่อทับกันไหม* ซึ่งตอบได้ครบจากภาพนิ่งของจังหวะที่เดินถึงหมุดแล้ว  ส่วน
+// จังหวะการเดินเป็นเรื่องของเวลา ไม่ใช่ของการจัดวาง
+//
+// และที่สำคัญกว่า: ถ้าเขียนตัวคำนวณการเดินซ้ำที่นี่ มันจะเป็นสูตรชุดที่สองที่
+// ต้องตรงกับ journey.py ตลอดไป วันหนึ่งจะไม่ตรง แล้วคนจะเชื่อพรีวิว
+// เส้นทางกับหมุดใช้ค่าดิบชุดเดียวกับที่เอนจินอ่าน (d · px/py · lx/ly) ตรง ๆ
+function fxJourneyNode(t5){
+  const j = fxData().journey;
+  if (!j || !j.enabled || !(j.d || '').trim()) return null;
+  const cur = (fxJourneyView().stops || [])
+    .filter(s => !s.orphan && s.a != null && t5 >= s.a - 0.01 && t5 < s.b)
+    .sort((a, b) => b.a - a.a)[0];
+  if (!cur) return null;
+
+  const box = j.box || [1000, 550];
+  const pad = +j.pad || 26;
+  const stops = fxStops();
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const mk = n => document.createElementNS('http://www.w3.org/2000/svg', n);
+  svg.setAttribute('viewBox', `${-pad} ${-pad} ${box[0] + pad * 2} ${box[1] + pad * 2}`);
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', '100%');
+  svg.setAttribute('preserveAspectRatio', 'none');
+
+  if (+j.panel > 0.01){
+    const bg = mk('rect');
+    bg.setAttribute('x', -pad); bg.setAttribute('y', -pad);
+    bg.setAttribute('width', box[0] + pad * 2);
+    bg.setAttribute('height', box[1] + pad * 2);
+    bg.setAttribute('rx', pad * 0.9);
+    bg.setAttribute('fill', j.panel_color || '#0E1A22');
+    bg.setAttribute('fill-opacity', +j.panel);
+    svg.append(bg);
+  }
+
+  const road = (col, upto) => {
+    const p = mk('path');
+    p.setAttribute('d', j.d);
+    p.setAttribute('fill', 'none');
+    p.setAttribute('stroke', col);
+    p.setAttribute('stroke-width', +j.thick || 7);
+    p.setAttribute('stroke-linecap', 'round');
+    p.setAttribute('stroke-linejoin', 'round');
+    if (upto != null){
+      // ตัดเส้นด้วย dasharray — ยาวเท่าที่เดินมาแล้ว ที่เหลือเป็นช่องว่าง
+      const L = p.getTotalLength ? p.getTotalLength() : 0;
+      if (L) p.setAttribute('stroke-dasharray', `${L * upto} ${L}`);
+    }
+    svg.append(p);
+    return p;
+  };
+  road(j.trail || '#8695A3', null);
+
+  // สัดส่วนที่เดินมาแล้ว ≈ ลำดับหมุดต่อจำนวนช่วง — พอสำหรับพรีวิว เพราะหมุดใน
+  // เส้นทางนี้วางห่างกันใกล้เคียงกัน และเราไม่ได้อ้างว่ามันตรงกับไฟล์ทุกพิกเซล
+  const done = stops.length > 1 ? cur.idx / (stops.length - 1) : 1;
+  const walked = road(j.line || '#FFFFFF', done);
+
+  stops.slice(0, cur.idx + 1).forEach((s, i) => {
+    const c = mk('circle');
+    c.setAttribute('cx', +s.px || 0); c.setAttribute('cy', +s.py || 0);
+    c.setAttribute('r', (+j.thick || 7) * 0.85);
+    c.setAttribute('fill', s.color || '#E65100');
+    c.setAttribute('stroke', '#FFFFFF');
+    c.setAttribute('stroke-width', (+j.thick || 7) * 0.35);
+    svg.append(c);
+
+    const tx = mk('text');
+    tx.setAttribute('x', +s.lx || 0); tx.setAttribute('y', +s.ly || 0);
+    tx.setAttribute('text-anchor', 'middle');
+    tx.setAttribute('dominant-baseline', 'middle');
+    tx.setAttribute('font-size', (+j.size || 34) * (i === cur.idx ? 1.18 : 1));
+    tx.setAttribute('font-family', j.font || 'sans-serif');
+    tx.setAttribute('font-weight', i === cur.idx ? '700' : '400');
+    tx.setAttribute('fill', i === cur.idx ? '#FFFFFF' : '#D8DEE3');
+    tx.setAttribute('stroke', i === cur.idx ? (s.color || '#000') : '#0B1216');
+    tx.setAttribute('stroke-width', 2.4);
+    tx.setAttribute('paint-order', 'stroke');
+    tx.textContent = s.label || '';
+    svg.append(tx);
+  });
+
+  // คนเดิน — วาดที่หมุดปลายทาง (จังหวะที่เดินถึงแล้ว)
+  const to = stops[cur.idx];
+  if (to){
+    const fig = +j.figure || 74;
+    const gx = +to.px || 0, gy = +to.py || 0;
+    const g = mk('g');
+    g.setAttribute('stroke', j.walker || '#FF3B30');
+    g.setAttribute('stroke-width', Math.max(1, fig * 0.085));
+    g.setAttribute('stroke-linecap', 'round');
+    g.setAttribute('fill', 'none');
+    const line = (x1, y1, x2, y2) => {
+      const l = mk('line');
+      l.setAttribute('x1', x1); l.setAttribute('y1', y1);
+      l.setAttribute('x2', x2); l.setAttribute('y2', y2);
+      g.append(l);
+    };
+    const head = mk('circle');
+    head.setAttribute('cx', gx); head.setAttribute('cy', gy - fig * 0.86);
+    head.setAttribute('r', fig * 0.15);
+    head.setAttribute('fill', j.walker || '#FF3B30');
+    head.setAttribute('stroke', 'none');
+    g.append(head);
+    line(gx, gy - fig * 0.71, gx, gy - fig * 0.42);
+    line(gx, gy - fig * 0.42, gx + fig * 0.23, gy);
+    line(gx, gy - fig * 0.42, gx - fig * 0.23, gy);
+    line(gx, gy - fig * 0.72, gx - fig * 0.26, gy - fig * 0.52);
+    line(gx, gy - fig * 0.72, gx + fig * 0.26, gy - fig * 0.52);
+    svg.append(g);
+  }
+
+  const w = +j.width || 0.46;
+  const d = el('div', 'cp jrn');
+  d.dataset.id = 'journey';
+  d.style.left = ((+j.x || 0.5) * 100) + '%';
+  d.style.top = ((+j.y || 0.5) * 100) + '%';
+  d.style.width = (w * 100) + '%';
+  // สูงตามอัตราส่วนของกล่อง เทียบกับ *ความกว้างของจอ* ไม่ใช่ของกล่องพ่อ —
+  // aspect-ratio ทำให้ไม่ต้องรู้ความสูงจริงของตัวเล่นตอนวาด
+  d.style.aspectRatio = `${box[0] + pad * 2} / ${box[1] + pad * 2}`;
+  d.style.transform = 'translate(-50%, -50%)';
+  d.title = 'ลากเพื่อย้ายแผนที่';
+  d.onpointerdown = ev => fxDragJourney(ev);
+  d.append(svg);
+  return d;
 }
 
 // ข้อความของขั้น 5 ที่กำลังขึ้นตอนนี้ — เวลามาจากเอนจิน (คำนวณจากไทม์ไลน์ที่
@@ -4959,6 +5397,14 @@ function fxDragShape(e, id){
   }, fxTouch);
 }
 
+// แผนที่มีชุดเดียวทั้งเรื่อง จึงไม่มี id ให้ capDragTo ใช้หา node — ส่งชื่อคงที่
+// ไปแทน แล้วตั้ง data-id ให้ตรงกันตอนวาด (ดู fxJourneyNode)
+function fxDragJourney(e){
+  const j = fxData().journey;
+  if (!j) return;
+  capDragTo(e, 'journey', (x, y) => { j.x = x; j.y = y; }, fxTouch);
+}
+
 const capStamp = () => JSON.stringify([CAP.style, CAP.auto.styles,
                                        (CAP.boxes || []).map(b => [b.style, b.x, b.y, b.text])]);
 
@@ -4979,7 +5425,31 @@ function capNode(c, k){
     ? (CAP.boxes || []).find(b => (b.id || '') === c.id) : null;
   if (bx){ c = {...c, text: bx.text, x: bx.x, y: bx.y}; }
   const d = el('div', 'cp' + (c.kind === 'box' ? ' bx' : '') + (capSel === c.id ? ' on' : ''));
-  d.textContent = c.text;
+  // การ์ดหลายบรรทัด — แต่ละบรรทัดมีขนาด/สีของตัวเอง จึงเป็น element ละบรรทัด
+  // ไม่ใช่ textContent ก้อนเดียว  ความสูงบรรทัดกับช่องไฟใช้สูตรเดียวกับตัวเขียน
+  // ASS (fxtext.stack_lines) โดยรับ line_h มาจากเอนจิน ไม่ใช่ตั้งเลขซ้ำที่นี่
+  const card = step === 5 && (c.lines || []).length ? c.lines : null;
+  if (card){
+    const lh = +((fxDefs() || {}).line_h) || 1.42;
+    card.forEach((v, i) => {
+      const sz = Math.max(7, (+v.size || 54) * k);
+      const ln = el('div');
+      ln.textContent = v.text || '';
+      ln.style.font = `${v.italic ? 'italic ' : ''}${v.bold ? '700' : '400'} `
+                    + `${sz}px "${v.font || s.font || 'sans-serif'}", sans-serif`;
+      ln.style.color = v.color || '#fff';
+      ln.style.height = (sz * lh) + 'px';
+      ln.style.lineHeight = (sz * lh) + 'px';
+      if (i > 0) ln.style.marginTop = ((+v.gap || 0) * sz) + 'px';
+      const b = (+v.border || 0) * k;
+      if (b > 0.4)
+        ln.style.textShadow = [[-1,-1],[1,-1],[-1,1],[1,1],[0,-1],[0,1],[-1,0],[1,0]]
+          .map(([x, y]) => `${x * b}px ${y * b}px 0 ${v.outline || '#000'}`).join(',');
+      d.append(ln);
+    });
+  } else {
+    d.textContent = c.text;
+  }
   d.dataset.id = c.id;
   const bord = (+s.border || 0) * k;
   d.style.font = `${s.italic ? 'italic ' : ''}${s.bold ? '700' : '400'} `
@@ -4998,7 +5468,9 @@ function capNode(c, k){
     d.style.background = fxRgba(pl.color || '#000000', isFinite(a) ? a : 0.45);
     d.style.padding = ((+pl.pad || 0) * k).toFixed(1) + 'px';
     d.style.borderRadius = '3px';
-  } else if (bord > 0.4)
+  } else if (bord > 0.4 && !card)
+    // การ์ดวาดขอบเป็นราย *บรรทัด* ไปแล้ว — ใส่ตรงนี้ด้วยจะตกทอดไปทับบรรทัดที่
+    // ตั้งใจไม่มีขอบ แล้วพรีวิวจะมีขอบมากกว่าไฟล์จริง
     d.style.textShadow = [[-1,-1],[1,-1],[-1,1],[1,1],[0,-1],[0,1],[-1,0],[1,0]]
       .map(([x, y]) => `${x * bord}px ${y * bord}px 0 ${s.outline || '#000'}`).join(',');
   // เลขแป้นตัวเลข 1-9: หลักคือแนวนอน (1,4,7 ซ้าย) แถวคือแนวตั้ง (1-3 ล่าง)
