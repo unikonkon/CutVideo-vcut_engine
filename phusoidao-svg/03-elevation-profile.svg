@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 620" width="100%" height="100%">
+  <!--
+    แบบที่ 3: ELEVATION PROFILE — กราฟไต่ระดับตามระยะทางจริง (แกน X = ระยะทางสะสม 0–6,500 ม.)
+    จุดต่ออนิเมชัน:
+      #ridge-line : pathLength=100 -> animate stroke-dashoffset 100 → 0
+      #ridge-area : animate opacity 0 → 1 (หรือ clip-path เลื่อนตามเส้น)
+      #stop-1..8  : animate r 0 → 6 ไล่ทีละจุด, label fade ตาม
+  -->
+  <defs>
+    <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#16A085" stop-opacity="0.42"/>
+      <stop offset="100%" stop-color="#16A085" stop-opacity="0.04"/>
+    </linearGradient>
+    <linearGradient id="ridgeGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#2E7D32"/>
+      <stop offset="45%"  stop-color="#E65100"/>
+      <stop offset="70%"  stop-color="#C0392B"/>
+      <stop offset="87%"  stop-color="#16A085"/>
+      <stop offset="100%" stop-color="#2980B9"/>
+    </linearGradient>
+  </defs>
+
+  <style>
+    .lbl  { font-family: Kanit, 'Noto Sans Thai', Sarabun, Thonburi, sans-serif; font-size: 13px; font-weight: 600;
+            fill: #22323F; stroke: #FFFFFF; stroke-width: 3.5; stroke-linejoin: round; paint-order: stroke; }
+    .grid { stroke: #93A5B4; stroke-opacity: .45; stroke-dasharray: 4 6; }
+  </style>
+
+  <g id="title">
+    <text x="52" y="44" font-family="Kanit, 'Noto Sans Thai', Sarabun, Thonburi, sans-serif" font-size="28" font-weight="700"
+          fill="#10202B" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round" paint-order="stroke">การเดินทาง ภูสอยดาว</text>
+    <text x="960" y="44" text-anchor="end" font-family="Kanit, 'Noto Sans Thai', Sarabun, Thonburi, sans-serif" font-size="14"
+          fill="#33505F" stroke="#FFFFFF" stroke-width="4" stroke-linejoin="round" paint-order="stroke">ระยะทางสะสม 6,500 เมตร</text>
+  </g>
+
+  <!-- เส้นกริด -->
+  <g id="grid">
+    <line class="grid" x1="52" y1="110" x2="960" y2="110"/>
+    <line class="grid" x1="52" y1="180" x2="960" y2="180"/>
+    <line class="grid" x1="52" y1="250" x2="960" y2="250"/>
+    <line class="grid" x1="52" y1="320" x2="960" y2="320"/>
+    <line x1="52" y1="390" x2="960" y2="390" stroke="#5C7284" stroke-width="1.5"/>
+  </g>
+
+  <!-- พื้นที่ใต้กราฟ + สันเส้นทาง -->
+  <path id="ridge-area" d="M 60,378 C 148,378 191,330 279,330 C 317,330 337,296 375,296 C 424,296 449,250 498,250 C 580,250 622,170 704,170 C 715,170 720,148 731,148 C 775,148 797,104 841,104 C 885,104 906,92 950,92 L 950,390 L 60,390 Z"
+        fill="url(#areaGrad)"/>
+  <path id="ridge-line" d="M 60,378 C 148,378 191,330 279,330 C 317,330 337,296 375,296 C 424,296 449,250 498,250 C 580,250 622,170 704,170 C 715,170 720,148 731,148 C 775,148 797,104 841,104 C 885,104 906,92 950,92"
+        fill="none" stroke="url(#ridgeGrad)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" pathLength="100"/>
+
+  <!-- จุดสำคัญ + ป้ายชื่อแนวตั้ง -->
+  <g id="stop-1">
+    <line x1="60" y1="378" x2="60" y2="390" stroke="#2E7D32" stroke-opacity=".5"/>
+    <circle cx="60" cy="378" r="6" fill="#FFFFFF" stroke="#2E7D32" stroke-width="3"/>
+    <text class="lbl" transform="translate(60,404) rotate(-90)" text-anchor="end" fill="#2E7D32">จุดเริ่มต้น · 0 ม.</text>
+  </g>
+
+  <g id="stop-2">
+    <line x1="279" y1="330" x2="279" y2="390" stroke="#E65100" stroke-opacity=".35"/>
+    <circle cx="279" cy="330" r="6" fill="#FFFFFF" stroke="#E65100" stroke-width="3"/>
+    <text class="lbl" transform="translate(279,404) rotate(-90)" text-anchor="end">เนินส่งญาติ · 1,600 ม.</text>
+  </g>
+
+  <g id="stop-3">
+    <line x1="375" y1="296" x2="375" y2="390" stroke="#E65100" stroke-opacity=".35"/>
+    <circle cx="375" cy="296" r="6" fill="#FFFFFF" stroke="#E65100" stroke-width="3"/>
+    <text class="lbl" transform="translate(375,404) rotate(-90)" text-anchor="end">เนินปราบเซียน · 2,300 ม.</text>
+  </g>
+
+  <g id="stop-4">
+    <line x1="498" y1="250" x2="498" y2="390" stroke="#E65100" stroke-opacity=".35"/>
+    <circle cx="498" cy="250" r="6" fill="#FFFFFF" stroke="#E65100" stroke-width="3"/>
+    <text class="lbl" transform="translate(498,404) rotate(-90)" text-anchor="end">เนินป่าก่อ · 3,200 ม.</text>
+  </g>
+
+  <g id="stop-5">
+    <line x1="704" y1="170" x2="704" y2="390" stroke="#E65100" stroke-opacity=".35"/>
+    <circle cx="704" cy="170" r="6" fill="#FFFFFF" stroke="#E65100" stroke-width="3"/>
+    <text class="lbl" transform="translate(704,404) rotate(-90)" text-anchor="end">เนินเสือโคร่ง · 4,700 ม.</text>
+  </g>
+
+  <g id="stop-6">
+    <line x1="731" y1="148" x2="731" y2="390" stroke="#C0392B" stroke-opacity=".4"/>
+    <circle cx="731" cy="148" r="6" fill="#FFFFFF" stroke="#C0392B" stroke-width="3"/>
+    <text class="lbl" transform="translate(731,404) rotate(-90)" text-anchor="end" fill="#C0392B">เนินมรณะ · 4,900 ม.</text>
+  </g>
+
+  <g id="stop-7">
+    <line x1="841" y1="104" x2="841" y2="390" stroke="#16A085" stroke-opacity=".4"/>
+    <circle cx="841" cy="104" r="6" fill="#FFFFFF" stroke="#16A085" stroke-width="3"/>
+    <text class="lbl" transform="translate(841,404) rotate(-90)" text-anchor="end" fill="#16A085">จุดผู้พิชิตลานสนภูสอยดาว · 5,700 ม.</text>
+  </g>
+
+  <g id="stop-8">
+    <line x1="950" y1="92" x2="950" y2="390" stroke="#2980B9" stroke-opacity=".4"/>
+    <circle cx="950" cy="92" r="10" fill="none" stroke="#2980B9" stroke-opacity=".35" stroke-width="2"/>
+    <circle cx="950" cy="92" r="6" fill="#FFFFFF" stroke="#2980B9" stroke-width="3"/>
+    <text class="lbl" transform="translate(950,404) rotate(-90)" text-anchor="end" fill="#2980B9">ลานกางเต็นท์ · 6,500 ม.</text>
+  </g>
+</svg>

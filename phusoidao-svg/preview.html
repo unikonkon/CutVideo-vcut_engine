@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>การเดินทาง ภูสอยดาว — 5 รูปแบบ</title>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#f1f5f9; }
+  body { font-family: Kanit, sans-serif; margin:0; padding:32px; background:var(--bg); color:#0f172a; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  p.sub { margin:0 0 24px; color:#64748b; font-size:14px; }
+  .bar { margin-bottom:24px; display:flex; gap:8px; }
+  button { font-family:inherit; font-size:13px; padding:8px 14px; border-radius:8px; border:1px solid #cbd5e1; background:#fff; cursor:pointer; }
+  .card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:18px; margin-bottom:24px; }
+  .card h2 { font-size:15px; margin:0 0 12px; color:#334155; font-weight:600; }
+  .stage { border-radius:10px; overflow:hidden; }
+  .stage img { display:block; width:100%; }
+</style>
+</head>
+<body>
+<h1>การเดินทาง ภูสอยดาว — 5 รูปแบบ</h1>
+<p class="sub">กดปุ่มเพื่อสลับพื้นหลัง ดูว่าอ่านออกไหมเวลาวางทับวิดีโอ</p>
+<div class="bar">
+  <button onclick="setBg('#f1f5f9')">พื้นอ่อน</button>
+  <button onclick="setBg('#0f172a')">พื้นเข้ม</button>
+  <button onclick="setBg('linear-gradient(120deg,#2d5a3d,#7a8b52,#3c6e71)')">พื้นภาพป่า</button>
+</div>
+
+<div class="card"><h2>1 · Trail Map — เส้นทางไต่เขาแบบแผนที่ (พื้นหลังโปร่งใส)</h2><div class="stage"><img src="01-trail-map.svg"></div></div>
+<div class="card"><h2>2 · Vertical Timeline — ไทม์ไลน์แนวตั้งบนแผ่นโปร่งแสง</h2><div class="stage" style="max-width:520px"><img src="02-vertical-timeline.svg"></div></div>
+<div class="card"><h2>3 · Elevation Profile — กราฟไต่ระดับตามระยะทางจริง</h2><div class="stage"><img src="03-elevation-profile.svg"></div></div>
+<div class="card"><h2>4 · Metro Line — เส้นตรงสไตล์แผนที่รถไฟฟ้า</h2><div class="stage"><img src="04-metro-line.svg"></div></div>
+<div class="card"><h2>5 · Mountain Card — การ์ดภาพประกอบภูเขา</h2><div class="stage"><img src="05-mountain-card.svg"></div></div>
+
+<script>
+function setBg(v){ document.body.style.background = v; }
+</script>
+</body>
+</html>

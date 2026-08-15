@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>เส้นทางภูสอยดาว — 5 แบบ</title>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; padding:24px; background:#0d0f12; color:#e8edf2; font-family:Kanit,sans-serif; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  p.sub { margin:0 0 20px; color:#8b98a5; font-size:13px; }
+  .bar { display:flex; gap:8px; margin-bottom:20px; }
+  button { font-family:inherit; font-size:13px; padding:7px 13px; border-radius:7px; border:1px solid #2a3138; background:#171b20; color:#e8edf2; cursor:pointer; }
+  button.on { background:#F69052; color:#1a1a1a; border-color:#F69052; }
+  .grid { display:flex; flex-wrap:wrap; gap:20px; }
+  .item { width:400px; }
+  .item h2 { font-size:14px; margin:0 0 8px; font-weight:500; color:#c6d0da; }
+  .stage { position:relative; width:400px; height:500px; border-radius:10px; overflow:hidden; background:#20262c; }
+  .stage img { position:absolute; inset:0; width:400px; height:500px; }
+  .stage img.photo { object-fit:cover; }
+  body.nophoto .photo { display:none; }
+</style>
+</head>
+<body>
+<h1>เส้นทางภูสอยดาว — 5 แบบ (ต้นแบบ: route-phusoidao.svg)</h1>
+<p class="sub">ทุกแบบใช้พิกัดหมุดและข้อความเดียวกัน viewBox 960×1200 · พื้นหลังโปร่งใส วางทับฟุตเทจได้เลย</p>
+<div class="bar">
+  <button class="on" onclick="document.body.classList.remove('nophoto');sel(this)">ทับรูปต้นฉบับ</button>
+  <button onclick="document.body.classList.add('nophoto');sel(this)">พื้นหลังเรียบ</button>
+</div>
+<div class="grid" id="g"></div>
+<script>
+const items = [
+  ["route-phusoidao.svg","ต้นแบบ · ถอดจากรูปจริง"],
+  ["route-1-glow.svg","1 · Glow — เส้นเรืองแสง หมุดขอบขาว"],
+  ["route-2-gradient.svg","2 · Gradient — เส้นทึบไล่สีตามความยาก"],
+  ["route-3-numbered.svg","3 · Numbered — หมุดใส่เลข + เส้นขีดคั่น"],
+  ["route-4-minimal.svg","4 · Minimal — บางเบา หมุดกลวง"],
+  ["route-5-direction.svg","5 · Direction — ลูกศรบอกทิศ + หมุดวงแหวน"],
+];
+document.getElementById('g').innerHTML = items.map(([f,t])=>`
+  <div class="item"><h2>${t}</h2>
+    <div class="stage">
+      <img class="photo" src="Route-เดินป่าไทย-ภูสอยดาว.jpg">
+      <img src="${f}">
+    </div>
+  </div>`).join('');
+function sel(b){ document.querySelectorAll('.bar button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); }
+</script>
+</body>
+</html>

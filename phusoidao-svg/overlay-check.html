@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>ตรวจการทับซ้อน route-phusoidao.svg</title>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#111; font-family:Kanit,sans-serif; color:#eee; }
+  .wrap { position:relative; width:960px; margin:0 auto; }
+  .wrap img.photo { display:block; width:960px; }
+  .wrap img.ov { position:absolute; inset:0; width:960px; }
+  .bar { padding:10px; display:flex; gap:8px; align-items:center; justify-content:center; }
+  button { font-family:inherit; padding:6px 12px; border-radius:6px; border:0; cursor:pointer; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <button onclick="p.style.opacity=1;o.style.opacity=1">ซ้อนกัน</button>
+  <button onclick="p.style.opacity=1;o.style.opacity=0">รูปต้นฉบับ</button>
+  <button onclick="p.style.opacity=0;o.style.opacity=1">SVG อย่างเดียว</button>
+  <button onclick="o.style.filter=o.style.filter?'':'invert(1) hue-rotate(180deg)'">สลับสี SVG</button>
+</div>
+<div class="wrap">
+  <img id="p" class="photo" src="Route-เดินป่าไทย-ภูสอยดาว.jpg">
+  <img id="o" class="ov" src="route-phusoidao.svg">
+</div>
+</body>
+</html>

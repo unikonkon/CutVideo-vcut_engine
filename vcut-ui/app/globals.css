@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #050507;
+  --panel: #101013;
+  --panel-2: #17171b;
+  --panel-3: #1e1e24;
+  --border: #232329;
+  --border-2: #2e2e36;
+  --text: #ececf0;
+  --muted: #8a8a94;
+  --faint: #5b5b64;
+  --accent: #3b82f6;
+  --accent-2: #2563eb;
+  --talk: #3b82f6;
+  --broll: #8b5cf6;
+  --danger: #ef4444;
+  --ok: #22c55e;
+  --warn: #f59e0b;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-panel-3: var(--panel-3);
+  --color-line: var(--border);
+  --color-line-2: var(--border-2);
+  --color-ink: var(--text);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-talk: var(--talk);
+  --color-broll: var(--broll);
+  --color-danger: var(--danger);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --font-sans: var(--font-thai), var(--font-geist-sans), sans-serif;
+  --font-mono: var(--font-geist-mono), monospace;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-thai), sans-serif;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-2);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--faint);
+}
+
+/* ลายทแยงบนช็อตที่ยังไม่มีไฟล์ตัด */
+.needs-render {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 6px,
+    rgba(245, 158, 11, 0.18) 6px 12px
+  );
+}
+
+input[type="range"] {
+  accent-color: var(--accent);
+}

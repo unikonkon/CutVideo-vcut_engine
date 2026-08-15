@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 1200" width="100%" height="100%">
+  <!--
+    แบบที่ 5 · DIRECTION — เพิ่มหัวลูกศรสีส้มกลางแต่ละช่วง บอกทิศทางการเดิน + หมุดเป็นวงแหวนขาวไส้ส้ม
+    พิกัดและข้อความเดียวกับต้นฉบับทุกจุด
+    อนิเมชัน: #route-reveal (dashoffset 100→0), #arrow-1..7 (fade ตามเส้น), #dot-1..8, #label-1..8, #tent
+  -->
+  <defs>
+    <mask id="route-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="960" height="1200">
+      <path id="route-reveal"
+            d="M 114,943 L 249,858 L 340,762 L 452,642 L 522,554 L 605,427 L 690,379 L 843,380"
+            fill="none" stroke="#FFFFFF" stroke-width="26" stroke-linecap="butt"
+            pathLength="100" stroke-dasharray="100 100" stroke-dashoffset="0"/>
+    </mask>
+    <filter id="txtShadow" x="-15%" y="-25%" width="130%" height="160%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+    <filter id="arrShadow" x="-60%" y="-60%" width="220%" height="220%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <style>
+    text { font-family: Kanit, 'Noto Sans Thai', Sarabun, Thonburi, sans-serif; fill: #FFFFFF; }
+    .nm  { font-size: 30px; font-weight: 600; }
+    .big { font-size: 34px; font-weight: 600; }
+    .km  { font-size: 18px; }
+    .sub { font-size: 18px; }
+    .arr { fill: none; stroke: #F69052; stroke-width: 3.8; stroke-linecap: round; stroke-linejoin: round; }
+  </style>
+
+  <g id="route" mask="url(#route-mask)">
+    <path id="route-line" d="M 114,943 L 249,858 L 340,762 L 452,642 L 522,554 L 605,427 L 690,379 L 843,380"
+          fill="none" stroke="#FFFFFF" stroke-width="3.6" stroke-dasharray="10 7" stroke-linecap="butt"/>
+  </g>
+
+  <g id="arrows" filter="url(#arrShadow)">
+    <polyline id="arrow-1" class="arr" points="-6,-7 3,0 -6,7" transform="translate(181.5,900.5) rotate(-32.2)"/>
+    <polyline id="arrow-2" class="arr" points="-6,-7 3,0 -6,7" transform="translate(294.5,810) rotate(-46.5)"/>
+    <polyline id="arrow-3" class="arr" points="-6,-7 3,0 -6,7" transform="translate(396,702) rotate(-47)"/>
+    <polyline id="arrow-4" class="arr" points="-6,-7 3,0 -6,7" transform="translate(487,598) rotate(-51.5)"/>
+    <polyline id="arrow-5" class="arr" points="-6,-7 3,0 -6,7" transform="translate(563.5,490.5) rotate(-56.8)"/>
+    <polyline id="arrow-6" class="arr" points="-6,-7 3,0 -6,7" transform="translate(647.5,403) rotate(-29.4)"/>
+    <polyline id="arrow-7" class="arr" points="-6,-7 3,0 -6,7" transform="translate(766.5,379.5) rotate(0.4)"/>
+  </g>
+
+  <g filter="url(#txtShadow)">
+    <g id="label-1"><text class="nm" x="123" y="950">จุดเริ่มต้น</text></g>
+    <g id="label-2">
+      <text class="nm" x="181" y="825" text-anchor="middle">เนินส่งญาติ</text>
+      <text class="km" x="181" y="852" text-anchor="middle">1.6 กม.</text>
+    </g>
+    <g id="label-3">
+      <text class="nm" x="272" y="738" text-anchor="middle">เนินปราบเซียน</text>
+      <text class="km" x="272" y="765" text-anchor="middle">2.3 กม.</text>
+    </g>
+    <g id="label-4">
+      <text class="nm" x="386" y="619" text-anchor="middle">เนินป่ากอ</text>
+      <text class="km" x="386" y="646" text-anchor="middle">3.2 กม.</text>
+    </g>
+    <g id="label-5">
+      <text class="nm" x="460" y="526" text-anchor="middle">เนินเสือโคร่ง</text>
+      <text class="km" x="460" y="553" text-anchor="middle">4.7 กม.</text>
+    </g>
+    <g id="label-6">
+      <text class="nm" x="528" y="430" text-anchor="middle">เนินมรณะ</text>
+      <text class="km" x="528" y="457" text-anchor="middle">4.9 กม.</text>
+    </g>
+    <g id="label-7">
+      <text class="sub" x="631" y="318" text-anchor="middle">ความสูง 1,633 ม.</text>
+      <text class="big" x="631" y="347" text-anchor="middle">ผู้พิชิตภูสอยดาว</text>
+      <text class="km"  x="631" y="368" text-anchor="middle">5.7 กม.</text>
+    </g>
+    <g id="label-8">
+      <text class="sub" x="853" y="318" text-anchor="middle">ลานสนภูสอยดาว</text>
+      <text class="big" x="853" y="347" text-anchor="middle">ลานกางเต็นท์</text>
+      <text class="km"  x="853" y="368" text-anchor="middle">6.5 กม.</text>
+    </g>
+  </g>
+
+  <g id="dots">
+    <g id="dot-1"><circle cx="114" cy="943" r="11" fill="none" stroke="#FFFFFF" stroke-width="2.4"/><circle cx="114" cy="943" r="5.5" fill="#F69052"/></g>
+    <g id="dot-2"><circle cx="249" cy="858" r="11" fill="none" stroke="#FFFFFF" stroke-width="2.4"/><circle cx="249" cy="858" r="5.5" fill="#F69052"/></g>
+    <g id="dot-3"><circle cx="340" cy="762" r="11" fill="none" stroke="#FFFFFF" stroke-width="2.4"/><circle cx="340" cy="762" r="5.5" fill="#F69052"/></g>
+    <g id="dot-4"><circle cx="452" cy="642" r="11" fill="none" stroke="#FFFFFF" stroke-width="2.4"/><circle cx="452" cy="642" r="5.5" fill="#F69052"/></g>
+    <g id="dot-5"><circle cx="522" cy="554" r="11" fill="none" stroke="#FFFFFF" stroke-width="2.4"/><circle cx="522" cy="554" r="5.5" fill="#F69052"/></g>
+    <g id="dot-6"><circle cx="605" cy="427" r="11" fill="none" stroke="#FFFFFF" stroke-width="2.4"/><circle cx="605" cy="427" r="5.5" fill="#F69052"/></g>
+    <g id="dot-7"><circle cx="690" cy="379" r="11" fill="none" stroke="#FFFFFF" stroke-width="2.4"/><circle cx="690" cy="379" r="5.5" fill="#F69052"/></g>
+    <g id="dot-8">
+      <circle cx="843" cy="380" r="11.5" fill="none" stroke="#FFFFFF" stroke-width="3.2"/>
+      <circle cx="843" cy="380" r="6.5" fill="#F69052"/>
+    </g>
+  </g>
+
+  <g id="tent" fill="none" stroke="#FFFFFF" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="812.5" y1="449" x2="843" y2="398.5"/>
+    <line x1="862.5" y1="449" x2="832.5" y2="398.5"/>
+    <line x1="812.5" y1="449" x2="862.5" y2="449"/>
+    <line x1="837.2" y1="412" x2="837.2" y2="431"/>
+    <polyline points="827.5,449 837.2,430.5 847,449"/>
+  </g>
+</svg>

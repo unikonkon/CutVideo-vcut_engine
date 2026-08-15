@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 560" width="100%" height="100%">
+  <!--
+    แบบที่ 1: TRAIL MAP — เส้นทางไต่เขาแบบแผนที่ (พื้นหลังโปร่งใส วางทับวิดีโอได้)
+    จุดต่ออนิเมชัน:
+      #trail-line  : stroke-dasharray="100 100" -> animate stroke-dashoffset 100 → 0 (วาดเส้น)
+      #stop-1..8   : animate opacity / transform scale จาก 0 → 1 ไล่ทีละจุด
+      #hiker       : animateMotion ตาม path #trail-geom
+  -->
+  <defs>
+    <linearGradient id="trailGrad" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#2E7D32"/>
+      <stop offset="45%"  stop-color="#E65100"/>
+      <stop offset="72%"  stop-color="#C0392B"/>
+      <stop offset="88%"  stop-color="#16A085"/>
+      <stop offset="100%" stop-color="#2980B9"/>
+    </linearGradient>
+
+    <filter id="cardShadow" x="-20%" y="-40%" width="140%" height="180%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0B1A24" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+
+  <style>
+    .name { font-family: Kanit, 'Noto Sans Thai', Sarabun, Thonburi, sans-serif; font-size: 14px; font-weight: 600; fill: #1F2D3A; }
+    .dist { font-family: Kanit, 'Noto Sans Thai', Sarabun, Thonburi, sans-serif; font-size: 11px; fill: #6B7C8A; }
+    .card { fill: #FFFFFF; fill-opacity: .96; }
+    .lead { stroke: #12232E; stroke-width: 1.4; stroke-dasharray: 3 3; stroke-opacity: .75; }
+  </style>
+
+  <!-- หัวเรื่อง -->
+  <g id="title">
+    <text x="40" y="58" font-family="Kanit, 'Noto Sans Thai', Sarabun, Thonburi, sans-serif" font-size="30" font-weight="700"
+          fill="#10202B" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round" paint-order="stroke">การเดินทาง ภูสอยดาว</text>
+    <text x="40" y="84" font-family="Kanit, 'Noto Sans Thai', Sarabun, Thonburi, sans-serif" font-size="14"
+          fill="#33505F" stroke="#FFFFFF" stroke-width="4" stroke-linejoin="round" paint-order="stroke">ระยะทางรวม 6,500 เมตร · 8 จุดสำคัญ</text>
+  </g>
+
+  <!-- เส้นทาง: ขอบเข้ม + ไล่สี + จุดไข่ปลาขาว -->
+  <g id="trail">
+    <path id="trail-casing" d="M 80,470 C 128,470 152,428 200,428 C 248,428 272,392 320,392 C 368,392 392,344 440,344 C 488,344 512,288 560,288 C 608,288 632,246 680,246 C 728,246 752,176 800,176 C 848,176 872,130 920,130"
+          fill="none" stroke="#0F1E28" stroke-width="11" stroke-linecap="round" stroke-opacity=".9"/>
+    <path id="trail-line" d="M 80,470 C 128,470 152,428 200,428 C 248,428 272,392 320,392 C 368,392 392,344 440,344 C 488,344 512,288 560,288 C 608,288 632,246 680,246 C 728,246 752,176 800,176 C 848,176 872,130 920,130"
+          fill="none" stroke="url(#trailGrad)" stroke-width="6.5" stroke-linecap="round" pathLength="100"/>
+    <path id="trail-dots" d="M 80,470 C 128,470 152,428 200,428 C 248,428 272,392 320,392 C 368,392 392,344 440,344 C 488,344 512,288 560,288 C 608,288 632,246 680,246 C 728,246 752,176 800,176 C 848,176 872,130 920,130"
+          fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="0.5 9" stroke-opacity=".85"/>
+  </g>
+
+  <!-- จุดที่ 1 -->
+  <g id="stop-1">
+    <line class="lead" x1="80" y1="479" x2="80" y2="504"/>
+    <g filter="url(#cardShadow)">
+      <rect class="card" x="64" y="504" width="138" height="46" rx="10" stroke="#2E7D32" stroke-opacity=".45"/>
+    </g>
+    <text class="name" x="133" y="525" text-anchor="middle" fill="#2E7D32">จุดเริ่มต้น</text>
+    <text class="dist" x="133" y="541" text-anchor="middle">0 ม.</text>
+    <circle cx="80" cy="470" r="10.5" fill="none" stroke="#0F1E28" stroke-opacity=".35"/>
+    <circle cx="80" cy="470" r="9" fill="#2E7D32" stroke="#FFFFFF" stroke-width="3"/>
+  </g>
+
+  <!-- จุดที่ 2 -->
+  <g id="stop-2">
+    <line class="lead" x1="200" y1="419" x2="200" y2="394"/>
+    <g filter="url(#cardShadow)">
+      <rect class="card" x="78" y="348" width="138" height="46" rx="10" stroke="#E65100" stroke-opacity=".35"/>
+    </g>
+    <text class="name" x="147" y="369" text-anchor="middle">เนินส่งญาติ</text>
+    <text class="dist" x="147" y="385" text-anchor="middle">1,600 ม.</text>
+    <circle cx="200" cy="428" r="10.5" fill="none" stroke="#0F1E28" stroke-opacity=".35"/>
+    <circle cx="200" cy="428" r="9" fill="#E65100" stroke="#FFFFFF" stroke-width="3"/>
+  </g>
+
+  <!-- จุดที่ 3 -->
+  <g id="stop-3">
+    <line class="lead" x1="320" y1="401" x2="320" y2="426"/>
+    <g filter="url(#cardShadow)">
+      <rect class="card" x="304" y="426" width="138" height="46" rx="10" stroke="#E65100" stroke-opacity=".35"/>
+    </g>
+    <text class="name" x="373" y="447" text-anchor="middle">เนินปราบเซียน</text>
+    <text class="dist" x="373" y="463" text-anchor="middle">2,300 ม.</text>
+    <circle cx="320" cy="392" r="10.5" fill="none" stroke="#0F1E28" stroke-opacity=".35"/>
+    <circle cx="320" cy="392" r="9" fill="#E65100" stroke="#FFFFFF" stroke-width="3"/>
+  </g>
+
+  <!-- จุดที่ 4 -->
+  <g id="stop-4">
+    <line class="lead" x1="440" y1="335" x2="440" y2="310"/>
+    <g filter="url(#cardShadow)">
+      <rect class="card" x="318" y="264" width="138" height="46" rx="10" stroke="#E65100" stroke-opacity=".35"/>
+    </g>
+    <text class="name" x="387" y="285" text-anchor="middle">เนินป่าก่อ</text>
+    <text class="dist" x="387" y="301" text-anchor="middle">3,200 ม.</text>
+    <circle cx="440" cy="344" r="10.5" fill="none" stroke="#0F1E28" stroke-opacity=".35"/>
+    <circle cx="440" cy="344" r="9" fill="#E65100" stroke="#FFFFFF" stroke-width="3"/>
+  </g>
+
+  <!-- จุดที่ 5 -->
+  <g id="stop-5">
+    <line class="lead" x1="560" y1="297" x2="560" y2="322"/>
+    <g filter="url(#cardShadow)">
+      <rect class="card" x="544" y="322" width="138" height="46" rx="10" stroke="#E65100" stroke-opacity=".35"/>
+    </g>
+    <text class="name" x="613" y="343" text-anchor="middle">เนินเสือโคร่ง</text>
+    <text class="dist" x="613" y="359" text-anchor="middle">4,700 ม.</text>
+    <circle cx="560" cy="288" r="10.5" fill="none" stroke="#0F1E28" stroke-opacity=".35"/>
+    <circle cx="560" cy="288" r="9" fill="#E65100" stroke="#FFFFFF" stroke-width="3"/>
+  </g>
+
+  <!-- จุดที่ 6 -->
+  <g id="stop-6">
+    <line class="lead" x1="680" y1="237" x2="680" y2="212"/>
+    <g filter="url(#cardShadow)">
+      <rect class="card" x="558" y="166" width="138" height="46" rx="10" stroke="#C0392B" stroke-opacity=".45"/>
+    </g>
+    <text class="name" x="627" y="187" text-anchor="middle" fill="#C0392B">เนินมรณะ</text>
+    <text class="dist" x="627" y="203" text-anchor="middle">4,900 ม.</text>
+    <circle cx="680" cy="246" r="10.5" fill="none" stroke="#0F1E28" stroke-opacity=".35"/>
+    <circle cx="680" cy="246" r="9" fill="#C0392B" stroke="#FFFFFF" stroke-width="3"/>
+  </g>
+
+  <!-- จุดที่ 7 -->
+  <g id="stop-7">
+    <line class="lead" x1="800" y1="185" x2="800" y2="210"/>
+    <g filter="url(#cardShadow)">
+      <rect class="card" x="784" y="210" width="200" height="46" rx="10" stroke="#16A085" stroke-opacity=".45"/>
+    </g>
+    <text class="name" x="884" y="231" text-anchor="middle" fill="#16A085">จุดผู้พิชิตลานสนภูสอยดาว</text>
+    <text class="dist" x="884" y="247" text-anchor="middle">5,700 ม.</text>
+    <circle cx="800" cy="176" r="10.5" fill="none" stroke="#0F1E28" stroke-opacity=".35"/>
+    <circle cx="800" cy="176" r="9" fill="#16A085" stroke="#FFFFFF" stroke-width="3"/>
+  </g>
+
+  <!-- จุดที่ 8 -->
+  <g id="stop-8">
+    <line class="lead" x1="920" y1="121" x2="920" y2="96"/>
+    <g filter="url(#cardShadow)">
+      <rect class="card" x="798" y="50" width="138" height="46" rx="10" stroke="#2980B9" stroke-opacity=".45"/>
+    </g>
+    <text class="name" x="867" y="71" text-anchor="middle" fill="#2980B9">ลานกางเต็นท์</text>
+    <text class="dist" x="867" y="87" text-anchor="middle">6,500 ม.</text>
+    <circle cx="920" cy="130" r="13" fill="none" stroke="#2980B9" stroke-opacity=".35" stroke-width="2"/>
+    <circle cx="920" cy="130" r="9" fill="#2980B9" stroke="#FFFFFF" stroke-width="3"/>
+  </g>
+</svg>

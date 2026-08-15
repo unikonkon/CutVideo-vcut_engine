@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 600" width="100%" height="100%">
+  <!--
+    แบบที่ 5: MOUNTAIN CARD — การ์ดภาพประกอบแบน ๆ (flat) เส้นทางไต่สันเขา + สารบัญจุดด้านซ้าย
+    จุดต่ออนิเมชัน:
+      #trail-line : pathLength=100 -> animate stroke-dashoffset 100 → 0 (เส้นทางค่อย ๆ ถูกวาด)
+      #pin-1..8   : animate opacity/scale ไล่ทีละหมุด พร้อม #item-1..8 ในสารบัญ
+      #ridge-back / #ridge-mid : parallax เลื่อนแนวนอนเล็กน้อยได้
+  -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#DCEDF7"/>
+      <stop offset="100%" stop-color="#F6FBFD"/>
+    </linearGradient>
+    <linearGradient id="slope" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#4E8F6D"/>
+      <stop offset="100%" stop-color="#3E7C63"/>
+    </linearGradient>
+    <clipPath id="scene">
+      <rect x="350" y="40" width="610" height="520" rx="20"/>
+    </clipPath>
+    <filter id="soft" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#0B1A24" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+
+  <style>
+    .it  { font-family: Kanit, 'Noto Sans Thai', Sarabun, Thonburi, sans-serif; font-size: 15px; font-weight: 600; fill: #1E293B; }
+    .id  { font-family: Kanit, 'Noto Sans Thai', Sarabun, Thonburi, sans-serif; font-size: 12px; fill: #64748B; }
+    .num { font-family: Kanit, 'Noto Sans Thai', Sarabun, Thonburi, sans-serif; font-size: 13px; font-weight: 700; fill: #FFFFFF; }
+    .pn  { font-family: Kanit, 'Noto Sans Thai', Sarabun, Thonburi, sans-serif; font-size: 12px; font-weight: 700; }
+  </style>
+
+  <g filter="url(#soft)">
+    <rect x="0" y="0" width="1000" height="600" rx="24" fill="#FFFFFF"/>
+  </g>
+  <rect x="0.5" y="0.5" width="999" height="599" rx="24" fill="none" stroke="#E2E8F0"/>
+
+  <!-- ภาพประกอบภูเขา -->
+  <g clip-path="url(#scene)">
+    <rect x="350" y="40" width="610" height="520" fill="url(#sky)"/>
+    <circle cx="880" cy="108" r="26" fill="#FFD27A"/>
+    <path id="ridge-back" d="M 350,560 L 350,300 L 450,180 L 545,265 L 665,150 L 790,245 L 960,125 L 960,560 Z" fill="#CBDEE8"/>
+    <path id="ridge-mid"  d="M 350,560 L 350,380 L 470,285 L 575,355 L 700,250 L 820,330 L 960,235 L 960,560 Z" fill="#A7C9BC"/>
+    <path id="ridge-front" d="M 350,560 L 350,545 C 368,538 374,524 390,519 C 416,519 429,494 455,494 C 481,494 494,459 520,459 C 546,459 559,429 585,429 C 611,429 624,384 650,384 C 676,384 689,349 715,349 C 745,349 760,299 790,299 C 834,299 856,239 900,239 C 930,235 945,230 960,226 L 960,560 Z" fill="url(#slope)"/>
+
+    <g fill="#2F6B4F" opacity=".85">
+      <polygon points="500,494 489,520 511,520"/>
+      <polygon points="620,444 609,470 631,470"/>
+      <polygon points="690,414 679,440 701,440"/>
+      <polygon points="760,374 749,400 771,400"/>
+      <polygon points="840,324 829,350 851,350"/>
+    </g>
+
+    <path id="trail-line" d="M 390,545 C 416,545 429,520 455,520 C 481,520 494,485 520,485 C 546,485 559,455 585,455 C 611,455 624,410 650,410 C 676,410 689,375 715,375 C 745,375 760,325 790,325 C 834,325 856,265 900,265"
+          fill="none" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="9 7" stroke-opacity=".95" pathLength="100"/>
+
+    <g id="pin-1"><circle cx="390" cy="545" r="12" fill="#FFFFFF" stroke="#2E7D32" stroke-width="3"/><text class="pn" x="390" y="550" text-anchor="middle" fill="#2E7D32">1</text></g>
+    <g id="pin-2"><circle cx="455" cy="520" r="12" fill="#FFFFFF" stroke="#E65100" stroke-width="3"/><text class="pn" x="455" y="525" text-anchor="middle" fill="#E65100">2</text></g>
+    <g id="pin-3"><circle cx="520" cy="485" r="12" fill="#FFFFFF" stroke="#E65100" stroke-width="3"/><text class="pn" x="520" y="490" text-anchor="middle" fill="#E65100">3</text></g>
+    <g id="pin-4"><circle cx="585" cy="455" r="12" fill="#FFFFFF" stroke="#E65100" stroke-width="3"/><text class="pn" x="585" y="460" text-anchor="middle" fill="#E65100">4</text></g>
+    <g id="pin-5"><circle cx="650" cy="410" r="12" fill="#FFFFFF" stroke="#E65100" stroke-width="3"/><text class="pn" x="650" y="415" text-anchor="middle" fill="#E65100">5</text></g>
+    <g id="pin-6"><circle cx="715" cy="375" r="12" fill="#FFFFFF" stroke="#C0392B" stroke-width="3"/><text class="pn" x="715" y="380" text-anchor="middle" fill="#C0392B">6</text></g>
+    <g id="pin-7"><circle cx="790" cy="325" r="12" fill="#FFFFFF" stroke="#16A085" stroke-width="3"/><text class="pn" x="790" y="330" text-anchor="middle" fill="#16A085">7</text></g>
+    <g id="pin-8"><circle cx="900" cy="265" r="14" fill="#2980B9" stroke="#FFFFFF" stroke-width="3"/><text class="pn" x="900" y="270" text-anchor="middle" fill="#FFFFFF">8</text></g>
+  </g>
+  <rect x="350" y="40" width="610" height="520" rx="20" fill="none" stroke="#D8E3EA"/>
+
+  <!-- สารบัญจุดสำคัญ -->
+  <g id="legend">
+    <text x="40" y="66" font-family="Kanit, 'Noto Sans Thai', Sarabun, Thonburi, sans-serif" font-size="26" font-weight="700" fill="#14202B">การเดินทาง ภูสอยดาว</text>
+    <text x="40" y="92" font-family="Kanit, 'Noto Sans Thai', Sarabun, Thonburi, sans-serif" font-size="13" fill="#64748B">ระยะทางรวม 6,500 เมตร · 8 จุดสำคัญ</text>
+    <line x1="40" y1="110" x2="330" y2="110" stroke="#E2E8F0"/>
+
+    <g id="item-1"><circle cx="56" cy="146" r="14" fill="#2E7D32"/><text class="num" x="56" y="151" text-anchor="middle">1</text><text class="it" x="84" y="144">จุดเริ่มต้น</text><text class="id" x="84" y="161">0 ม.</text></g>
+    <g id="item-2"><circle cx="56" cy="200" r="14" fill="#E65100"/><text class="num" x="56" y="205" text-anchor="middle">2</text><text class="it" x="84" y="198">เนินส่งญาติ</text><text class="id" x="84" y="215">1,600 ม.</text></g>
+    <g id="item-3"><circle cx="56" cy="254" r="14" fill="#E65100"/><text class="num" x="56" y="259" text-anchor="middle">3</text><text class="it" x="84" y="252">เนินปราบเซียน</text><text class="id" x="84" y="269">2,300 ม.</text></g>
+    <g id="item-4"><circle cx="56" cy="308" r="14" fill="#E65100"/><text class="num" x="56" y="313" text-anchor="middle">4</text><text class="it" x="84" y="306">เนินป่าก่อ</text><text class="id" x="84" y="323">3,200 ม.</text></g>
+    <g id="item-5"><circle cx="56" cy="362" r="14" fill="#E65100"/><text class="num" x="56" y="367" text-anchor="middle">5</text><text class="it" x="84" y="360">เนินเสือโคร่ง</text><text class="id" x="84" y="377">4,700 ม.</text></g>
+    <g id="item-6"><circle cx="56" cy="416" r="14" fill="#C0392B"/><text class="num" x="56" y="421" text-anchor="middle">6</text><text class="it" x="84" y="414" fill="#C0392B">เนินมรณะ</text><text class="id" x="84" y="431">4,900 ม.</text></g>
+    <g id="item-7"><circle cx="56" cy="470" r="14" fill="#16A085"/><text class="num" x="56" y="475" text-anchor="middle">7</text><text class="it" x="84" y="468" fill="#16A085">จุดผู้พิชิตลานสนภูสอยดาว</text><text class="id" x="84" y="485">5,700 ม.</text></g>
+    <g id="item-8"><circle cx="56" cy="524" r="14" fill="#2980B9"/><text class="num" x="56" y="529" text-anchor="middle">8</text><text class="it" x="84" y="522" fill="#2980B9">ลานกางเต็นท์</text><text class="id" x="84" y="539">6,500 ม.</text></g>
+  </g>
+</svg>
