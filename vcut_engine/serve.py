@@ -897,6 +897,70 @@ def make_handler(ctx, job):
                 proc.wait()
                 lst.unlink(missing_ok=True)
 
+        # ── รับไฟล์ฟุตเทจ ──
+        def _upload_clip(self, query):
+            """รับคลิปดิบลงโฟลเดอร์ฟุตเทจ — body คือเนื้อไฟล์ตรง ๆ ไม่ใช่ JSON
+
+            ทำไมไม่ใช้ /api/asset: ทางนั้นห่อ base64 ทั้งไฟล์ใน JSON (เพดาน 40 MB)
+            ซึ่งพอเป็นฟุตเทจระดับกิกะไบต์จะกินหน่วยความจำ 1.3 เท่าของไฟล์ —
+            ทางนี้อ่านทีละก้อนแล้วเขียนลงดิสก์เลย ไม่อ่านทั้งไฟล์ขึ้นมาก่อน
+
+            เขียนลง .part ก่อนแล้วค่อยเปลี่ยนชื่อ — สายหลุดกลางทางจะไม่เหลือไฟล์
+            ครึ่ง ๆ ที่ scan หยิบไปเข้าใจว่าเป็นคลิปจริง  ชื่อไฟล์ถูกกรองให้เหลือ
+            ตัวอักษรที่เส้นทาง /thumb /clip รับ (SAFE_NAME) ไม่งั้นอัปโหลดสำเร็จ
+            แต่เปิดภาพตัวอย่างไม่ได้เพราะชื่อไม่ผ่านด่านของเส้นทางพวกนั้น
+            """
+            q = dict(x.split("=", 1) for x in query.split("&") if "=" in x)
+            raw = Path(unquote(q.get("name", ""))).name
+            stem = re.sub(r"[^A-Za-z0-9._\-]+", "_", Path(raw).stem).strip("._")
+            ext = Path(raw).suffix
+            if not stem or not ext:
+                return self._json({"error": f"ชื่อไฟล์ใช้ไม่ได้: {raw}"}, 400)
+            exts = {e.lower() for e in ctx.get("scan.extensions", [".MOV"])}
+            if ext.lower() not in exts:
+                return self._json(
+                    {"error": f"นามสกุล {ext} ไม่อยู่ใน [scan] extensions "
+                              f"({', '.join(sorted(exts))})"}, 400)
+            if not ctx.source.is_dir():
+                return self._json(
+                    {"error": f"ไม่พบโฟลเดอร์ฟุตเทจ {ctx.source} — "
+                              "ต่อดิสก์/สร้างโฟลเดอร์ก่อน"}, 400)
+            try:
+                size = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                size = 0
+            if size <= 0:
+                return self._json({"error": "ไม่รู้ขนาดไฟล์ (Content-Length)"}, 411)
+            free = shutil.disk_usage(ctx.source).free
+            if size > free - (1 << 30):
+                return self._json(
+                    {"error": f"ดิสก์ไม่พอ — ไฟล์ {size / 1e9:.1f} GB "
+                              f"เหลือ {free / 1e9:.1f} GB"}, 507)
+            dst = ctx.source / f"{stem}{ext}"
+            if dst.exists() and q.get("overwrite") != "1":
+                return self._json(
+                    {"error": f"มีไฟล์ชื่อ {dst.name} อยู่แล้ว", "exists": True}, 409)
+            tmp = dst.with_suffix(dst.suffix + ".part")
+            got = 0
+            try:
+                with tmp.open("wb") as f:
+                    while got < size:
+                        buf = self.rfile.read(min(1 << 20, size - got))
+                        if not buf:
+                            break
+                        f.write(buf)
+                        got += len(buf)
+                if got != size:
+                    tmp.unlink(missing_ok=True)
+                    return self._json(
+                        {"error": f"ได้ไม่ครบ — รับมา {got} จาก {size} ไบต์"}, 400)
+                tmp.replace(dst)
+            except OSError as e:
+                tmp.unlink(missing_ok=True)
+                return self._json({"error": f"เขียนไฟล์ไม่ได้: {e}"}, 500)
+            return self._json({"ok": True, "name": dst.name, "size": got,
+                               "renamed": dst.name != raw})
+
         # ── เส้นทาง ──
         def do_GET(self):
             if not self._guard():
@@ -1064,7 +1128,11 @@ def make_handler(ctx, job):
         def do_POST(self):
             if not self._guard():
                 return
-            p = urlparse(self.path).path
+            u = urlparse(self.path)
+            p = u.path
+            # อัปโหลดต้องแยกก่อนถึงบรรทัดอ่าน JSON — body เป็นเนื้อไฟล์ ไม่ใช่ JSON
+            if p == "/upload/clip":
+                return self._upload_clip(u.query)
             try:
                 n = int(self.headers.get("Content-Length") or 0)
                 payload = json.loads(self.rfile.read(n) or b"{}")

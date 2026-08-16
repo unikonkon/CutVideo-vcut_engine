@@ -10,21 +10,30 @@ import {
 import { Loader2, PlugZap, RefreshCw } from "lucide-react";
 import {
   api,
+  api2,
   clipUrl,
   liveUrl,
   segUrl,
   type ClipInfo,
   type JobState,
   type ProjectState,
+  type ReviewOp,
   type Shot,
 } from "@/lib/api";
 import TopBar from "@/components/TopBar";
-import IconRail from "@/components/IconRail";
+import IconRail, { type Tab } from "@/components/IconRail";
 import AssetsPanel from "@/components/AssetsPanel";
 import Preview from "@/components/Preview";
 import Properties from "@/components/Properties";
 import Timeline from "@/components/Timeline";
 import JobPanel from "@/components/JobPanel";
+import TextPanel from "@/components/panels/TextPanel";
+import MusicPanel from "@/components/panels/MusicPanel";
+import StickerPanel from "@/components/panels/StickerPanel";
+import FxPanel from "@/components/panels/FxPanel";
+import TranscriptPanel from "@/components/panels/TranscriptPanel";
+import ReviewPanel from "@/components/panels/ReviewPanel";
+import SetupPanel from "@/components/panels/SetupPanel";
 
 export default function Editor() {
   const [proj, setProj] = useState<ProjectState | null>(null);
@@ -41,6 +50,9 @@ export default function Editor() {
   const [job, setJob] = useState<JobState | null>(null);
   const [jobLines, setJobLines] = useState<string[]>([]);
   const [jobOpen, setJobOpen] = useState(false);
+  const [tab, setTab] = useState<Tab>("assets");
+  // เด้งขึ้นทุกครั้งที่งานฝั่งเอนจินจบ — panel ที่เปิดอยู่จะโหลดข้อมูลใหม่
+  const [reloadKey, setReloadKey] = useState(0);
 
   const [playing, setPlaying] = useState(false);
   const [playhead, setPlayhead] = useState(0);
@@ -145,6 +157,7 @@ export default function Editor() {
       if (got && !got.running) {
         clearInterval(id);
         refresh();
+        setReloadKey((k) => k + 1);
       }
     }, 1000);
     return () => clearInterval(id);
@@ -158,6 +171,32 @@ export default function Editor() {
         await pollJob();
       } catch (e) {
         flash(e instanceof Error ? e.message : "สั่งงานไม่สำเร็จ");
+      }
+    },
+    [pollJob, flash],
+  );
+
+  const musicFetch = useCallback(
+    async (url: string) => {
+      try {
+        await api2.music(url);
+        setJobOpen(true);
+        await pollJob();
+      } catch (e) {
+        flash(e instanceof Error ? e.message : "สั่งดึงเพลงไม่สำเร็จ");
+      }
+    },
+    [pollJob, flash],
+  );
+
+  const runReview = useCallback(
+    async (context: string, force: boolean) => {
+      try {
+        await api2.runReview(context, force);
+        setJobOpen(true);
+        await pollJob();
+      } catch (e) {
+        flash(e instanceof Error ? e.message : "สั่ง review ไม่สำเร็จ");
       }
     },
     [pollJob, flash],
@@ -350,6 +389,38 @@ export default function Editor() {
     setSel(k);
   }, [shots, offsets, playhead, mutate, flash]);
 
+  // ช็อตที่หัวเล่นชี้อยู่ → (ชื่อคลิป, วินาทีในคลิปต้นฉบับ) — ใช้ผูกเอฟเฟกต์/ภาพซ้อน
+  const atPlayhead = useCallback(() => {
+    for (let i = 0; i < shots.length; i++) {
+      if (playhead < offsets[i] + shots[i].dur) {
+        return {
+          name: shots[i].name,
+          at: shots[i].start + (playhead - offsets[i]),
+        };
+      }
+    }
+    return null;
+  }, [shots, offsets, playhead]);
+
+  const applyReviewOp = useCallback(
+    (op: ReviewOp): boolean => {
+      if (shots[op.at]?.name !== op.name) {
+        flash(`ช็อต ${op.at + 1} ไม่ใช่ ${op.name} แล้ว — ไทม์ไลน์เปลี่ยนไป ให้รัน review ใหม่`);
+        return false;
+      }
+      if (op.op === "drop") {
+        removeShot(op.at);
+        return true;
+      }
+      if (op.op === "move" && op.to != null) {
+        reorder(op.at, Math.min(op.to, shots.length - 1));
+        return true;
+      }
+      return false;
+    },
+    [shots, removeShot, reorder, flash],
+  );
+
   const addClip = useCallback(
     (c: ClipInfo) => {
       const piece: Shot = {
@@ -483,15 +554,55 @@ export default function Editor() {
       />
 
       <div className="flex min-h-0 flex-1 gap-2 px-2">
-        <IconRail />
-        <AssetsPanel
-          clips={clips}
-          usage={usage}
-          onAdd={addClip}
-          onPreview={previewClip}
-          onScan={() => runJob("scan")}
-          busy={!!job?.running}
-        />
+        <IconRail tab={tab} onTab={setTab} />
+        {tab === "assets" && (
+          <AssetsPanel
+            clips={clips}
+            usage={usage}
+            onAdd={addClip}
+            onPreview={previewClip}
+            onScan={() => runJob("scan")}
+            busy={!!job?.running}
+            flash={flash}
+          />
+        )}
+        {tab === "text" && (
+          <TextPanel reloadKey={reloadKey} runJob={runJob} flash={flash} />
+        )}
+        {tab === "music" && (
+          <MusicPanel
+            reloadKey={reloadKey}
+            onMusicFetch={musicFetch}
+            flash={flash}
+          />
+        )}
+        {tab === "stickers" && (
+          <StickerPanel
+            reloadKey={reloadKey}
+            atPlayhead={atPlayhead}
+            flash={flash}
+          />
+        )}
+        {tab === "fx" && (
+          <FxPanel
+            reloadKey={reloadKey}
+            atPlayhead={atPlayhead}
+            flash={flash}
+          />
+        )}
+        {tab === "cc" && <TranscriptPanel reloadKey={reloadKey} />}
+        {tab === "review" && (
+          <ReviewPanel
+            reloadKey={reloadKey}
+            busy={!!job?.running}
+            onRun={runReview}
+            applyOp={applyReviewOp}
+            flash={flash}
+          />
+        )}
+        {tab === "setup" && (
+          <SetupPanel reloadKey={reloadKey} flash={flash} />
+        )}
         <Preview
           videoRef={videoRef}
           stageRef={stageRef}
