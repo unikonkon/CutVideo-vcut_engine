@@ -1,15 +1,16 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #050507;
-  --panel: #101013;
-  --panel-2: #17171b;
-  --panel-3: #1e1e24;
-  --border: #232329;
-  --border-2: #2e2e36;
-  --text: #ececf0;
-  --muted: #8a8a94;
-  --faint: #5b5b64;
+  /* โทนเทากลาง (อิงสวอตช์ #2e2e2e) — panel คือสีหลักของ section, bg เข้มกว่านิดให้เห็นชั้น */
+  --bg: #232323;
+  --panel: #2e2e2e;
+  --panel-2: #363636;
+  --panel-3: #3f3f3f;
+  --border: #474747;
+  --border-2: #555555;
+  --text: #ececec;
+  --muted: #9c9c9c;
+  --faint: #6e6e6e;
   --accent: #3b82f6;
   --accent-2: #2563eb;
   --talk: #3b82f6;

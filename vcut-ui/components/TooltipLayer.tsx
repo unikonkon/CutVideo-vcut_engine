@@ -111,7 +111,7 @@ export default function TooltipLayer() {
   if (!tip) return null;
   return (
     <div
-      className="pointer-events-none fixed z-[200] max-w-64 rounded-lg border border-line-2 bg-[#202027] px-2.5 py-1.5 text-[11px] leading-4.5 text-ink shadow-xl"
+      className="pointer-events-none fixed z-[200] max-w-64 rounded-lg border border-line-2 bg-[#1d1d1d] px-2.5 py-1.5 text-[11px] leading-4.5 text-ink shadow-xl"
       style={{
         left: tip.x,
         top: tip.y,
