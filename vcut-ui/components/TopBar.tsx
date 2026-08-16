@@ -98,6 +98,7 @@ export default function TopBar({
         <>
           <button
             onClick={onRevert}
+            title="ทิ้งการแก้ช็อตทั้งหมด กลับเป็นตาม edl.json บนดิสก์"
             className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] text-muted hover:bg-panel-2 hover:text-ink"
           >
             <RotateCcw size={13} /> ย้อนกลับ
@@ -105,6 +106,7 @@ export default function TopBar({
           <button
             onClick={onSave}
             disabled={saving}
+            title="เขียนไทม์ไลน์ลง edl.json — สำรองของเดิมไว้ให้ (Cmd+S)"
             className="flex items-center gap-1.5 rounded-lg bg-panel-3 px-3 py-1.5 text-[12px] font-medium text-ink hover:bg-line-2 disabled:opacity-50"
           >
             {saving ? (
@@ -133,7 +135,7 @@ export default function TopBar({
             onClick={onSaveFx}
             disabled={fxSaving}
             className="flex items-center gap-1.5 rounded-lg border border-broll/50 bg-broll/20 px-3 py-1.5 text-[12px] font-medium text-ink hover:bg-broll/30 disabled:opacity-50"
-            title="บันทึกเลเยอร์ (ข้อความ/สติกเกอร์/เพลง/แผนที่) ลง fx.json"
+            title="บันทึกเลเยอร์ (ข้อความ/สติกเกอร์/เพลง/แผนที่) ลง fx.json (Cmd+S)"
           >
             {fxSaving ? (
               <Loader2 size={13} className="animate-spin" />
@@ -174,6 +176,7 @@ export default function TopBar({
         <div className="relative" ref={menuRef}>
           <button
             onClick={() => setOpen((v) => !v)}
+            title="สร้างไฟล์วิดีโอจริงด้วยเอนจิน (render/assemble ขั้น 4-5)"
             className="flex items-center gap-1.5 rounded-lg border border-accent/60 bg-accent/90 px-3.5 py-1.5 text-[12.5px] font-medium text-white shadow-[0_0_14px_rgba(59,130,246,0.35)] hover:bg-accent"
           >
             <Upload size={13} /> Export <ChevronDown size={12} />

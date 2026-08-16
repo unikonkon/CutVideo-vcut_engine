@@ -323,6 +323,7 @@ export default function Preview({
         <div className="relative">
           <button
             onClick={() => setFitOpen((v) => !v)}
+            title="วิธีวางภาพในจอ: Fit=เห็นทั้งภาพ · Fill=เต็มจอตัดขอบ · Stretch=ยืด"
             className="flex items-center gap-1 rounded-lg bg-panel-2 px-2.5 py-1.5 text-[12px] text-ink hover:bg-panel-3"
           >
             {fit.label} <ChevronDown size={12} />

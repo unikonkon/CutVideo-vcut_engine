@@ -97,6 +97,71 @@ export default function Editor() {
     null,
   );
 
+  // ── ประวัติย้อนกลับ/ทำซ้ำ — ครอบทั้งการตัดช็อต (EDL) และเลเยอร์ (fx) ──
+  interface Snap {
+    shots: Shot[];
+    fx: typeof fxDraft;
+    dirty: boolean;
+    fxDirty: boolean;
+  }
+  const undoStack = useRef<Snap[]>([]);
+  const redoStack = useRef<Snap[]>([]);
+  const lastPush = useRef(0);
+  const [histVer, setHistVer] = useState(0); // ให้ปุ่มรู้ว่ามีของให้ย้อนไหม
+
+  const stateRef = useRef<Snap>({
+    shots: [],
+    fx: null,
+    dirty: false,
+    fxDirty: false,
+  });
+  useEffect(() => {
+    stateRef.current = { shots, fx: fxDraft, dirty, fxDirty };
+  });
+
+  const pushHistory = useCallback(() => {
+    const now = Date.now();
+    // การพิมพ์/ลากรัว ๆ ภายใน 0.8 วิ นับเป็นก้าวเดียว — จุดย้อนคือก่อนก้าวแรก
+    if (now - lastPush.current < 800) return;
+    lastPush.current = now;
+    undoStack.current.push({ ...stateRef.current });
+    if (undoStack.current.length > 100) undoStack.current.shift();
+    redoStack.current = [];
+    setHistVer((v) => v + 1);
+  }, []);
+
+  const applySnap = useCallback((s: Snap) => {
+    setShots(s.shots);
+    setDirty(s.dirty);
+    setFxDraft(s.fx);
+    setFxDirty(s.fxDirty);
+  }, []);
+
+  const undo = useCallback(() => {
+    const s = undoStack.current.pop();
+    if (!s) return;
+    redoStack.current.push({ ...stateRef.current });
+    lastPush.current = 0;
+    applySnap(s);
+    setHistVer((v) => v + 1);
+  }, [applySnap]);
+
+  const redo = useCallback(() => {
+    const s = redoStack.current.pop();
+    if (!s) return;
+    undoStack.current.push({ ...stateRef.current });
+    lastPush.current = 0;
+    applySnap(s);
+    setHistVer((v) => v + 1);
+  }, [applySnap]);
+
+  const clearHistory = useCallback(() => {
+    undoStack.current = [];
+    redoStack.current = [];
+    lastPush.current = 0;
+    setHistVer((v) => v + 1);
+  }, []);
+
   const [playing, setPlaying] = useState(false);
   const [playhead, setPlayhead] = useState(0);
   const [pxPerSec, setPxPerSec] = useState(10);
@@ -158,6 +223,7 @@ export default function Editor() {
       setShots(st.timeline);
       setDirty(false);
       setOffline(false);
+      clearHistory(); // ของบนจอถูกแทนด้วยของจากดิสก์ — ประวัติเก่าใช้ต่อไม่ได้
       streamRef.current.key = ""; // ลำดับอาจเปลี่ยน — ขอสตรีมใหม่รอบหน้า
       setPxPerSec((px) => {
         const t = st.timeline.reduce((a, s) => a + s.dur, 0);
@@ -170,7 +236,7 @@ export default function Editor() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [clearHistory]);
 
   useEffect(() => {
     refresh();
@@ -187,10 +253,11 @@ export default function Editor() {
         journey: JSON.parse(JSON.stringify(d.fx.journey)),
       });
       setFxDirty(false);
+      clearHistory();
     } catch {
       setFxData(null);
     }
-  }, []);
+  }, [clearHistory]);
 
   useEffect(() => {
     loadFx();
@@ -200,10 +267,11 @@ export default function Editor() {
 
   const patchFx = useCallback(
     (part: Partial<NonNullable<typeof fxDraft>>) => {
+      pushHistory();
       setFxDraft((d) => (d ? { ...d, ...part } : d));
       setFxDirty(true);
     },
-    [],
+    [pushHistory],
   );
 
   const saveFx = useCallback(async () => {
@@ -398,10 +466,14 @@ export default function Editor() {
   );
 
   // ── แก้ไทม์ไลน์ (ยังไม่เขียนลงดิสก์จนกด "บันทึก EDL") ──
-  const mutate = useCallback((fn: (prev: Shot[]) => Shot[]) => {
-    setShots((prev) => fn(prev));
-    setDirty(true);
-  }, []);
+  const mutate = useCallback(
+    (fn: (prev: Shot[]) => Shot[]) => {
+      pushHistory();
+      setShots((prev) => fn(prev));
+      setDirty(true);
+    },
+    [pushHistory],
+  );
 
   const patchShot = useCallback(
     (i: number, patch: Partial<Shot>) => {
@@ -644,6 +716,7 @@ export default function Editor() {
   };
   const selectLayerItem = useCallback((kind: LayerKind, idx: number) => {
     setFocus({ kind, idx });
+    setSel(null); // ปุ่ม Delete จะได้ชี้ที่บล็อกเลเยอร์ ไม่ใช่ช็อตที่ค้างเลือกไว้
     setTab(KIND_TAB[kind] ?? "fx");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -797,23 +870,73 @@ export default function Editor() {
     }
   }, [shots, refresh, flash]);
 
+  const zoomFit = useCallback(() => {
+    setPxPerSec(
+      total > 0
+        ? Math.min(120, Math.max(2, (window.innerWidth - 220) / total))
+        : 10,
+    );
+  }, [total]);
+
+  // Cmd+S — บันทึกทุกอย่างที่ค้างในครั้งเดียว
+  const saveAll = useCallback(() => {
+    if (!dirty && !fxDirty) return flash("ไม่มีอะไรค้างบันทึก");
+    if (dirty) save();
+    if (fxDirty) saveFx();
+  }, [dirty, fxDirty, save, saveFx, flash]);
+
   // ── คีย์ลัด ──
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
-      if (e.code === "Space") {
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+      } else if (mod && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        saveAll();
+      } else if (e.code === "Space") {
         e.preventDefault();
         toggle();
       } else if (e.key === "Delete" || e.key === "Backspace") {
-        if (sel != null) removeShot(sel);
-      } else if (e.key === "s" || e.key === "S") {
+        // บล็อกเลเยอร์ที่เลือกอยู่มาก่อนช็อต
+        if (
+          focus &&
+          (focus.kind === "text" ||
+            focus.kind === "sticker" ||
+            focus.kind === "music")
+        ) {
+          removeLayerItem(focus.kind, focus.idx);
+        } else if (sel != null) {
+          removeShot(sel);
+        }
+      } else if (!mod && (e.key === "s" || e.key === "S")) {
         split();
+      } else if (e.key === "-" || e.key === "_") {
+        setPxPerSec((p) => Math.max(2, p / 1.3));
+      } else if (e.key === "=" || e.key === "+") {
+        setPxPerSec((p) => Math.min(120, p * 1.3));
+      } else if (e.key === "0") {
+        zoomFit();
       }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [toggle, sel, removeShot, split]);
+  }, [
+    toggle,
+    sel,
+    focus,
+    removeShot,
+    removeLayerItem,
+    split,
+    undo,
+    redo,
+    saveAll,
+    zoomFit,
+  ]);
 
   // ── จอสถานะพิเศษ ──
   if (loading) {
@@ -961,7 +1084,10 @@ export default function Editor() {
           playhead={playhead}
           pxPerSec={pxPerSec}
           onZoom={setPxPerSec}
-          onSelect={setSel}
+          onSelect={(i) => {
+            setSel(i);
+            if (i != null) setFocus(null);
+          }}
           onSeek={seek}
           onReorder={reorder}
           onRemove={removeShot}
@@ -970,6 +1096,10 @@ export default function Editor() {
           layers={layers}
           vis={vis}
           onVis={(k) => setVis((v) => ({ ...v, [k]: !v[k] }))}
+          canUndo={histVer >= 0 && undoStack.current.length > 0}
+          canRedo={redoStack.current.length > 0}
+          onUndo={undo}
+          onRedo={redo}
           layerSel={focus}
           onLayerSelect={selectLayerItem}
           onLayerChange={changeLayerItem}

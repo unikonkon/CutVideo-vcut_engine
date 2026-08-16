@@ -235,6 +235,7 @@ export function SaveBar({
       <button
         onClick={onSave}
         disabled={saving}
+        title="บันทึกลงไฟล์โปรเจกต์ (Cmd+S)"
         className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-[12px] font-medium text-white hover:bg-accent-2 disabled:opacity-50"
       >
         {saving ? (

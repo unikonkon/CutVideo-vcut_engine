@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Captions,
   Copy,
@@ -9,10 +9,12 @@ import {
   Magnet,
   Mic,
   Music,
+  Redo2,
   Scissors,
   Smile,
   Trash2,
   Type,
+  Undo2,
   Video,
   ZoomIn,
   ZoomOut,
@@ -198,6 +200,10 @@ export default function Timeline({
   onLayerChange,
   onLayerRemove,
   onDropPayload,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
 }: {
   shots: Shot[];
   offsets: number[];
@@ -226,11 +232,36 @@ export default function Timeline({
   ) => void;
   onLayerRemove: (kind: LayerKind, idx: number) => void;
   onDropPayload: (payload: unknown, tl: number) => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
   const [dropHint, setDropHint] = useState<number | null>(null);
+
+  // ── ซูมโดยยึดเส้นหัวเล่น (สีแดง) เป็นจุดหมุน ──
+  //
+  // เปลี่ยน pxPerSec เฉย ๆ จะทำให้เนื้อหาใต้จอไหล — จุดที่กำลังดูหลุดไปที่อื่น
+  // ทางแก้: จำไว้ว่าหัวเล่นอยู่ตรงไหนของ viewport ก่อนซูม แล้วชดเชย scrollLeft
+  // ให้มันกลับไปอยู่ตำแหน่งเดิมบนจอ  ถ้าหัวเล่นอยู่นอกจอ ให้ดึงมากลางจอแทน
+  // ทำที่นี่ที่เดียวครอบทุกทางซูม (ปุ่ม · แถบเลื่อน · คีย์ - = 0) เพราะทุกทาง
+  // จบที่ pxPerSec ตัวเดียวกัน
+  const phRef = useRef(playhead);
+  phRef.current = playhead;
+  const prevPx = useRef(pxPerSec);
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const oldPx = prevPx.current;
+    if (!el || oldPx === pxPerSec) return;
+    prevPx.current = pxPerSec;
+    const screenX = 8 + phRef.current * oldPx - el.scrollLeft;
+    const anchor =
+      screenX >= 0 && screenX <= el.clientWidth ? screenX : el.clientWidth / 2;
+    el.scrollLeft = Math.max(0, 8 + phRef.current * pxPerSec - anchor);
+  }, [pxPerSec]);
 
   const width = Math.max(total * pxPerSec + 120, 600);
   const step = rulerStep(pxPerSec);
@@ -341,8 +372,25 @@ export default function Timeline({
       {/* แถบเครื่องมือ */}
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-line px-2">
         <button
+          onClick={onUndo}
+          disabled={!canUndo}
+          title="ย้อนกลับการแก้ล่าสุด — ช็อตและเลเยอร์ (Cmd+Z)"
+          className="rounded-md p-2 text-muted hover:bg-panel-2 hover:text-ink disabled:opacity-30"
+        >
+          <Undo2 size={14} />
+        </button>
+        <button
+          onClick={onRedo}
+          disabled={!canRedo}
+          title="ทำซ้ำที่เพิ่งย้อนไป (Cmd+Shift+Z)"
+          className="rounded-md p-2 text-muted hover:bg-panel-2 hover:text-ink disabled:opacity-30"
+        >
+          <Redo2 size={14} />
+        </button>
+        <div className="mx-1 h-5 w-px bg-line" />
+        <button
           onClick={onSplit}
-          title="ซอยช็อตตรงหัวเล่น (S)"
+          title="ซอยช็อตตรงหัวเล่นออกเป็นสองชิ้น (S)"
           className="rounded-md p-2 text-muted hover:bg-panel-2 hover:text-ink"
         >
           <Scissors size={14} />
@@ -350,7 +398,7 @@ export default function Timeline({
         <button
           onClick={() => selected != null && onDuplicate(selected)}
           disabled={selected == null}
-          title="ทำสำเนาช็อตที่เลือก"
+          title="ทำสำเนาช็อตที่เลือก ต่อท้ายตำแหน่งเดิม"
           className="rounded-md p-2 text-muted hover:bg-panel-2 hover:text-ink disabled:opacity-30"
         >
           <Copy size={14} />
@@ -393,7 +441,7 @@ export default function Timeline({
         <button
           onClick={() => onZoom(Math.max(2, pxPerSec / 1.4))}
           className="rounded-md p-2 text-muted hover:bg-panel-2 hover:text-ink"
-          title="ซูมออก"
+          title="ซูมออก (-) · ซูมพอดีทั้งเรื่อง (0)"
         >
           <ZoomOut size={14} />
         </button>
@@ -404,11 +452,12 @@ export default function Timeline({
           value={pxPerSec}
           onChange={(e) => onZoom(parseFloat(e.target.value))}
           className="w-28"
+          title="ระดับซูมไทม์ไลน์ — คีย์ลัด: - / = / 0"
         />
         <button
           onClick={() => onZoom(Math.min(120, pxPerSec * 1.4))}
           className="rounded-md p-2 text-muted hover:bg-panel-2 hover:text-ink"
-          title="ซูมเข้า"
+          title="ซูมเข้า (=)"
         >
           <ZoomIn size={14} />
         </button>
