@@ -42,6 +42,7 @@ import TopBar from "@/components/TopBar";
 import IconRail, { type Tab } from "@/components/IconRail";
 import AssetsPanel from "@/components/AssetsPanel";
 import Preview from "@/components/Preview";
+import MusicMixer from "@/components/MusicMixer";
 import Properties from "@/components/Properties";
 import Timeline from "@/components/Timeline";
 import JobPanel from "@/components/JobPanel";
@@ -1066,6 +1067,12 @@ export default function Editor() {
           onToggle={toggle}
           notice={notice}
           overlay={overlayData}
+        />
+        <MusicMixer
+          tracks={fxDraft?.music ?? []}
+          playing={playing}
+          playhead={playhead}
+          total={total}
         />
         <Properties
           shot={sel != null ? (shots[sel] ?? null) : null}
