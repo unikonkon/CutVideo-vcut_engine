@@ -1,12 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Captions, ChevronDown, ChevronRight, FileDown } from "lucide-react";
+import { Captions, ChevronDown, ChevronRight, FileDown, Plus } from "lucide-react";
 import { api2, textFileUrl, type TranscriptData } from "@/lib/api";
+import { DND_MIME } from "@/lib/layers";
 import { dur } from "@/lib/time";
 import { Empty, Panel, Spin } from "@/components/ui";
 
-export default function TranscriptPanel({ reloadKey }: { reloadKey: number }) {
+export default function TranscriptPanel({
+  reloadKey,
+  onAddText,
+}: {
+  reloadKey: number;
+  onAddText: (text: string) => void;
+}) {
   const [data, setData] = useState<TranscriptData | null>(null);
   const [open, setOpen] = useState<string | null>(null);
 
@@ -92,11 +99,30 @@ export default function TranscriptPanel({ reloadKey }: { reloadKey: number }) {
                   {isOpen && (
                     <div className="flex flex-col gap-1 border-t border-line p-2">
                       {segs.map(([a, b, text], i) => (
-                        <div key={i} className="flex gap-2 text-[12px]">
+                        <div
+                          key={i}
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData(
+                              DND_MIME,
+                              JSON.stringify({ type: "transcript", text }),
+                            );
+                            e.dataTransfer.effectAllowed = "copy";
+                          }}
+                          className="group flex cursor-grab gap-2 rounded px-1 py-0.5 text-[12px] hover:bg-panel-3 active:cursor-grabbing"
+                          title="ลากไปปล่อยบนไทม์ไลน์ = ทำเป็นข้อความบนหนังตรงจุดนั้น"
+                        >
                           <span className="shrink-0 font-mono text-[10px] leading-5 text-faint">
                             {dur(a)}–{dur(b)}
                           </span>
-                          <span className="text-ink">{text}</span>
+                          <span className="min-w-0 flex-1 text-ink">{text}</span>
+                          <button
+                            onClick={() => onAddText(text)}
+                            title="ทำเป็นข้อความบนหนังที่หัวเล่น"
+                            className="hidden shrink-0 rounded bg-panel-3 px-1 text-muted hover:text-ink group-hover:block"
+                          >
+                            <Plus size={11} />
+                          </button>
                         </div>
                       ))}
                     </div>

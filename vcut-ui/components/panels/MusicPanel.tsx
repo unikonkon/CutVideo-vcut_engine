@@ -1,15 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Download, Music, Plus, Trash2, Upload } from "lucide-react";
-import {
-  api2,
-  assetUrl,
-  fileToBase64,
-  type FxData,
-  type MusicTrack,
-} from "@/lib/api";
-import { dur } from "@/lib/time";
+import { useRef, useState } from "react";
+import { Download, GripVertical, Music, Trash2, Upload } from "lucide-react";
+import { api2, assetUrl, fileToBase64, type MusicTrack } from "@/lib/api";
+import { DND_MIME } from "@/lib/layers";
 import {
   Empty,
   Field,
@@ -17,45 +11,29 @@ import {
   Panel,
   SaveBar,
   Section,
-  Sel,
   Spin,
   TInput,
   Toggle,
 } from "@/components/ui";
+import type { FxStore } from "./types";
 
 export default function MusicPanel({
-  reloadKey,
+  fxs,
   onMusicFetch,
+  onAddAtPlayhead,
+  focusIdx,
   flash,
 }: {
-  reloadKey: number;
+  fxs: FxStore;
   onMusicFetch: (url: string) => void;
+  onAddAtPlayhead: (file: string) => void;
+  focusIdx: number | null;
   flash: (m: string) => void;
 }) {
-  const [data, setData] = useState<FxData | null>(null);
-  const [items, setItems] = useState<MusicTrack[]>([]);
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [yt, setYt] = useState("");
-  const [addFile, setAddFile] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const d = await api2.fx();
-      setData(d);
-      setItems(d.music.items.map((m) => ({ ...m })));
-      setDirty(false);
-    } catch {
-      setData(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load, reloadKey]);
-
-  if (!data) {
+  if (!fxs.data || !fxs.draft) {
     return (
       <Panel title={<><Music size={13} /> เพลงประกอบ</>}>
         <Spin />
@@ -63,32 +41,18 @@ export default function MusicPanel({
     );
   }
 
-  const patch = (i: number, p: Partial<MusicTrack>) => {
-    setItems((prev) => prev.map((m, k) => (k === i ? { ...m, ...p } : m)));
-    setDirty(true);
-  };
+  const { data, draft } = fxs;
+  const items = draft.music;
 
-  const save = async () => {
-    setSaving(true);
-    try {
-      const r = await api2.saveFx({ music: items });
-      setData(r.fx);
-      setItems(r.fx.music.items.map((m) => ({ ...m })));
-      setDirty(false);
-      flash("บันทึกเพลงแล้ว — มีผลตอนสร้างไฟล์แบบมีเอฟเฟกต์ (ขั้น 5)");
-    } catch (e) {
-      flash(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
-    } finally {
-      setSaving(false);
-    }
-  };
+  const patch = (i: number, p: Partial<MusicTrack>) =>
+    fxs.patch({ music: items.map((m, k) => (k === i ? { ...m, ...p } : m)) });
 
   const uploadAudio = async (f: File) => {
     try {
       const b64 = await fileToBase64(f);
       const r = await api2.saveAsset(f.name, b64, "audio");
-      setData(r.fx);
-      flash(`เพิ่มไฟล์เพลง ${r.file} เข้าคลังแล้ว`);
+      fxs.setData(r.fx);
+      flash(`เพิ่มไฟล์เพลง ${r.file} เข้าคลังแล้ว — ลากลงไทม์ไลน์ได้เลย`);
     } catch (e) {
       flash(e instanceof Error ? e.message : "อัปโหลดไม่สำเร็จ");
     }
@@ -102,7 +66,13 @@ export default function MusicPanel({
     <Panel
       title={<><Music size={13} /> เพลงประกอบ ({items.length} แทร็ก)</>}
       footer={
-        <SaveBar dirty={dirty} saving={saving} onSave={save} onRevert={load} />
+        <SaveBar
+          dirty={fxs.dirty}
+          saving={fxs.saving}
+          onSave={fxs.save}
+          onRevert={fxs.revert}
+          hint="FX ยังไม่บันทึก (รวมทุกเลเยอร์)"
+        />
       }
     >
       <Section title="เพิ่มเพลงเข้าคลัง">
@@ -140,41 +110,45 @@ export default function MusicPanel({
           />
         </div>
         {unused.length > 0 && (
-          <div className="flex gap-1.5">
-            <Sel
-              value={addFile}
-              onChange={setAddFile}
-              options={[
-                { v: "", label: "— เลือกไฟล์ในคลังมาใช้ —" },
-                ...unused.map((t) => ({ v: t, label: t })),
-              ]}
-            />
-            <button
-              onClick={() => {
-                if (!addFile) return;
-                setItems((p) => [
-                  ...p,
-                  { ...data.music.defaults, file: addFile, id: "" },
-                ]);
-                setAddFile("");
-                setDirty(true);
-              }}
-              className="shrink-0 rounded-lg border border-line bg-panel-2 px-2.5 text-ink hover:bg-panel-3"
-            >
-              <Plus size={13} />
-            </button>
+          <div className="flex flex-col gap-1">
+            {unused.map((t) => (
+              <div
+                key={t}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(
+                    DND_MIME,
+                    JSON.stringify({ type: "music-file", file: t }),
+                  );
+                  e.dataTransfer.effectAllowed = "copy";
+                }}
+                className="flex cursor-grab items-center gap-1.5 rounded-lg border border-dashed border-line-2 bg-panel-2 px-2 py-1.5 active:cursor-grabbing"
+                title="ลากลงเลเยอร์เพลงบนไทม์ไลน์ หรือกดปุ่มเพื่อวางที่หัวเล่น"
+              >
+                <GripVertical size={12} className="shrink-0 text-faint" />
+                <span className="min-w-0 flex-1 truncate text-[11.5px] text-ink">{t}</span>
+                <button
+                  onClick={() => onAddAtPlayhead(t)}
+                  className="shrink-0 rounded bg-panel-3 px-1.5 py-0.5 text-[10.5px] text-muted hover:text-ink"
+                >
+                  ＋ ที่หัวเล่น
+                </button>
+              </div>
+            ))}
           </div>
         )}
       </Section>
 
       <Section title="แทร็กในหนัง">
         {items.length === 0 ? (
-          <Empty>ยังไม่มีเพลง — ดึงจาก YouTube หรืออัปโหลดไฟล์ก่อน</Empty>
+          <Empty>ยังไม่มีเพลง — ดึงจาก YouTube แล้วลากลงไทม์ไลน์</Empty>
         ) : (
           items.map((m, i) => (
             <div
               key={`${m.file}-${i}`}
-              className="flex flex-col gap-2 rounded-lg border border-line bg-panel-2 p-2.5"
+              className={`flex flex-col gap-2 rounded-lg border bg-panel-2 p-2.5 ${
+                focusIdx === i ? "border-accent" : "border-line"
+              }`}
             >
               <div className="flex items-center gap-2">
                 <span className="min-w-0 flex-1 truncate text-[12px] text-ink" title={m.file}>
@@ -185,10 +159,7 @@ export default function MusicPanel({
                 )}
                 <audio src={assetUrl(m.file)} controls preload="none" className="h-7 w-28" />
                 <button
-                  onClick={() => {
-                    setItems((p) => p.filter((_, k) => k !== i));
-                    setDirty(true);
-                  }}
+                  onClick={() => fxs.patch({ music: items.filter((_, k) => k !== i) })}
                   className="shrink-0 rounded-md p-1 text-muted hover:text-danger"
                   title="เอาแทร็กออก (ไฟล์ยังอยู่ในคลัง)"
                 >
@@ -224,8 +195,8 @@ export default function MusicPanel({
         )}
       </Section>
       <div className="text-[11px] leading-5 text-muted">
-        เพลงถูกผสมตอน &ldquo;สร้างพร้อมเอฟเฟกต์&rdquo; (ปุ่ม Export) — ไฟล์เพลงอยู่ใน
-        .vcut/assets ของโปรเจกต์
+        ลากแทร็กบนเลเยอร์ &ldquo;เพลง&rdquo; ของไทม์ไลน์เพื่อเลื่อนเวลาได้เลย —
+        เพลงถูกผสมจริงตอน Export แบบมีเอฟเฟกต์
       </div>
     </Panel>
   );

@@ -38,6 +38,10 @@ export default function TopBar({
   saving,
   onSave,
   onRevert,
+  fxDirty,
+  fxSaving,
+  onSaveFx,
+  onRevertFx,
   job,
   onRun,
   onStop,
@@ -50,6 +54,10 @@ export default function TopBar({
   saving: boolean;
   onSave: () => void;
   onRevert: () => void;
+  fxDirty: boolean;
+  fxSaving: boolean;
+  onSaveFx: () => void;
+  onRevertFx: () => void;
   job: JobState | null;
   onRun: (step: string) => void;
   onStop: () => void;
@@ -108,6 +116,31 @@ export default function TopBar({
             {needRender > 0 && (
               <span className="text-warn">· ตัดใหม่ {needRender} ชิ้น</span>
             )}
+          </button>
+        </>
+      )}
+
+      {fxDirty && (
+        <>
+          <button
+            onClick={onRevertFx}
+            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] text-muted hover:bg-panel-2 hover:text-ink"
+            title="ทิ้งที่แก้เลเยอร์/เอฟเฟกต์ทั้งหมด"
+          >
+            <RotateCcw size={13} /> ทิ้ง FX
+          </button>
+          <button
+            onClick={onSaveFx}
+            disabled={fxSaving}
+            className="flex items-center gap-1.5 rounded-lg border border-broll/50 bg-broll/20 px-3 py-1.5 text-[12px] font-medium text-ink hover:bg-broll/30 disabled:opacity-50"
+            title="บันทึกเลเยอร์ (ข้อความ/สติกเกอร์/เพลง/แผนที่) ลง fx.json"
+          >
+            {fxSaving ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              <Save size={13} />
+            )}
+            บันทึก FX
           </button>
         </>
       )}

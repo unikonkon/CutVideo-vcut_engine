@@ -14,12 +14,30 @@ import {
   clipUrl,
   liveUrl,
   segUrl,
+  type CaptionsData,
   type ClipInfo,
+  type FxData,
+  type FxOverlay,
+  type FxTextItem,
   type JobState,
+  type MusicTrack,
   type ProjectState,
   type ReviewOp,
   type Shot,
+  type TranscriptData,
 } from "@/lib/api";
+import {
+  captionBlocks,
+  MAX_STACK,
+  musicBlocks,
+  overlapCount,
+  speechBlocks,
+  stickerBlocks,
+  textBlocks,
+  tlToClip,
+  type DropPayload,
+  type LayerKind,
+} from "@/lib/layers";
 import TopBar from "@/components/TopBar";
 import IconRail, { type Tab } from "@/components/IconRail";
 import AssetsPanel from "@/components/AssetsPanel";
@@ -53,6 +71,31 @@ export default function Editor() {
   const [tab, setTab] = useState<Tab>("assets");
   // เด้งขึ้นทุกครั้งที่งานฝั่งเอนจินจบ — panel ที่เปิดอยู่จะโหลดข้อมูลใหม่
   const [reloadKey, setReloadKey] = useState(0);
+
+  // ── fx (ขั้น 5) เป็น state กลาง — แผงซ้ายกับเลเยอร์บนไทม์ไลน์แก้ก้อนเดียวกัน ──
+  const [fxData, setFxData] = useState<FxData | null>(null);
+  const [fxDraft, setFxDraft] = useState<{
+    music: MusicTrack[];
+    texts: FxTextItem[];
+    overlays: FxOverlay[];
+    journey: Record<string, unknown>;
+  } | null>(null);
+  const [fxDirty, setFxDirty] = useState(false);
+  const [fxSaving, setFxSaving] = useState(false);
+  const [capData, setCapData] = useState<CaptionsData | null>(null);
+  const [trData, setTrData] = useState<TranscriptData | null>(null);
+  // เลเยอร์ไหนเปิดอยู่บนไทม์ไลน์
+  const [vis, setVis] = useState<Record<LayerKind, boolean>>({
+    text: true,
+    sticker: true,
+    music: true,
+    caption: false,
+    speech: false,
+  });
+  // บล็อก/รายการที่ถูกเลือกข้ามแผง — คลิกบนไทม์ไลน์แล้วให้แผงเปิดตัวนั้น
+  const [focus, setFocus] = useState<{ kind: LayerKind; idx: number } | null>(
+    null,
+  );
 
   const [playing, setPlaying] = useState(false);
   const [playhead, setPlayhead] = useState(0);
@@ -132,6 +175,57 @@ export default function Editor() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  const loadFx = useCallback(async () => {
+    try {
+      const d = await api2.fx();
+      setFxData(d);
+      setFxDraft({
+        music: d.fx.music.map((m) => ({ ...m })),
+        texts: d.fx.texts.map((t) => ({ ...t })),
+        overlays: d.fx.overlays.map((o) => ({ ...o })),
+        journey: JSON.parse(JSON.stringify(d.fx.journey)),
+      });
+      setFxDirty(false);
+    } catch {
+      setFxData(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFx();
+    api2.captions().then(setCapData).catch(() => setCapData(null));
+    api2.transcript().then(setTrData).catch(() => setTrData(null));
+  }, [loadFx, reloadKey]);
+
+  const patchFx = useCallback(
+    (part: Partial<NonNullable<typeof fxDraft>>) => {
+      setFxDraft((d) => (d ? { ...d, ...part } : d));
+      setFxDirty(true);
+    },
+    [],
+  );
+
+  const saveFx = useCallback(async () => {
+    if (!fxDraft) return;
+    setFxSaving(true);
+    try {
+      const r = await api2.saveFx(fxDraft);
+      setFxData(r.fx);
+      setFxDraft({
+        music: r.fx.fx.music.map((m) => ({ ...m })),
+        texts: r.fx.fx.texts.map((t) => ({ ...t })),
+        overlays: r.fx.fx.overlays.map((o) => ({ ...o })),
+        journey: JSON.parse(JSON.stringify(r.fx.fx.journey)),
+      });
+      setFxDirty(false);
+      flash("บันทึก fx.json แล้ว — มีผลตอนสร้างไฟล์แบบมีเอฟเฟกต์");
+    } catch (e) {
+      flash(e instanceof Error ? e.message : "บันทึก fx ไม่สำเร็จ");
+    } finally {
+      setFxSaving(false);
+    }
+  }, [fxDraft, flash]);
 
   // ── งานฝั่งเอนจิน (render/assemble/scan) ──
   const pollJob = useCallback(async () => {
@@ -421,6 +515,225 @@ export default function Editor() {
     [shots, removeShot, reorder, flash],
   );
 
+  // ก้อน props ที่แผง fx ทุกตัวใช้ร่วมกัน
+  const fxs = useMemo(
+    () => ({
+      data: fxData,
+      draft: fxDraft,
+      patch: patchFx,
+      save: saveFx,
+      revert: loadFx,
+      dirty: fxDirty,
+      saving: fxSaving,
+      setData: setFxData,
+    }),
+    [fxData, fxDraft, patchFx, saveFx, loadFx, fxDirty, fxSaving],
+  );
+
+  // ── เลเยอร์บนไทม์ไลน์ (คำนวณจาก state กลาง + EDL ปัจจุบัน) ──
+  const layers = useMemo(
+    () => ({
+      text: fxDraft ? textBlocks(fxDraft.texts, shots, offsets) : [],
+      sticker: fxDraft ? stickerBlocks(fxDraft.overlays, shots, offsets) : [],
+      music: fxDraft ? musicBlocks(fxDraft.music, total) : [],
+      caption: capData ? captionBlocks(capData.cues) : [],
+      speech: speechBlocks(trData, shots, offsets),
+    }),
+    [fxDraft, capData, trData, shots, offsets, total],
+  );
+
+  // ข้อมูลให้ตัวอย่างซ้อนสดใน preview — ตัวเลขชุดเดียวกับที่จะถูกเผาตอน render
+  const overlayData = useMemo(() => {
+    if (!fxDraft) {
+      return { texts: [], stickers: [], cues: capData?.cues ?? [] };
+    }
+    const kindOf = new Map(
+      (fxData?.overlay.assets ?? []).map((a) => [a.file, a.kind]),
+    );
+    const extKind = (f: string) =>
+      /\.(mov|webm|mp4|m4v)$/i.test(f) ? "video" : "image";
+    return {
+      texts: layers.text
+        .filter((b) => !b.orphan)
+        .map((b) => ({ item: fxDraft.texts[b.idx], tl: b.tl })),
+      stickers: layers.sticker
+        .filter((b) => !b.orphan)
+        .map((b) => {
+          const it = fxDraft.overlays[b.idx];
+          return { item: it, tl: b.tl, kind: kindOf.get(it.file) ?? extKind(it.file) };
+        }),
+      cues: capData?.cues ?? [],
+    };
+  }, [layers, fxDraft, fxData, capData]);
+
+  // ย้าย/ยืดบล็อกบนเลเยอร์ → เขียนกลับเป็นหน่วยของเอนจิน (คลิป+วินาที หรือ at รวม)
+  const changeLayerItem = useCallback(
+    (
+      kind: LayerKind,
+      idx: number,
+      tl: number,
+      durNew: number,
+      mode: "move" | "resize" = "resize",
+    ) => {
+      if (!fxDraft) return;
+      if (kind === "music") {
+        patchFx({
+          music: fxDraft.music.map((m, k) =>
+            k === idx
+              ? {
+                  ...m,
+                  at: Math.max(0, Math.round(tl * 100) / 100),
+                  // ลากย้าย: แทร็ก "เล่นจนจบ" (dur 0) คงไว้แบบนั้น
+                  // ยืดหด: ตั้งความยาวชัดเจนตามที่ลาก แม้เดิมจะเป็น 0
+                  dur:
+                    mode === "resize"
+                      ? Math.max(1, Math.round(durNew * 100) / 100)
+                      : m.dur,
+                }
+              : m,
+          ),
+        });
+        return;
+      }
+      const bind = tlToClip(shots, offsets, Math.max(0, tl));
+      if (!bind) return flash("ปล่อยนอกช่วงหนัง — ไม่ได้ย้าย");
+      const cur = kind === "text" ? fxDraft.texts[idx] : fxDraft.overlays[idx];
+      const dur =
+        mode === "resize"
+          ? Math.max(0.2, Math.round(durNew * 100) / 100)
+          : (cur?.dur ?? durNew);
+      // เพดานซ้อน 5 ชั้น — นับเฉพาะชิ้นอื่นที่ทับช่วงใหม่
+      if (overlapCount(layers[kind], tl, dur, idx) >= MAX_STACK) {
+        return flash(`ช่วงนี้ซ้อนครบ ${MAX_STACK} ชั้นแล้ว — ขยับไปที่ว่างก่อน`);
+      }
+      if (kind === "text") {
+        patchFx({
+          texts: fxDraft.texts.map((t, k) =>
+            k === idx ? { ...t, name: bind.name, at: bind.at, dur } : t,
+          ),
+        });
+      } else if (kind === "sticker") {
+        patchFx({
+          overlays: fxDraft.overlays.map((o, k) =>
+            k === idx ? { ...o, name: bind.name, at: bind.at, dur } : o,
+          ),
+        });
+      }
+    },
+    [fxDraft, shots, offsets, layers, patchFx, flash],
+  );
+
+  const removeLayerItem = useCallback(
+    (kind: LayerKind, idx: number) => {
+      if (!fxDraft) return;
+      if (kind === "music") patchFx({ music: fxDraft.music.filter((_, k) => k !== idx) });
+      else if (kind === "text") patchFx({ texts: fxDraft.texts.filter((_, k) => k !== idx) });
+      else if (kind === "sticker")
+        patchFx({ overlays: fxDraft.overlays.filter((_, k) => k !== idx) });
+      setFocus(null);
+    },
+    [fxDraft, patchFx],
+  );
+
+  const KIND_TAB: Record<string, Tab> = {
+    text: "fx",
+    sticker: "stickers",
+    music: "music",
+    caption: "text",
+    speech: "cc",
+  };
+  const selectLayerItem = useCallback((kind: LayerKind, idx: number) => {
+    setFocus({ kind, idx });
+    setTab(KIND_TAB[kind] ?? "fx");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // สร้างของใหม่ ณ เวลาบนไทม์ไลน์ (จากปุ่ม "ที่หัวเล่น" หรือจากการลากมาปล่อย)
+  const addTextAt = useCallback(
+    (tl: number, text?: string) => {
+      if (!fxDraft || !fxData) return;
+      const bind = tlToClip(shots, offsets, tl);
+      if (!bind) return flash("ตำแหน่งนี้อยู่นอกช่วงหนัง");
+      if (overlapCount(layers.text, tl, 2.0) >= MAX_STACK) {
+        return flash(`ช่วงนี้มีข้อความซ้อนครบ ${MAX_STACK} ชั้นแล้ว`);
+      }
+      patchFx({
+        texts: [
+          ...fxDraft.texts,
+          {
+            ...(fxData.defaults.text_item as Omit<FxTextItem, "at" | "dur" | "id" | "name" | "lines">),
+            ...(text ? { text } : {}),
+            at: bind.at,
+            dur: 2.0,
+            name: bind.name,
+            id: "",
+            lines: [],
+          },
+        ],
+      });
+      setFocus({ kind: "text", idx: fxDraft.texts.length });
+      flash(`วางข้อความที่ ${bind.name} — แก้เนื้อหาในแท็บเอฟเฟกต์ แล้วกดบันทึก FX`);
+    },
+    [fxDraft, fxData, shots, offsets, layers, patchFx, flash],
+  );
+
+  const addStickerAt = useCallback(
+    (tl: number, file: string) => {
+      if (!fxDraft || !fxData) return;
+      const bind = tlToClip(shots, offsets, tl);
+      if (!bind) return flash("ตำแหน่งนี้อยู่นอกช่วงหนัง");
+      if (overlapCount(layers.sticker, tl, 2.5) >= MAX_STACK) {
+        return flash(`ช่วงนี้มีภาพซ้อนครบ ${MAX_STACK} ชั้นแล้ว`);
+      }
+      patchFx({
+        overlays: [
+          ...fxDraft.overlays,
+          {
+            ...(fxData.defaults.overlay as Omit<FxOverlay, "at" | "dur" | "id" | "name">),
+            file,
+            at: bind.at,
+            dur: 2.5,
+            name: bind.name,
+            id: "",
+          },
+        ],
+      });
+      setFocus({ kind: "sticker", idx: fxDraft.overlays.length });
+      flash(`วาง ${file} ที่ ${bind.name} — กดบันทึก FX เมื่อจัดเสร็จ`);
+    },
+    [fxDraft, fxData, shots, offsets, layers, patchFx, flash],
+  );
+
+  const addMusicAt = useCallback(
+    (tl: number, file: string) => {
+      if (!fxDraft || !fxData) return;
+      patchFx({
+        music: [
+          ...fxDraft.music,
+          {
+            ...fxData.music.defaults,
+            file,
+            at: Math.max(0, Math.round(tl * 100) / 100),
+            id: "",
+          },
+        ],
+      });
+      setFocus({ kind: "music", idx: fxDraft.music.length });
+      flash(`วางเพลง ${file} ที่ ${tl.toFixed(1)} วิ — กดบันทึก FX เมื่อจัดเสร็จ`);
+    },
+    [fxDraft, fxData, patchFx, flash],
+  );
+
+  const dropOnTimeline = useCallback(
+    (p: DropPayload, tl: number) => {
+      if (p.type === "music-file") addMusicAt(tl, p.file);
+      else if (p.type === "sticker") addStickerAt(tl, p.file);
+      else if (p.type === "text-new") addTextAt(tl, p.text);
+      else if (p.type === "transcript") addTextAt(tl, p.text);
+    },
+    [addMusicAt, addStickerAt, addTextAt],
+  );
+
   const addClip = useCallback(
     (c: ClipInfo) => {
       const piece: Shot = {
@@ -546,6 +859,10 @@ export default function Editor() {
         saving={saving}
         onSave={save}
         onRevert={refresh}
+        fxDirty={fxDirty}
+        fxSaving={fxSaving}
+        onSaveFx={saveFx}
+        onRevertFx={loadFx}
         job={job}
         onRun={runJob}
         onStop={() => api.stopJob()}
@@ -567,30 +884,44 @@ export default function Editor() {
           />
         )}
         {tab === "text" && (
-          <TextPanel reloadKey={reloadKey} runJob={runJob} flash={flash} />
+          <TextPanel
+            reloadKey={reloadKey}
+            runJob={runJob}
+            onAddTextAtPlayhead={() => addTextAt(playhead)}
+            flash={flash}
+          />
         )}
         {tab === "music" && (
           <MusicPanel
-            reloadKey={reloadKey}
+            fxs={fxs}
             onMusicFetch={musicFetch}
+            onAddAtPlayhead={(f) => addMusicAt(playhead, f)}
+            focusIdx={focus?.kind === "music" ? focus.idx : null}
             flash={flash}
           />
         )}
         {tab === "stickers" && (
           <StickerPanel
-            reloadKey={reloadKey}
-            atPlayhead={atPlayhead}
+            fxs={fxs}
+            onPlaceAtPlayhead={(f) => addStickerAt(playhead, f)}
+            focusIdx={focus?.kind === "sticker" ? focus.idx : null}
             flash={flash}
           />
         )}
         {tab === "fx" && (
           <FxPanel
-            reloadKey={reloadKey}
-            atPlayhead={atPlayhead}
+            fxs={fxs}
+            onAddAtPlayhead={() => addTextAt(playhead)}
+            focusIdx={focus?.kind === "text" ? focus.idx : null}
             flash={flash}
           />
         )}
-        {tab === "cc" && <TranscriptPanel reloadKey={reloadKey} />}
+        {tab === "cc" && (
+          <TranscriptPanel
+            reloadKey={reloadKey}
+            onAddText={(t) => addTextAt(playhead, t)}
+          />
+        )}
         {tab === "review" && (
           <ReviewPanel
             reloadKey={reloadKey}
@@ -611,6 +942,7 @@ export default function Editor() {
           total={total}
           onToggle={toggle}
           notice={notice}
+          overlay={overlayData}
         />
         <Properties
           shot={sel != null ? (shots[sel] ?? null) : null}
@@ -635,6 +967,14 @@ export default function Editor() {
           onRemove={removeShot}
           onSplit={split}
           onDuplicate={duplicate}
+          layers={layers}
+          vis={vis}
+          onVis={(k) => setVis((v) => ({ ...v, [k]: !v[k] }))}
+          layerSel={focus}
+          onLayerSelect={selectLayerItem}
+          onLayerChange={changeLayerItem}
+          onLayerRemove={removeLayerItem}
+          onDropPayload={(p, tl) => dropOnTimeline(p as DropPayload, tl)}
         />
       </div>
 

@@ -26,10 +26,12 @@ const ALIGNS = [
 export default function TextPanel({
   reloadKey,
   runJob,
+  onAddTextAtPlayhead,
   flash,
 }: {
   reloadKey: number;
   runJob: (step: string) => void;
+  onAddTextAtPlayhead: () => void;
   flash: (m: string) => void;
 }) {
   const [data, setData] = useState<CaptionsData | null>(null);
@@ -106,6 +108,14 @@ export default function TextPanel({
           ffmpeg รุ่นที่เขียนข้อความได้ยังไม่มี — {data.ffmpeg.how}
         </Empty>
       )}
+
+      <button
+        onClick={onAddTextAtPlayhead}
+        className="rounded-lg border border-dashed border-line-2 bg-panel-2 py-2 text-[12px] text-ink hover:bg-panel-3"
+        title="สร้างข้อความบนหนัง (เลเยอร์ข้อความขั้น 5) ณ ตำแหน่งหัวเล่น"
+      >
+        ＋ วางข้อความบนหนังที่หัวเล่น
+      </button>
 
       <Section title="สไตล์หลัก">
         <div className="grid grid-cols-2 gap-2">

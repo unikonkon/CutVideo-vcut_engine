@@ -1,7 +1,18 @@
 "use client";
 
-import { type RefObject, useState } from "react";
-import { ChevronDown, Maximize, Pause, Play } from "lucide-react";
+import {
+  type CSSProperties,
+  type RefObject,
+  useEffect,
+  useState,
+} from "react";
+import { ChevronDown, Eye, EyeOff, Maximize, Pause, Play } from "lucide-react";
+import {
+  assetUrl,
+  type CaptionCue,
+  type FxOverlay,
+  type FxTextItem,
+} from "@/lib/api";
 import { tc } from "@/lib/time";
 
 const FITS = [
@@ -9,6 +20,166 @@ const FITS = [
   { v: "cover", label: "Fill" },
   { v: "fill", label: "Stretch" },
 ] as const;
+
+// ความละเอียดอ้างอิงของสไตล์ข้อความ (ass ใช้ PlayResY เท่าความสูง output)
+const REF_H = 1080;
+
+export interface OverlayData {
+  texts: { item: FxTextItem; tl: number }[];
+  stickers: { item: FxOverlay; tl: number; kind: string }[];
+  cues: CaptionCue[];
+}
+
+/** ตำแหน่ง anchor ตามเลข align แบบ ass (numpad: 1=ล่างซ้าย … 9=บนขวา) */
+function anchor(align: number): { tx: string; ty: string } {
+  const col = (align - 1) % 3; // 0 ซ้าย 1 กลาง 2 ขวา
+  const tx = col === 0 ? "0%" : col === 1 ? "-50%" : "-100%";
+  const ty = align <= 3 ? "-100%" : align <= 6 ? "-50%" : "0%";
+  return { tx, ty };
+}
+
+function fadeOpacity(p: number, q: number, tin: number, tout: number): number {
+  let o = 1;
+  if (tin > 0) o = Math.min(o, p / tin);
+  if (tout > 0) o = Math.min(o, q / tout);
+  return Math.max(0, Math.min(1, o));
+}
+
+function outlineShadow(px: number, color: string): string {
+  const r = Math.max(px, 0.5);
+  return [
+    `${r}px 0 ${color}`, `-${r}px 0 ${color}`,
+    `0 ${r}px ${color}`, `0 -${r}px ${color}`,
+    `${r * 0.7}px ${r * 0.7}px ${color}`, `-${r * 0.7}px ${r * 0.7}px ${color}`,
+    `${r * 0.7}px -${r * 0.7}px ${color}`, `-${r * 0.7}px -${r * 0.7}px ${color}`,
+  ].join(", ");
+}
+
+function TextOv({
+  t,
+  ph,
+  tl,
+  W,
+  H,
+}: {
+  t: FxTextItem;
+  ph: number;
+  tl: number;
+  W: number;
+  H: number;
+}) {
+  const s = H / REF_H;
+  const p = ph - tl;
+  const q = tl + t.dur - ph;
+  const { tx, ty } = anchor(t.align || 5);
+  const rise =
+    t.anim === "rise" ? (1 - Math.min(1, p / Math.max(t.in, 0.05))) * 26 * s : 0;
+  const style: CSSProperties = {
+    position: "absolute",
+    left: t.x * W,
+    top: t.y * H + rise,
+    transform: `translate(${tx}, ${ty}) rotate(${t.angle || 0}deg)`,
+    fontSize: t.size * s,
+    fontFamily: `'${t.font}', var(--font-thai), sans-serif`,
+    color: t.color,
+    fontWeight: t.bold ? 700 : 400,
+    fontStyle: t.italic ? "italic" : "normal",
+    letterSpacing: (t.spacing || 0) * s,
+    textShadow: outlineShadow((t.border || 0) * s, t.outline),
+    opacity: fadeOpacity(p, q, t.in, t.out),
+    whiteSpace: "pre",
+    textAlign: "center",
+    lineHeight: 1.25,
+    ...(t.plate
+      ? {
+          background: "rgba(10,13,17,0.72)",
+          padding: `${0.18 * t.size * s}px ${0.4 * t.size * s}px`,
+          borderRadius: 8 * s,
+        }
+      : {}),
+  };
+  const lines = (t.lines as Partial<FxTextItem>[] | undefined) ?? [];
+  return (
+    <div style={style}>
+      <div>{t.text}</div>
+      {lines.map((ln, i) => (
+        <div
+          key={i}
+          style={{
+            fontSize: (ln.size ?? t.size) * s,
+            color: ln.color ?? t.color,
+            fontWeight: ln.bold ? 700 : 400,
+            textShadow: outlineShadow((ln.border ?? t.border ?? 0) * s, ln.outline ?? t.outline),
+          }}
+        >
+          {String(ln.text ?? "")}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StickerOv({
+  o,
+  kind,
+  ph,
+  tl,
+  W,
+  H,
+}: {
+  o: FxOverlay;
+  kind: string;
+  ph: number;
+  tl: number;
+  W: number;
+  H: number;
+}) {
+  const p = ph - tl;
+  const q = tl + o.dur - ph;
+  const style: CSSProperties = {
+    position: "absolute",
+    left: o.x * W,
+    top: o.y * H,
+    width: o.width * W,
+    transform: `translate(-50%, -50%) rotate(${o.angle || 0}deg)`,
+    opacity:
+      (o.opacity ?? 1) *
+      (o.anim === "none" ? 1 : fadeOpacity(p, q, o.in, o.out)),
+  };
+  if (kind === "video") {
+    return (
+      <video src={assetUrl(o.file)} muted playsInline preload="metadata" style={style} />
+    );
+  }
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={assetUrl(o.file)} alt={o.file} style={style} />;
+}
+
+function CueOv({ c, W, H }: { c: CaptionCue; W: number; H: number }) {
+  const s = H / REF_H;
+  const st = c.style;
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: W / 2,
+        bottom: (st.margin_v ?? 60) * s,
+        transform: "translateX(-50%)",
+        fontSize: (st.size ?? 54) * s,
+        fontFamily: `'${st.font}', var(--font-thai), sans-serif`,
+        color: st.color,
+        fontWeight: st.bold ? 700 : 400,
+        textShadow: outlineShadow((st.border ?? 3) * s, st.outline),
+        whiteSpace: "pre-wrap",
+        textAlign: "center",
+        maxWidth: W * 0.9,
+        lineHeight: 1.3,
+      }}
+    >
+      {c.text}
+    </div>
+  );
+}
 
 export default function Preview({
   videoRef,
@@ -18,6 +189,7 @@ export default function Preview({
   total,
   onToggle,
   notice,
+  overlay,
 }: {
   videoRef: RefObject<HTMLVideoElement | null>;
   stageRef: RefObject<HTMLDivElement | null>;
@@ -26,9 +198,61 @@ export default function Preview({
   total: number;
   onToggle: () => void;
   notice: string;
+  overlay: OverlayData;
 }) {
   const [fit, setFit] = useState<(typeof FITS)[number]>(FITS[0]);
   const [fitOpen, setFitOpen] = useState(false);
+  const [showOv, setShowOv] = useState(true);
+  const [dims, setDims] = useState({ bw: 0, bh: 0, vw: 0, vh: 0 });
+
+  // ขนาดเวที + ขนาดจริงของวิดีโอ — ไว้คำนวณกรอบภาพ (หัก letterbox)
+  useEffect(() => {
+    const stage = stageRef.current;
+    const v = videoRef.current;
+    if (!stage || !v) return;
+    const upd = () =>
+      setDims({
+        bw: stage.clientWidth,
+        bh: stage.clientHeight,
+        vw: v.videoWidth,
+        vh: v.videoHeight,
+      });
+    upd();
+    const ro = new ResizeObserver(upd);
+    ro.observe(stage);
+    v.addEventListener("loadedmetadata", upd);
+    v.addEventListener("resize", upd);
+    return () => {
+      ro.disconnect();
+      v.removeEventListener("loadedmetadata", upd);
+      v.removeEventListener("resize", upd);
+    };
+  }, [stageRef, videoRef]);
+
+  // กรอบที่ภาพวิดีโอถูกวาดจริงภายในเวที ตาม object-fit
+  const { bw, bh } = dims;
+  const vw = dims.vw || 1920;
+  const vh = dims.vh || 1080;
+  let W = bw, H = bh, L = 0, T = 0;
+  if (fit.v !== "fill" && bw > 0 && bh > 0) {
+    const k =
+      fit.v === "contain"
+        ? Math.min(bw / vw, bh / vh)
+        : Math.max(bw / vw, bh / vh);
+    W = vw * k;
+    H = vh * k;
+    L = (bw - W) / 2;
+    T = (bh - H) / 2;
+  }
+
+  const ph = playhead;
+  const activeTexts = overlay.texts.filter(
+    ({ item, tl }) => ph >= tl && ph < tl + item.dur,
+  );
+  const activeStickers = overlay.stickers.filter(
+    ({ item, tl }) => ph >= tl && ph < tl + item.dur,
+  );
+  const activeCue = overlay.cues.find((c) => ph >= c.a && ph < c.b) ?? null;
 
   return (
     <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-line bg-panel">
@@ -40,15 +264,26 @@ export default function Preview({
           ref={videoRef}
           playsInline
           className="max-h-full max-w-full bg-black"
-          style={{
-            objectFit: fit.v,
-            width: "100%",
-            height: "100%",
-          }}
+          style={{ objectFit: fit.v, width: "100%", height: "100%" }}
           onClick={onToggle}
         />
+        {/* ชั้นซ้อนสด — ตัวเลขชุดเดียวกับที่ ffmpeg จะเผาใน render ขั้น 5 */}
+        {showOv && W > 0 && (
+          <div
+            className="pointer-events-none absolute overflow-hidden"
+            style={{ left: L, top: T, width: W, height: H }}
+          >
+            {activeTexts.map(({ item, tl }, i) => (
+              <TextOv key={`t${i}`} t={item} ph={ph} tl={tl} W={W} H={H} />
+            ))}
+            {activeStickers.map(({ item, tl, kind }, i) => (
+              <StickerOv key={`s${i}`} o={item} kind={kind} ph={ph} tl={tl} W={W} H={H} />
+            ))}
+            {activeCue && <CueOv c={activeCue} W={W} H={H} />}
+          </div>
+        )}
         {notice && (
-          <div className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-lg bg-black/75 px-3 py-1.5 text-[11.5px] text-white">
+          <div className="pointer-events-none absolute bottom-2 left-1/2 z-10 -translate-x-1/2 rounded-lg bg-black/75 px-3 py-1.5 text-[11.5px] text-white">
             {notice}
           </div>
         )}
@@ -74,6 +309,16 @@ export default function Preview({
             )}
           </button>
         </div>
+
+        <button
+          onClick={() => setShowOv((v) => !v)}
+          className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11.5px] ${
+            showOv ? "text-accent" : "text-muted hover:text-ink"
+          }`}
+          title="เปิด/ปิดตัวอย่างซ้อน (ข้อความ · สติกเกอร์ · ซับ)"
+        >
+          {showOv ? <Eye size={13} /> : <EyeOff size={13} />} ซ้อน
+        </button>
 
         <div className="relative">
           <button

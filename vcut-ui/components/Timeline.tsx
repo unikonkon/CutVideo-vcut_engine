@@ -2,17 +2,28 @@
 
 import { useMemo, useRef, useState } from "react";
 import {
+  Captions,
   Copy,
   Eye,
+  EyeOff,
   Magnet,
+  Mic,
+  Music,
   Scissors,
+  Smile,
   Trash2,
+  Type,
   Video,
-  Volume2,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
 import { thumbUrl, type Shot } from "@/lib/api";
+import {
+  assignRows,
+  DND_MIME,
+  type LayerBlock,
+  type LayerKind,
+} from "@/lib/layers";
 import { dur, rulerStep } from "@/lib/time";
 
 const CHAPTER_COLORS = [
@@ -23,6 +34,147 @@ const CHAPTER_COLORS = [
   "#ec4899",
   "#14b8a6",
 ];
+
+// ลำดับบน→ล่างตามภาพ OpenCut: เอฟเฟกต์อยู่เหนือวิดีโอ เสียงอยู่ใต้
+const LANES: {
+  kind: LayerKind;
+  label: string;
+  icon: typeof Type;
+  h: number;
+  color: string;
+  readonly?: boolean;
+}[] = [
+  { kind: "text", label: "ข้อความ (ขั้น 5)", icon: Type, h: 26, color: "#10b981" },
+  { kind: "sticker", label: "สติกเกอร์/ภาพซ้อน", icon: Smile, h: 26, color: "#ec4899" },
+  { kind: "caption", label: "ซับอัตโนมัติ", icon: Captions, h: 20, color: "#64748b", readonly: true },
+];
+const LANES_BELOW: typeof LANES = [
+  { kind: "speech", label: "เสียงพูดในคลิป", icon: Mic, h: 20, color: "#14b8a6", readonly: true },
+  { kind: "music", label: "เพลง", icon: Music, h: 30, color: "#8b5cf6" },
+];
+
+function Block({
+  b,
+  pxPerSec,
+  color,
+  readonly,
+  selected,
+  top,
+  height,
+  onSelect,
+  onChange,
+  onRemove,
+}: {
+  b: LayerBlock;
+  pxPerSec: number;
+  color: string;
+  readonly?: boolean;
+  selected: boolean;
+  top: number;
+  height: number;
+  onSelect: () => void;
+  onChange: (tl: number, dur: number, mode: "move" | "resize") => void;
+  onRemove: () => void;
+}) {
+  // ghost ระหว่างลาก — commit ตอนปล่อยเท่านั้น จะได้ไม่ยิง state ถี่ ๆ
+  const [ghost, setGhost] = useState<{ tl: number; dur: number } | null>(null);
+  const drag = useRef<{
+    x0: number;
+    tl0: number;
+    dur0: number;
+    mode: "move" | "resize-r" | "resize-l";
+  } | null>(null);
+
+  const start = (e: React.PointerEvent, mode: "move" | "resize-r" | "resize-l") => {
+    if (readonly) return;
+    e.stopPropagation();
+    e.preventDefault();
+    try {
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      /* pointer จำลอง (ทดสอบ) ไม่มี capture ได้ — ลากต่อได้อยู่ดี */
+    }
+    drag.current = { x0: e.clientX, tl0: b.tl, dur0: b.dur, mode };
+  };
+  const move = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d) return;
+    const dx = (e.clientX - d.x0) / pxPerSec;
+    if (d.mode === "move") {
+      setGhost({ tl: Math.max(0, d.tl0 + dx), dur: d.dur0 });
+    } else if (d.mode === "resize-r") {
+      setGhost({ tl: d.tl0, dur: Math.max(0.2, d.dur0 + dx) });
+    } else {
+      // ขอบซ้าย: เลื่อนจุดเริ่มโดยตรึงจุดจบ
+      const tl = Math.min(Math.max(0, d.tl0 + dx), d.tl0 + d.dur0 - 0.2);
+      setGhost({ tl, dur: d.tl0 + d.dur0 - tl });
+    }
+  };
+  const end = () => {
+    if (drag.current && ghost) {
+      const moved =
+        Math.abs(ghost.tl - drag.current.tl0) > 0.02 ||
+        Math.abs(ghost.dur - drag.current.dur0) > 0.02;
+      if (moved) {
+        onChange(
+          ghost.tl,
+          ghost.dur,
+          drag.current.mode === "move" ? "move" : "resize",
+        );
+      }
+    }
+    drag.current = null;
+    setGhost(null);
+  };
+
+  const tl = ghost?.tl ?? b.tl;
+  const w = Math.max((ghost?.dur ?? b.dur) * pxPerSec, 6);
+  return (
+    <div
+      onPointerDown={(e) => start(e, "move")}
+      onPointerMove={move}
+      onPointerUp={end}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelect();
+      }}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        if (!readonly) onRemove();
+      }}
+      title={`${b.label}${b.orphan ? " · ช่วงนี้ถูกตัดออกไปแล้ว!" : ""}${readonly ? "" : "\nลาก=ย้าย · ขอบซ้าย/ขวา=ยืดหด · ดับเบิลคลิก=ลบ"}`}
+      className={`absolute flex items-center overflow-hidden rounded-md border text-[10px] leading-none text-white ${
+        readonly ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"
+      } ${selected ? "z-20 ring-2 ring-white/80" : ""} ${ghost ? "z-30 opacity-80" : ""}`}
+      style={{
+        left: 8 + tl * pxPerSec,
+        width: w,
+        top,
+        height,
+        background: b.orphan ? "#7f1d1d" : color + (readonly ? "55" : "cc"),
+        borderColor: b.orphan ? "#ef4444" : color,
+      }}
+    >
+      {!readonly && (
+        <div
+          onPointerDown={(e) => start(e, "resize-l")}
+          onPointerMove={move}
+          onPointerUp={end}
+          className="absolute left-0 top-0 h-full w-1.5 cursor-ew-resize bg-white/25 hover:bg-white/60"
+        />
+      )}
+      <span className="truncate px-2">{b.label}</span>
+      {!readonly && (
+        <div
+          onPointerDown={(e) => start(e, "resize-r")}
+          onPointerMove={move}
+          onPointerUp={end}
+          className="absolute right-0 top-0 h-full w-1.5 cursor-ew-resize bg-white/25 hover:bg-white/60"
+        />
+      )}
+    </div>
+  );
+}
 
 export default function Timeline({
   shots,
@@ -38,6 +190,14 @@ export default function Timeline({
   onRemove,
   onSplit,
   onDuplicate,
+  layers,
+  vis,
+  onVis,
+  layerSel,
+  onLayerSelect,
+  onLayerChange,
+  onLayerRemove,
+  onDropPayload,
 }: {
   shots: Shot[];
   offsets: number[];
@@ -52,10 +212,25 @@ export default function Timeline({
   onRemove: (i: number) => void;
   onSplit: () => void;
   onDuplicate: (i: number) => void;
+  layers: Record<LayerKind, LayerBlock[]>;
+  vis: Record<LayerKind, boolean>;
+  onVis: (k: LayerKind) => void;
+  layerSel: { kind: LayerKind; idx: number } | null;
+  onLayerSelect: (kind: LayerKind, idx: number) => void;
+  onLayerChange: (
+    kind: LayerKind,
+    idx: number,
+    tl: number,
+    dur: number,
+    mode: "move" | "resize",
+  ) => void;
+  onLayerRemove: (kind: LayerKind, idx: number) => void;
+  onDropPayload: (payload: unknown, tl: number) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
+  const [dropHint, setDropHint] = useState<number | null>(null);
 
   const width = Math.max(total * pxPerSec + 120, 600);
   const step = rulerStep(pxPerSec);
@@ -76,16 +251,93 @@ export default function Timeline({
     return m;
   }, [shots]);
 
-  const timeFromEvent = (e: React.MouseEvent) => {
+  const timeFromClientX = (clientX: number) => {
     const el = scrollRef.current;
     if (!el) return 0;
     const rect = el.getBoundingClientRect();
-    const x = e.clientX - rect.left + el.scrollLeft - 8;
+    const x = clientX - rect.left + el.scrollLeft - 8;
     return Math.max(0, Math.min(total, x / pxPerSec));
   };
 
+  const lanesAbove = LANES.filter((l) => vis[l.kind]);
+  const lanesBelow = LANES_BELOW.filter((l) => vis[l.kind]);
+
+  // ข้อความ/สติกเกอร์ซ้อนกันได้ — ชิ้นที่ทับเวลากันแยกแถว (สูงสุด 5)
+  const ROW_H = 24;
+  const stack = useMemo(() => {
+    const out = new Map<LayerKind, { rowOf: Map<number, number>; rows: number }>();
+    for (const k of ["text", "sticker"] as LayerKind[]) {
+      const { row, rows } = assignRows(layers[k]);
+      out.set(k, { rowOf: row, rows });
+    }
+    return out;
+  }, [layers]);
+
+  const laneHeight = (l: (typeof LANES)[number]) => {
+    const st = stack.get(l.kind);
+    return st ? st.rows * ROW_H + 4 : l.h;
+  };
+
+  const laneRow = (l: (typeof LANES)[number]) => {
+    const st = stack.get(l.kind);
+    const h = laneHeight(l);
+    return (
+      <div
+        key={l.kind}
+        className="relative border-b border-line/60"
+        style={{ height: h }}
+      >
+        {layers[l.kind].map((b) => {
+          const row = st?.rowOf.get(b.idx) ?? 0;
+          return (
+            <Block
+              key={`${l.kind}${b.idx}-${b.tl.toFixed(2)}`}
+              b={b}
+              pxPerSec={pxPerSec}
+              color={l.color}
+              readonly={l.readonly}
+              selected={layerSel?.kind === l.kind && layerSel.idx === b.idx}
+              top={st ? 2 + row * ROW_H : 2}
+              height={st ? ROW_H - 4 : h - 4}
+              onSelect={() => onLayerSelect(l.kind, b.idx)}
+              onChange={(tl, d, mode) => onLayerChange(l.kind, b.idx, tl, d, mode)}
+              onRemove={() => onLayerRemove(l.kind, b.idx)}
+            />
+          );
+        })}
+      </div>
+    );
+  };
+
+  const headerRow = (l: (typeof LANES)[number]) => {
+    const Icon = l.icon;
+    const st = stack.get(l.kind);
+    return (
+      <div
+        key={l.kind}
+        className="flex items-center justify-center gap-1 border-b border-line/60"
+        style={{ height: laneHeight(l) }}
+      >
+        <button
+          onClick={() => onVis(l.kind)}
+          className="text-muted hover:text-ink"
+          title={`ซ่อน/แสดง ${l.label}`}
+        >
+          <Eye size={11} />
+        </button>
+        <Icon size={11} style={{ color: l.color }} />
+        {st && st.rows > 1 && (
+          <span className="text-[9px] text-faint">{st.rows}</span>
+        )}
+      </div>
+    );
+  };
+
+  // แถวของเลเยอร์ที่ถูกซ่อน — เหลือปุ่มตาไว้เปิดกลับ
+  const hiddenLanes = [...LANES, ...LANES_BELOW].filter((l) => !vis[l.kind]);
+
   return (
-    <section className="flex h-60 shrink-0 flex-col overflow-hidden rounded-xl border border-line bg-panel">
+    <section className="flex h-[21rem] shrink-0 flex-col overflow-hidden rounded-xl border border-line bg-panel">
       {/* แถบเครื่องมือ */}
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-line px-2">
         <button
@@ -112,14 +364,30 @@ export default function Timeline({
           <Trash2 size={14} />
         </button>
 
+        {hiddenLanes.length > 0 && (
+          <div className="ml-2 flex items-center gap-1">
+            {hiddenLanes.map((l) => {
+              const Icon = l.icon;
+              return (
+                <button
+                  key={l.kind}
+                  onClick={() => onVis(l.kind)}
+                  title={`แสดงเลเยอร์ ${l.label}`}
+                  className="flex items-center gap-1 rounded-md border border-line bg-panel-2 px-1.5 py-1 text-[10px] text-faint hover:text-ink"
+                >
+                  <EyeOff size={10} />
+                  <Icon size={10} style={{ color: l.color }} />
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <div className="mx-auto flex items-center gap-2 rounded-full bg-panel-2 px-3 py-1 text-[11.5px] text-muted">
           {shots.length} ช็อต · {dur(total)}
         </div>
 
-        <button
-          className="rounded-md p-2 text-accent"
-          title="ดูดติดขอบ (เปิดเสมอ)"
-        >
+        <button className="rounded-md p-2 text-accent" title="ดูดติดขอบ (เปิดเสมอ)">
           <Magnet size={14} />
         </button>
         <button
@@ -146,34 +414,54 @@ export default function Timeline({
         </button>
       </div>
 
-      <div className="flex min-h-0 flex-1">
+      {/* เลื่อนแนวตั้งที่ชั้นนอก — หัวแทร็กกับเลนเลื่อนพร้อมกันเสมอ */}
+      <div className="flex min-h-0 flex-1 overflow-y-auto">
         {/* หัวแทร็ก */}
-        <div className="flex w-12 shrink-0 flex-col border-r border-line pt-7">
-          <div className="flex flex-1 flex-col items-center justify-center gap-2 text-faint">
-            <Volume2 size={13} />
-            <Eye size={13} />
-            <Video size={13} />
+        <div className="flex w-12 shrink-0 flex-col border-r border-line">
+          <div className="h-7 shrink-0 border-b border-line" />
+          <div className="h-2.5 shrink-0" />
+          {lanesAbove.map(headerRow)}
+          <div className="flex h-20 shrink-0 flex-col items-center justify-center gap-1.5 border-b border-line/60 text-faint">
+            <Eye size={11} />
+            <Video size={12} />
           </div>
+          {lanesBelow.map(headerRow)}
         </div>
 
         {/* พื้นที่ไทม์ไลน์ */}
         <div
           ref={scrollRef}
-          className="relative min-w-0 flex-1 overflow-x-auto overflow-y-hidden"
+          className="relative min-w-0 flex-1 overflow-x-auto"
           onClick={(e) => {
             if (e.target === e.currentTarget) onSelect(null);
           }}
+          onDragOver={(e) => {
+            if (e.dataTransfer.types.includes(DND_MIME)) {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "copy";
+              setDropHint(timeFromClientX(e.clientX));
+            }
+          }}
+          onDragLeave={() => setDropHint(null)}
+          onDrop={(e) => {
+            const raw = e.dataTransfer.getData(DND_MIME);
+            setDropHint(null);
+            if (!raw) return;
+            e.preventDefault();
+            try {
+              onDropPayload(JSON.parse(raw), timeFromClientX(e.clientX));
+            } catch {
+              /* payload เพี้ยน — ไม่ทำอะไร */
+            }
+          }}
         >
-          <div className="relative h-full" style={{ width }}>
+          <div className="relative" style={{ width }}>
             {/* ไม้บรรทัด */}
             <div
               className="sticky top-0 z-10 h-7 cursor-pointer border-b border-line bg-panel"
               onMouseDown={(e) => {
-                onSeek(timeFromEvent(e));
-                const move = (ev: MouseEvent) =>
-                  onSeek(
-                    timeFromEvent(ev as unknown as React.MouseEvent),
-                  );
+                onSeek(timeFromClientX(e.clientX));
+                const move = (ev: MouseEvent) => onSeek(timeFromClientX(ev.clientX));
                 const up = () => {
                   window.removeEventListener("mousemove", move);
                   window.removeEventListener("mouseup", up);
@@ -194,13 +482,13 @@ export default function Timeline({
             </div>
 
             {/* แถบบท */}
-            <div className="relative mt-1 h-1.5">
+            <div className="relative h-2.5 pt-1">
               {shots.map((s, i) =>
                 s.chapter ? (
                   <div
                     key={`ch${i}`}
                     title={s.chapter_title}
-                    className="absolute h-full rounded-sm opacity-70"
+                    className="absolute h-1.5 rounded-sm opacity-70"
                     style={{
                       left: 8 + offsets[i] * pxPerSec,
                       width: Math.max(s.dur * pxPerSec - 1, 2),
@@ -211,8 +499,11 @@ export default function Timeline({
               )}
             </div>
 
+            {/* เลเยอร์เหนือวิดีโอ */}
+            {lanesAbove.map(laneRow)}
+
             {/* แทร็กวิดีโอ */}
-            <div className="relative mt-2 h-20">
+            <div className="relative h-20 border-b border-line/60">
               {shots.map((s, i) => {
                 const left = 8 + offsets[i] * pxPerSec;
                 const w = Math.max(s.dur * pxPerSec - 2, 8);
@@ -221,19 +512,24 @@ export default function Timeline({
                   <div
                     key={`${s.name}-${i}`}
                     draggable
-                    onDragStart={() => setDragFrom(i)}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("text/x-shot", String(i));
+                      setDragFrom(i);
+                    }}
                     onDragEnd={() => {
                       setDragFrom(null);
                       setDragOver(null);
                     }}
                     onDragOver={(e) => {
+                      if (dragFrom == null) return;
                       e.preventDefault();
                       setDragOver(i);
                     }}
                     onDrop={(e) => {
+                      if (dragFrom == null) return;
                       e.preventDefault();
-                      if (dragFrom != null && dragFrom !== i)
-                        onReorder(dragFrom, i);
+                      e.stopPropagation();
+                      if (dragFrom !== i) onReorder(dragFrom, i);
                       setDragFrom(null);
                       setDragOver(null);
                     }}
@@ -242,10 +538,8 @@ export default function Timeline({
                       onSelect(i);
                     }}
                     title={`${s.name} · ${s.start.toFixed(1)}–${s.end.toFixed(1)} วิ${s.seg ? "" : " · ยังไม่มีไฟล์ตัด"}`}
-                    className={`absolute top-0 h-full cursor-grab overflow-hidden rounded-lg border active:cursor-grabbing ${
-                      isSel
-                        ? "z-20 border-accent ring-2 ring-accent/60"
-                        : "border-line-2"
+                    className={`absolute top-1 h-[4.5rem] cursor-grab overflow-hidden rounded-lg border active:cursor-grabbing ${
+                      isSel ? "z-20 border-accent ring-2 ring-accent/60" : "border-line-2"
                     } ${dragOver === i && dragFrom !== i ? "outline outline-2 outline-accent/70" : ""}`}
                     style={{ left, width: w }}
                   >
@@ -265,14 +559,24 @@ export default function Timeline({
                     />
                     {w > 46 && (
                       <div className="absolute inset-x-0 bottom-0 truncate bg-black/55 px-1.5 py-0.5 text-[10px] text-white">
-                        {s.name}{" "}
-                        <span className="text-white/60">{dur(s.dur)}</span>
+                        {s.name} <span className="text-white/60">{dur(s.dur)}</span>
                       </div>
                     )}
                   </div>
                 );
               })}
             </div>
+
+            {/* เลเยอร์ใต้วิดีโอ */}
+            {lanesBelow.map(laneRow)}
+
+            {/* เส้นบอกจุดที่กำลังจะปล่อยของ */}
+            {dropHint != null && (
+              <div
+                className="pointer-events-none absolute bottom-0 top-7 z-40 w-0.5 bg-accent"
+                style={{ left: 8 + dropHint * pxPerSec }}
+              />
+            )}
 
             {/* หัวเล่น */}
             <div

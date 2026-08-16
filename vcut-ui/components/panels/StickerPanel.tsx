@@ -1,14 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import { Film, ImagePlus, Smile, Trash2 } from "lucide-react";
-import {
-  api2,
-  assetUrl,
-  fileToBase64,
-  type FxData,
-  type FxOverlay,
-} from "@/lib/api";
+import { api2, assetUrl, fileToBase64, type FxOverlay } from "@/lib/api";
+import { DND_MIME } from "@/lib/layers";
 import {
   Empty,
   Field,
@@ -18,40 +13,23 @@ import {
   Section,
   Sel,
   Spin,
-  Toggle,
 } from "@/components/ui";
+import type { FxStore } from "./types";
 
 export default function StickerPanel({
-  reloadKey,
-  atPlayhead,
+  fxs,
+  onPlaceAtPlayhead,
+  focusIdx,
   flash,
 }: {
-  reloadKey: number;
-  atPlayhead: () => { name: string; at: number } | null;
+  fxs: FxStore;
+  onPlaceAtPlayhead: (file: string) => void;
+  focusIdx: number | null;
   flash: (m: string) => void;
 }) {
-  const [data, setData] = useState<FxData | null>(null);
-  const [overlays, setOverlays] = useState<FxOverlay[]>([]);
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const d = await api2.fx();
-      setData(d);
-      setOverlays(d.fx.overlays.map((o) => ({ ...o })));
-      setDirty(false);
-    } catch {
-      setData(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load, reloadKey]);
-
-  if (!data) {
+  if (!fxs.data || !fxs.draft) {
     return (
       <Panel title={<><Smile size={13} /> สติกเกอร์ / ภาพซ้อน</>}>
         <Spin />
@@ -59,29 +37,15 @@ export default function StickerPanel({
     );
   }
 
+  const { data, draft } = fxs;
+  const overlays = draft.overlays;
+
   const animOpts = Object.keys(
     (data.defaults.overlay_anim as Record<string, unknown>) ?? { fade: 1 },
   ).map((k) => ({ v: k, label: k }));
 
-  const patch = (i: number, p: Partial<FxOverlay>) => {
-    setOverlays((prev) => prev.map((o, k) => (k === i ? { ...o, ...p } : o)));
-    setDirty(true);
-  };
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      const r = await api2.saveFx({ overlays });
-      setData(r.fx);
-      setOverlays(r.fx.fx.overlays.map((o) => ({ ...o })));
-      setDirty(false);
-      flash("บันทึกภาพซ้อนแล้ว — มีผลตอนสร้างไฟล์แบบมีเอฟเฟกต์");
-    } catch (e) {
-      flash(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
-    } finally {
-      setSaving(false);
-    }
-  };
+  const patch = (i: number, p: Partial<FxOverlay>) =>
+    fxs.patch({ overlays: overlays.map((o, k) => (k === i ? { ...o, ...p } : o)) });
 
   const upload = async (f: File) => {
     if (f.size > 40 * 1024 * 1024) {
@@ -90,29 +54,11 @@ export default function StickerPanel({
     try {
       const b64 = await fileToBase64(f);
       const r = await api2.saveAsset(f.name, b64, "media");
-      setData(r.fx);
-      flash(`เพิ่ม ${r.file} เข้าคลังแล้ว — กดที่รูปเพื่อวางลงหนัง`);
+      fxs.setData(r.fx);
+      flash(`เพิ่ม ${r.file} เข้าคลังแล้ว — คลิกวางที่หัวเล่น หรือลากลงไทม์ไลน์`);
     } catch (e) {
       flash(e instanceof Error ? e.message : "อัปโหลดไม่สำเร็จ");
     }
-  };
-
-  const place = (file: string) => {
-    const pos = atPlayhead();
-    if (!pos) return flash("เลื่อนหัวเล่นไปตรงช็อตที่จะให้ภาพโผล่ก่อน");
-    setOverlays((p) => [
-      ...p,
-      {
-        ...(data.defaults.overlay as Omit<FxOverlay, "at" | "dur" | "id" | "name">),
-        file,
-        at: Math.round(pos.at * 100) / 100,
-        dur: 2.5,
-        name: pos.name,
-        id: "",
-      },
-    ]);
-    setDirty(true);
-    flash(`วาง ${file} ที่ ${pos.name} — ปรับเวลา/ตำแหน่งด้านล่างแล้วกดบันทึก`);
   };
 
   const used = new Set(overlays.map((o) => o.file));
@@ -121,7 +67,13 @@ export default function StickerPanel({
     <Panel
       title={<><Smile size={13} /> สติกเกอร์ / ภาพซ้อน</>}
       footer={
-        <SaveBar dirty={dirty} saving={saving} onSave={save} onRevert={load} />
+        <SaveBar
+          dirty={fxs.dirty}
+          saving={fxs.saving}
+          onSave={fxs.save}
+          onRevert={fxs.revert}
+          hint="FX ยังไม่บันทึก (รวมทุกเลเยอร์)"
+        />
       }
     >
       <Section
@@ -156,9 +108,17 @@ export default function StickerPanel({
             {data.overlay.assets.map((a) => (
               <div
                 key={a.file}
-                className="group relative cursor-pointer overflow-hidden rounded-lg border border-line bg-black"
-                onClick={() => place(a.file)}
-                title={`${a.file} (${a.w}×${a.h}) — คลิกเพื่อวางที่หัวเล่น`}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(
+                    DND_MIME,
+                    JSON.stringify({ type: "sticker", file: a.file }),
+                  );
+                  e.dataTransfer.effectAllowed = "copy";
+                }}
+                className="group relative cursor-grab overflow-hidden rounded-lg border border-line bg-black active:cursor-grabbing"
+                onClick={() => onPlaceAtPlayhead(a.file)}
+                title={`${a.file} (${a.w}×${a.h}) — คลิก=วางที่หัวเล่น · ลากลงไทม์ไลน์=วางตรงจุดนั้น`}
               >
                 {a.kind === "image" ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -175,7 +135,7 @@ export default function StickerPanel({
                       return flash("ไฟล์นี้ถูกใช้อยู่ — เอาออกจากรายการก่อนลบ");
                     api2
                       .deleteAsset(a.file)
-                      .then((r) => setData(r.fx))
+                      .then((r) => fxs.setData(r.fx))
                       .catch((err) => flash(err.message));
                   }}
                   className="absolute right-1 top-1 hidden rounded bg-black/70 p-1 text-white hover:bg-danger group-hover:block"
@@ -194,14 +154,16 @@ export default function StickerPanel({
       <Section title={`วางอยู่ในหนัง (${overlays.length})`}>
         {overlays.length === 0 ? (
           <Empty>
-            ยังไม่มีภาพซ้อน — เลื่อนหัวเล่นไปตรงจังหวะที่ต้องการ
-            แล้วคลิกรูปในคลังด้านบน
+            ยังไม่มีภาพซ้อน — คลิกรูปในคลังเพื่อวางที่หัวเล่น
+            หรือลากรูปไปปล่อยบนไทม์ไลน์ตรงจุดที่ต้องการ
           </Empty>
         ) : (
           overlays.map((o, i) => (
             <div
               key={`${o.file}-${i}`}
-              className="flex flex-col gap-2 rounded-lg border border-line bg-panel-2 p-2.5"
+              className={`flex flex-col gap-2 rounded-lg border bg-panel-2 p-2.5 ${
+                focusIdx === i ? "border-accent" : "border-line"
+              }`}
             >
               <div className="flex items-center gap-2">
                 <span className="min-w-0 flex-1 truncate text-[12px] text-ink">
@@ -211,10 +173,9 @@ export default function StickerPanel({
                   @{o.name || "?"}
                 </span>
                 <button
-                  onClick={() => {
-                    setOverlays((p) => p.filter((_, k) => k !== i));
-                    setDirty(true);
-                  }}
+                  onClick={() =>
+                    fxs.patch({ overlays: overlays.filter((_, k) => k !== i) })
+                  }
                   className="shrink-0 rounded-md p-1 text-muted hover:text-danger"
                 >
                   <Trash2 size={13} />
