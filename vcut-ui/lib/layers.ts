@@ -138,9 +138,10 @@ export function speechBlocks(
   return out;
 }
 
-// ── ซ้อนกันได้สูงสุด 5 ชั้น (ข้อความ/สติกเกอร์) ──
+// ── ซ้อนกันได้สูงสุด 5 ชั้น (ข้อความ/สติกเกอร์) · เสียง 6 ชั้น ──
 
 export const MAX_STACK = 5;
+export const MAX_AUDIO_STACK = 6;
 
 /** จัดบล็อกที่ทับเวลากันให้แยกแถว — คืน map idx→แถว และจำนวนแถวที่ใช้ */
 export function assignRows(
@@ -177,6 +178,7 @@ export const DND_MIME = "application/x-vcut";
 
 export type DropPayload =
   | { type: "music-file"; file: string }
+  | { type: "sfx"; file: string; dur: number }
   | { type: "sticker"; file: string }
   | { type: "text-new"; text?: string }
   | { type: "transcript"; text: string };

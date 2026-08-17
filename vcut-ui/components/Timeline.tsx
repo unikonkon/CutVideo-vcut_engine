@@ -23,6 +23,7 @@ import { thumbUrl, type Shot } from "@/lib/api";
 import {
   assignRows,
   DND_MIME,
+  MAX_AUDIO_STACK,
   type LayerBlock,
   type LayerKind,
 } from "@/lib/layers";
@@ -293,7 +294,8 @@ export default function Timeline({
   const lanesAbove = LANES.filter((l) => vis[l.kind]);
   const lanesBelow = LANES_BELOW.filter((l) => vis[l.kind]);
 
-  // ข้อความ/สติกเกอร์ซ้อนกันได้ — ชิ้นที่ทับเวลากันแยกแถว (สูงสุด 5)
+  // ข้อความ/สติกเกอร์ซ้อนกันได้ (สูงสุด 5) · เพลง/เสียงเอฟเฟกต์ 6 —
+  // ชิ้นที่ทับเวลากันแยกแถวให้อัตโนมัติ
   const ROW_H = 24;
   const stack = useMemo(() => {
     const out = new Map<LayerKind, { rowOf: Map<number, number>; rows: number }>();
@@ -301,6 +303,8 @@ export default function Timeline({
       const { row, rows } = assignRows(layers[k]);
       out.set(k, { rowOf: row, rows });
     }
+    const m = assignRows(layers.music, MAX_AUDIO_STACK);
+    out.set("music", { rowOf: m.row, rows: m.rows });
     return out;
   }, [layers]);
 

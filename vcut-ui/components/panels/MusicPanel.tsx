@@ -1,9 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Download, GripVertical, Music, Trash2, Upload } from "lucide-react";
+import { Download, GripVertical, Music, Play, Trash2, Upload, Zap } from "lucide-react";
 import { api2, assetUrl, fileToBase64, type MusicTrack } from "@/lib/api";
 import { DND_MIME } from "@/lib/layers";
+import { SFX_LIST, sfxUrl } from "@/lib/sfx";
 import {
   Empty,
   Field,
@@ -21,17 +22,29 @@ export default function MusicPanel({
   fxs,
   onMusicFetch,
   onAddAtPlayhead,
+  onAddSfxAtPlayhead,
   focusIdx,
   flash,
 }: {
   fxs: FxStore;
   onMusicFetch: (url: string) => void;
   onAddAtPlayhead: (file: string) => void;
+  onAddSfxAtPlayhead: (file: string, dur: number) => void;
   focusIdx: number | null;
   flash: (m: string) => void;
 }) {
   const [yt, setYt] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  // ตัวเล่นลองฟังเสียงเอฟเฟกต์ — ใช้ตัวเดียว กดเสียงใหม่แล้วตัวเก่าหยุดเอง
+  const sfxPlayer = useRef<HTMLAudioElement | null>(null);
+  const previewSfx = (file: string) => {
+    if (!sfxPlayer.current) sfxPlayer.current = new Audio();
+    const a = sfxPlayer.current;
+    a.pause();
+    a.src = sfxUrl(file);
+    a.currentTime = 0;
+    a.play().catch(() => flash("เล่นตัวอย่างเสียงไม่ได้"));
+  };
 
   if (!fxs.data || !fxs.draft) {
     return (
@@ -58,8 +71,11 @@ export default function MusicPanel({
     }
   };
 
+  // ไฟล์เสียงเอฟเฟกต์ตัวอย่างมีหมวดของตัวเองอยู่แล้ว — ไม่ต้องโชว์ซ้ำตรงนี้
   const unused = data.music.tracks.filter(
-    (t) => !items.some((m) => m.file === t),
+    (t) =>
+      !items.some((m) => m.file === t) &&
+      !SFX_LIST.some((s) => s.file === t),
   );
 
   return (
@@ -137,6 +153,50 @@ export default function MusicPanel({
             ))}
           </div>
         )}
+      </Section>
+
+      <Section title="เสียงเอฟเฟกต์ (10 เสียงตัวอย่าง)">
+        <div className="grid grid-cols-2 gap-1.5">
+          {SFX_LIST.map((s) => (
+            <div
+              key={s.file}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(
+                  DND_MIME,
+                  JSON.stringify({ type: "sfx", file: s.file, dur: s.dur }),
+                );
+                e.dataTransfer.effectAllowed = "copy";
+              }}
+              className="flex cursor-grab items-center gap-1 rounded-lg border border-dashed border-line-2 bg-panel-2 px-1.5 py-1 active:cursor-grabbing"
+              title="ลากลงเลเยอร์เพลงบนไทม์ไลน์ หรือกด ＋ เพื่อวางที่หัวเล่น"
+            >
+              <button
+                onClick={() => previewSfx(s.file)}
+                className="shrink-0 rounded p-1 text-muted hover:text-ink"
+                title="ลองฟัง"
+              >
+                <Play size={11} />
+              </button>
+              <Zap size={10} className="shrink-0 text-warn" />
+              <span className="min-w-0 flex-1 truncate text-[11px] text-ink">
+                {s.label}
+                <span className="ml-1 text-[9.5px] text-faint">{s.dur.toFixed(1)}s</span>
+              </span>
+              <button
+                onClick={() => onAddSfxAtPlayhead(s.file, s.dur)}
+                className="shrink-0 rounded bg-panel-3 px-1.5 py-0.5 text-[10.5px] text-muted hover:text-ink"
+                title="วางเสียงนี้ตรงหัวเล่น"
+              >
+                ＋
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="text-[10.5px] leading-4 text-muted">
+          เสียงสังเคราะห์ให้เริ่มต้น — ใช้ครั้งแรกระบบจะเพิ่มไฟล์เข้าคลังของโปรเจกต์ให้เอง
+          วางแล้วปรับดัง/เวลาได้เหมือนแทร็กเพลง (ซ้อนกันได้สูงสุด 6 ชั้น)
+        </div>
       </Section>
 
       <Section title="แทร็กในหนัง">

@@ -12,6 +12,7 @@ import {
   api,
   api2,
   clipUrl,
+  fileToBase64,
   liveUrl,
   segUrl,
   type CaptionsData,
@@ -28,6 +29,7 @@ import {
 } from "@/lib/api";
 import {
   captionBlocks,
+  MAX_AUDIO_STACK,
   MAX_STACK,
   musicBlocks,
   overlapCount,
@@ -38,6 +40,7 @@ import {
   type DropPayload,
   type LayerKind,
 } from "@/lib/layers";
+import { SFX_LIST, sfxUrl } from "@/lib/sfx";
 import TopBar from "@/components/TopBar";
 import IconRail, { type Tab } from "@/components/IconRail";
 import AssetsPanel from "@/components/AssetsPanel";
@@ -650,6 +653,18 @@ export default function Editor() {
     ) => {
       if (!fxDraft) return;
       if (kind === "music") {
+        // เพดานเสียงซ้อน 6 ชั้น — คิดจากความยาวที่เห็นบนไทม์ไลน์ (dur 0 = ถึงท้ายหนัง)
+        const effDur =
+          mode === "resize"
+            ? Math.max(1, durNew)
+            : ((d) => (d > 0 ? d : Math.max(total - tl, 1)))(
+                fxDraft.music[idx]?.dur ?? 0,
+              );
+        if (overlapCount(layers.music, tl, effDur, idx) >= MAX_AUDIO_STACK) {
+          return flash(
+            `ช่วงนี้มีเสียงซ้อนครบ ${MAX_AUDIO_STACK} ชั้นแล้ว — ขยับไปที่ว่างก่อน`,
+          );
+        }
         patchFx({
           music: fxDraft.music.map((m, k) =>
             k === idx
@@ -693,7 +708,7 @@ export default function Editor() {
         });
       }
     },
-    [fxDraft, shots, offsets, layers, patchFx, flash],
+    [fxDraft, shots, offsets, layers, total, patchFx, flash],
   );
 
   const removeLayerItem = useCallback(
@@ -781,6 +796,11 @@ export default function Editor() {
   const addMusicAt = useCallback(
     (tl: number, file: string) => {
       if (!fxDraft || !fxData) return;
+      const d = fxData.music.defaults.dur;
+      const effDur = d > 0 ? d : Math.max(total - tl, 1);
+      if (overlapCount(layers.music, tl, effDur) >= MAX_AUDIO_STACK) {
+        return flash(`ช่วงนี้มีเสียงซ้อนครบ ${MAX_AUDIO_STACK} ชั้นแล้ว`);
+      }
       patchFx({
         music: [
           ...fxDraft.music,
@@ -795,17 +815,60 @@ export default function Editor() {
       setFocus({ kind: "music", idx: fxDraft.music.length });
       flash(`วางเพลง ${file} ที่ ${tl.toFixed(1)} วิ — กดบันทึก FX เมื่อจัดเสร็จ`);
     },
-    [fxDraft, fxData, patchFx, flash],
+    [fxDraft, fxData, layers, total, patchFx, flash],
+  );
+
+  // เสียงเอฟเฟกต์ตัวอย่าง — ไฟล์อยู่ใน public/sfx ของ UI; ครั้งแรกที่ใช้
+  // อัปโหลดเข้าโฟลเดอร์ assets ของโปรเจกต์ก่อน (เอนจินอ่านจากที่นั่นเท่านั้น)
+  // แล้วค่อยวางเป็นแทร็กเพลงแบบ "เสียงสั้น": ยาวเท่าไฟล์ ไม่วน ไม่หลบเสียงพูด
+  const addSfxAt = useCallback(
+    async (tl: number, file: string, dur: number) => {
+      if (!fxDraft || !fxData) return;
+      if (overlapCount(layers.music, tl, dur) >= MAX_AUDIO_STACK) {
+        return flash(`ช่วงนี้มีเสียงซ้อนครบ ${MAX_AUDIO_STACK} ชั้นแล้ว`);
+      }
+      try {
+        if (!fxData.music.tracks.includes(file)) {
+          const blob = await (await fetch(sfxUrl(file))).blob();
+          const b64 = await fileToBase64(new File([blob], file));
+          const r = await api2.saveAsset(file, b64, "audio");
+          setFxData(r.fx);
+        }
+      } catch (e) {
+        return flash(e instanceof Error ? e.message : "เพิ่มไฟล์เสียงเข้าคลังไม่สำเร็จ");
+      }
+      patchFx({
+        music: [
+          ...fxDraft.music,
+          {
+            ...fxData.music.defaults,
+            file,
+            at: Math.max(0, Math.round(tl * 100) / 100),
+            dur,
+            loop: false,
+            duck: false,
+            fade_in: 0,
+            fade_out: 0,
+            gain_db: -6,
+            id: "",
+          },
+        ],
+      });
+      setFocus({ kind: "music", idx: fxDraft.music.length });
+      flash(`วางเสียง ${file} ที่ ${tl.toFixed(1)} วิ — กดบันทึก FX เมื่อจัดเสร็จ`);
+    },
+    [fxDraft, fxData, layers, patchFx, flash],
   );
 
   const dropOnTimeline = useCallback(
     (p: DropPayload, tl: number) => {
       if (p.type === "music-file") addMusicAt(tl, p.file);
+      else if (p.type === "sfx") addSfxAt(tl, p.file, p.dur);
       else if (p.type === "sticker") addStickerAt(tl, p.file);
       else if (p.type === "text-new") addTextAt(tl, p.text);
       else if (p.type === "transcript") addTextAt(tl, p.text);
     },
-    [addMusicAt, addStickerAt, addTextAt],
+    [addMusicAt, addSfxAt, addStickerAt, addTextAt],
   );
 
   const addClip = useCallback(
@@ -1020,6 +1083,7 @@ export default function Editor() {
             fxs={fxs}
             onMusicFetch={musicFetch}
             onAddAtPlayhead={(f) => addMusicAt(playhead, f)}
+            onAddSfxAtPlayhead={(f, d) => addSfxAt(playhead, f, d)}
             focusIdx={focus?.kind === "music" ? focus.idx : null}
             flash={flash}
           />
