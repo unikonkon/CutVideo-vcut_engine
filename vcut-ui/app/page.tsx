@@ -46,6 +46,7 @@ import IconRail, { type Tab } from "@/components/IconRail";
 import AssetsPanel from "@/components/AssetsPanel";
 import Preview from "@/components/Preview";
 import MusicMixer from "@/components/MusicMixer";
+import MixerPanel from "@/components/MixerPanel";
 import Properties from "@/components/Properties";
 import Timeline from "@/components/Timeline";
 import JobPanel from "@/components/JobPanel";
@@ -168,6 +169,7 @@ export default function Editor() {
 
   const [playing, setPlaying] = useState(false);
   const [playhead, setPlayhead] = useState(0);
+  const [mixerOpen, setMixerOpen] = useState(false);
   const [pxPerSec, setPxPerSec] = useState(10);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -822,7 +824,7 @@ export default function Editor() {
   // อัปโหลดเข้าโฟลเดอร์ assets ของโปรเจกต์ก่อน (เอนจินอ่านจากที่นั่นเท่านั้น)
   // แล้วค่อยวางเป็นแทร็กเพลงแบบ "เสียงสั้น": ยาวเท่าไฟล์ ไม่วน ไม่หลบเสียงพูด
   const addSfxAt = useCallback(
-    async (tl: number, file: string, dur: number) => {
+    async (tl: number, file: string, dur: number, loop = false) => {
       if (!fxDraft || !fxData) return;
       if (overlapCount(layers.music, tl, dur) >= MAX_AUDIO_STACK) {
         return flash(`ช่วงนี้มีเสียงซ้อนครบ ${MAX_AUDIO_STACK} ชั้นแล้ว`);
@@ -845,7 +847,7 @@ export default function Editor() {
             file,
             at: Math.max(0, Math.round(tl * 100) / 100),
             dur,
-            loop: false,
+            loop,
             duck: false,
             fade_in: 0,
             fade_out: 0,
@@ -863,7 +865,7 @@ export default function Editor() {
   const dropOnTimeline = useCallback(
     (p: DropPayload, tl: number) => {
       if (p.type === "music-file") addMusicAt(tl, p.file);
-      else if (p.type === "sfx") addSfxAt(tl, p.file, p.dur);
+      else if (p.type === "sfx") addSfxAt(tl, p.file, p.dur, p.loop);
       else if (p.type === "sticker") addStickerAt(tl, p.file);
       else if (p.type === "text-new") addTextAt(tl, p.text);
       else if (p.type === "transcript") addTextAt(tl, p.text);
@@ -1083,7 +1085,8 @@ export default function Editor() {
             fxs={fxs}
             onMusicFetch={musicFetch}
             onAddAtPlayhead={(f) => addMusicAt(playhead, f)}
-            onAddSfxAtPlayhead={(f, d) => addSfxAt(playhead, f, d)}
+            onAddSfxAtPlayhead={(f, d, lp) => addSfxAt(playhead, f, d, lp)}
+            onToggleMixer={() => setMixerOpen((o) => !o)}
             focusIdx={focus?.kind === "music" ? focus.idx : null}
             flash={flash}
           />
@@ -1138,6 +1141,22 @@ export default function Editor() {
           playhead={playhead}
           total={total}
         />
+        {mixerOpen && (
+          <MixerPanel
+            tracks={fxDraft?.music ?? []}
+            focusIdx={focus?.kind === "music" ? focus.idx : null}
+            onGain={(i, db) =>
+              fxDraft &&
+              patchFx({
+                music: fxDraft.music.map((m, k) =>
+                  k === i ? { ...m, gain_db: db } : m,
+                ),
+              })
+            }
+            onSelect={(i) => selectLayerItem("music", i)}
+            onClose={() => setMixerOpen(false)}
+          />
+        )}
         <Properties
           shot={sel != null ? (shots[sel] ?? null) : null}
           onPatch={(p) => sel != null && patchShot(sel, p)}

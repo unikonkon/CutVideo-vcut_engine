@@ -178,7 +178,7 @@ export const DND_MIME = "application/x-vcut";
 
 export type DropPayload =
   | { type: "music-file"; file: string }
-  | { type: "sfx"; file: string; dur: number }
+  | { type: "sfx"; file: string; dur: number; loop?: boolean }
   | { type: "sticker"; file: string }
   | { type: "text-new"; text?: string }
   | { type: "transcript"; text: string };

@@ -264,3 +264,33 @@ export function Spin() {
     </div>
   );
 }
+
+/** แถบเลื่อนความดังแนวตั้ง (fader แบบโต๊ะมิกซ์) — หน่วย dB
+ *  writing-mode: vertical-lr + direction: rtl = ลากขึ้น (ค่าเพิ่ม) ลากลง (ค่าลด) */
+export function Fader({
+  value,
+  onChange,
+  min = -40,
+  max = 6,
+  h = 76,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  max?: number;
+  h?: number;
+}) {
+  return (
+    <input
+      type="range"
+      min={min}
+      max={max}
+      step={0.5}
+      value={Math.min(max, Math.max(min, value))}
+      onChange={(e) => onChange(Number(e.target.value))}
+      className="cursor-pointer"
+      style={{ writingMode: "vertical-lr", direction: "rtl", width: 16, height: h }}
+      title="ความดัง (dB) — ลากขึ้นดัง ลากลงเบา"
+    />
+  );
+}

@@ -1,12 +1,22 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Download, GripVertical, Music, Play, Trash2, Upload, Zap } from "lucide-react";
+import {
+  Download,
+  GripVertical,
+  Music,
+  Play,
+  SlidersVertical,
+  Trash2,
+  Upload,
+  Zap,
+} from "lucide-react";
 import { api2, assetUrl, fileToBase64, type MusicTrack } from "@/lib/api";
 import { DND_MIME } from "@/lib/layers";
-import { SFX_LIST, sfxUrl } from "@/lib/sfx";
+import { SFX_CATS, SFX_LIST, sfxUrl } from "@/lib/sfx";
 import {
   Empty,
+  Fader,
   Field,
   NInput,
   Panel,
@@ -23,13 +33,15 @@ export default function MusicPanel({
   onMusicFetch,
   onAddAtPlayhead,
   onAddSfxAtPlayhead,
+  onToggleMixer,
   focusIdx,
   flash,
 }: {
   fxs: FxStore;
   onMusicFetch: (url: string) => void;
   onAddAtPlayhead: (file: string) => void;
-  onAddSfxAtPlayhead: (file: string, dur: number) => void;
+  onAddSfxAtPlayhead: (file: string, dur: number, loop: boolean) => void;
+  onToggleMixer: () => void;
   focusIdx: number | null;
   flash: (m: string) => void;
 }) {
@@ -155,100 +167,129 @@ export default function MusicPanel({
         )}
       </Section>
 
-      <Section title="เสียงเอฟเฟกต์ (10 เสียงตัวอย่าง)">
-        <div className="grid grid-cols-2 gap-1.5">
-          {SFX_LIST.map((s) => (
-            <div
-              key={s.file}
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.setData(
-                  DND_MIME,
-                  JSON.stringify({ type: "sfx", file: s.file, dur: s.dur }),
-                );
-                e.dataTransfer.effectAllowed = "copy";
-              }}
-              className="flex cursor-grab items-center gap-1 rounded-lg border border-dashed border-line-2 bg-panel-2 px-1.5 py-1 active:cursor-grabbing"
-              title="ลากลงเลเยอร์เพลงบนไทม์ไลน์ หรือกด ＋ เพื่อวางที่หัวเล่น"
-            >
-              <button
-                onClick={() => previewSfx(s.file)}
-                className="shrink-0 rounded p-1 text-muted hover:text-ink"
-                title="ลองฟัง"
-              >
-                <Play size={11} />
-              </button>
-              <Zap size={10} className="shrink-0 text-warn" />
-              <span className="min-w-0 flex-1 truncate text-[11px] text-ink">
-                {s.label}
-                <span className="ml-1 text-[9.5px] text-faint">{s.dur.toFixed(1)}s</span>
-              </span>
-              <button
-                onClick={() => onAddSfxAtPlayhead(s.file, s.dur)}
-                className="shrink-0 rounded bg-panel-3 px-1.5 py-0.5 text-[10.5px] text-muted hover:text-ink"
-                title="วางเสียงนี้ตรงหัวเล่น"
-              >
-                ＋
-              </button>
+      <Section title="เสียงเอฟเฟกต์ (30 เสียงตัวอย่าง · 6 หมวด)">
+        {SFX_CATS.map((c) => (
+          <div key={c.key} className="flex flex-col gap-1">
+            <div className="text-[10.5px] font-medium text-muted">{c.label}</div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {SFX_LIST.filter((s) => s.cat === c.key).map((s) => (
+                <div
+                  key={s.file}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData(
+                      DND_MIME,
+                      JSON.stringify({
+                        type: "sfx",
+                        file: s.file,
+                        dur: s.dur,
+                        loop: !!s.loop,
+                      }),
+                    );
+                    e.dataTransfer.effectAllowed = "copy";
+                  }}
+                  className="flex cursor-grab items-center gap-1 rounded-lg border border-dashed border-line-2 bg-panel-2 px-1.5 py-1 active:cursor-grabbing"
+                  title="ลากลงเลเยอร์เพลงบนไทม์ไลน์ หรือกด ＋ เพื่อวางที่หัวเล่น"
+                >
+                  <button
+                    onClick={() => previewSfx(s.file)}
+                    className="shrink-0 rounded p-1 text-muted hover:text-ink"
+                    title="ลองฟัง"
+                  >
+                    <Play size={11} />
+                  </button>
+                  <Zap size={10} className="shrink-0 text-warn" />
+                  <span className="min-w-0 flex-1 truncate text-[11px] text-ink">
+                    {s.label}
+                    <span className="ml-1 text-[9.5px] text-faint">
+                      {s.dur.toFixed(1)}s
+                    </span>
+                  </span>
+                  <button
+                    onClick={() => onAddSfxAtPlayhead(s.file, s.dur, !!s.loop)}
+                    className="shrink-0 rounded bg-panel-3 px-1.5 py-0.5 text-[10.5px] text-muted hover:text-ink"
+                    title="วางเสียงนี้ตรงหัวเล่น"
+                  >
+                    ＋
+                  </button>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
         <div className="text-[10.5px] leading-4 text-muted">
           เสียงสังเคราะห์ให้เริ่มต้น — ใช้ครั้งแรกระบบจะเพิ่มไฟล์เข้าคลังของโปรเจกต์ให้เอง
-          วางแล้วปรับดัง/เวลาได้เหมือนแทร็กเพลง (ซ้อนกันได้สูงสุด 6 ชั้น)
+          หมวดบรรยากาศวนซ้ำอัตโนมัติ ยืดบล็อกบนไทม์ไลน์ได้ตามใจ (เสียงซ้อนสูงสุด 6 ชั้น)
         </div>
       </Section>
 
       <Section title="แทร็กในหนัง">
+        <button
+          onClick={onToggleMixer}
+          className="flex items-center justify-center gap-1.5 rounded-lg border border-line bg-panel-2 px-2.5 py-1.5 text-[12px] text-ink hover:bg-panel-3"
+          title="เปิด/ปิดมิกเซอร์รวม — ปรับความดังทุกแทร็กในจอเดียว"
+        >
+          <SlidersVertical size={12} /> มิกเซอร์รวม
+        </button>
         {items.length === 0 ? (
           <Empty>ยังไม่มีเพลง — ดึงจาก YouTube แล้วลากลงไทม์ไลน์</Empty>
         ) : (
           items.map((m, i) => (
             <div
               key={`${m.file}-${i}`}
-              className={`flex flex-col gap-2 rounded-lg border bg-panel-2 p-2.5 ${
+              className={`flex gap-2 rounded-lg border bg-panel-2 p-2.5 ${
                 focusIdx === i ? "border-accent" : "border-line"
               }`}
             >
-              <div className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate text-[12px] text-ink" title={m.file}>
-                  {m.file}
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-[12px] text-ink" title={m.file}>
+                    {m.file}
+                  </span>
+                  {data.music.missing.includes(m.file) && (
+                    <span className="shrink-0 text-[10.5px] text-danger">ไม่พบไฟล์</span>
+                  )}
+                  <audio src={assetUrl(m.file)} controls preload="none" className="h-7 w-28" />
+                  <button
+                    onClick={() => fxs.patch({ music: items.filter((_, k) => k !== i) })}
+                    className="shrink-0 rounded-md p-1 text-muted hover:text-danger"
+                    title="เอาแทร็กออก (ไฟล์ยังอยู่ในคลัง)"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <Field label="เริ่มที่ (วิ)">
+                    <NInput value={m.at} min={0} onChange={(v) => patch(i, { at: v })} />
+                  </Field>
+                  <Field label="ยาว (0=จนจบ)">
+                    <NInput value={m.dur} min={0} onChange={(v) => patch(i, { dur: v })} />
+                  </Field>
+                  <Field label="ดัง (dB)">
+                    <NInput value={m.gain_db} step={0.5} onChange={(v) => patch(i, { gain_db: v })} />
+                  </Field>
+                  <Field label="เฟดเข้า (วิ)">
+                    <NInput value={m.fade_in} min={0} onChange={(v) => patch(i, { fade_in: v })} />
+                  </Field>
+                  <Field label="เฟดออก (วิ)">
+                    <NInput value={m.fade_out} min={0} onChange={(v) => patch(i, { fade_out: v })} />
+                  </Field>
+                  <Field label="หลบเสียงพูด (dB)">
+                    <NInput value={m.duck_db} min={0} onChange={(v) => patch(i, { duck_db: v })} />
+                  </Field>
+                </div>
+                <div className="flex gap-4">
+                  <Toggle value={m.loop} onChange={(v) => patch(i, { loop: v })} label="วนซ้ำ" />
+                  <Toggle value={m.duck} onChange={(v) => patch(i, { duck: v })} label="เบาลงตอนมีเสียงพูด" />
+                </div>
+              </div>
+              {/* fader ความดังข้างการ์ด — ตัวเดียวกับช่อง ดัง (dB) แค่ลากได้ */}
+              <div className="flex shrink-0 flex-col items-center justify-center gap-1 border-l border-line pl-2">
+                <Fader value={m.gain_db} onChange={(v) => patch(i, { gain_db: v })} />
+                <span className="font-mono text-[9.5px] text-muted">
+                  {m.gain_db > 0 ? "+" : ""}
+                  {m.gain_db.toFixed(1)}dB
                 </span>
-                {data.music.missing.includes(m.file) && (
-                  <span className="shrink-0 text-[10.5px] text-danger">ไม่พบไฟล์</span>
-                )}
-                <audio src={assetUrl(m.file)} controls preload="none" className="h-7 w-28" />
-                <button
-                  onClick={() => fxs.patch({ music: items.filter((_, k) => k !== i) })}
-                  className="shrink-0 rounded-md p-1 text-muted hover:text-danger"
-                  title="เอาแทร็กออก (ไฟล์ยังอยู่ในคลัง)"
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <Field label="เริ่มที่ (วิ)">
-                  <NInput value={m.at} min={0} onChange={(v) => patch(i, { at: v })} />
-                </Field>
-                <Field label="ยาว (0=จนจบ)">
-                  <NInput value={m.dur} min={0} onChange={(v) => patch(i, { dur: v })} />
-                </Field>
-                <Field label="ดัง (dB)">
-                  <NInput value={m.gain_db} step={0.5} onChange={(v) => patch(i, { gain_db: v })} />
-                </Field>
-                <Field label="เฟดเข้า (วิ)">
-                  <NInput value={m.fade_in} min={0} onChange={(v) => patch(i, { fade_in: v })} />
-                </Field>
-                <Field label="เฟดออก (วิ)">
-                  <NInput value={m.fade_out} min={0} onChange={(v) => patch(i, { fade_out: v })} />
-                </Field>
-                <Field label="หลบเสียงพูด (dB)">
-                  <NInput value={m.duck_db} min={0} onChange={(v) => patch(i, { duck_db: v })} />
-                </Field>
-              </div>
-              <div className="flex gap-4">
-                <Toggle value={m.loop} onChange={(v) => patch(i, { loop: v })} label="วนซ้ำ" />
-                <Toggle value={m.duck} onChange={(v) => patch(i, { duck: v })} label="เบาลงตอนมีเสียงพูด" />
               </div>
             </div>
           ))
