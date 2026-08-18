@@ -170,6 +170,9 @@ export default function Editor() {
   const [playing, setPlaying] = useState(false);
   const [playhead, setPlayhead] = useState(0);
   const [mixerOpen, setMixerOpen] = useState(false);
+  // ขนาดหนัง (layout) จาก config — ใช้โชว์ตัวเลือกใต้จอ + สเกลตัวอย่างซ้อนให้ตรง
+  const [frame, setFrame] = useState<{ w: number; h: number } | null>(null);
+  const setupPath = useRef("");
   const [pxPerSec, setPxPerSec] = useState(10);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -368,6 +371,44 @@ export default function Editor() {
       }
     },
     [pollJob, flash],
+  );
+
+  // ── ขนาดหนัง (layout) — อ่าน/เขียน video.width/height ใน config ──
+  useEffect(() => {
+    let dead = false;
+    api2
+      .setup()
+      .then((s) => {
+        if (dead) return;
+        setupPath.current = s.project.path;
+        const num = (k: string, d: number) => {
+          const v = Number(s.values[k] ?? s.inherited[k]);
+          return Number.isFinite(v) && v > 0 ? v : d;
+        };
+        setFrame({ w: num("video.width", 1920), h: num("video.height", 1080) });
+      })
+      .catch(() => {});
+    return () => {
+      dead = true;
+    };
+  }, [reloadKey]);
+
+  const applyLayout = useCallback(
+    async (w: number, h: number) => {
+      try {
+        await api2.saveSetup(setupPath.current, {
+          "video.width": w,
+          "video.height": h,
+        });
+        setFrame({ w, h });
+        flash(
+          `ขนาดหนัง ${w}×${h} แล้ว — มีผลตอน Export (ชิ้นที่ตัดไว้จะถูก render ใหม่ให้เอง)`,
+        );
+      } catch (e) {
+        flash(e instanceof Error ? e.message : "บันทึกขนาดไม่สำเร็จ");
+      }
+    },
+    [flash],
   );
 
   // ── เล่นวิดีโอ: สตรีมชิ้นที่ render แล้วเป็นสายเดียว (ผ่าน /api/live) ──
@@ -1137,6 +1178,8 @@ export default function Editor() {
           onToggle={toggle}
           notice={notice}
           overlay={overlayData}
+          frame={frame}
+          onLayout={applyLayout}
         />
         <MusicMixer
           tracks={fxDraft?.music ?? []}

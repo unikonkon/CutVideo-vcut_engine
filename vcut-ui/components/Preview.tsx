@@ -6,7 +6,16 @@ import {
   useEffect,
   useState,
 } from "react";
-import { ChevronDown, Eye, EyeOff, Maximize, Pause, Play } from "lucide-react";
+import {
+  ChevronDown,
+  Eye,
+  EyeOff,
+  Maximize,
+  Pause,
+  Play,
+  Proportions,
+} from "lucide-react";
+import { LAYOUT_GROUPS, ratioLabel } from "@/lib/layouts";
 import {
   assetUrl,
   type CaptionCue,
@@ -21,7 +30,8 @@ const FITS = [
   { v: "fill", label: "Stretch" },
 ] as const;
 
-// ความละเอียดอ้างอิงของสไตล์ข้อความ (ass ใช้ PlayResY เท่าความสูง output)
+// ความละเอียดอ้างอิงตั้งต้นของสไตล์ข้อความ — ass ใช้ PlayResY เท่าความสูง output
+// จริง ดังนั้นถ้า config ตั้งขนาดหนังไว้ ให้สเกลด้วยความสูงนั้นแทน (ส่งผ่าน refH)
 const REF_H = 1080;
 
 export interface OverlayData {
@@ -61,14 +71,16 @@ function TextOv({
   tl,
   W,
   H,
+  refH,
 }: {
   t: FxTextItem;
   ph: number;
   tl: number;
   W: number;
   H: number;
+  refH: number;
 }) {
-  const s = H / REF_H;
+  const s = H / refH;
   const p = ph - tl;
   const q = tl + t.dur - ph;
   const { tx, ty } = anchor(t.align || 5);
@@ -155,8 +167,8 @@ function StickerOv({
   return <img src={assetUrl(o.file)} alt={o.file} style={style} />;
 }
 
-function CueOv({ c, W, H }: { c: CaptionCue; W: number; H: number }) {
-  const s = H / REF_H;
+function CueOv({ c, W, H, refH }: { c: CaptionCue; W: number; H: number; refH: number }) {
+  const s = H / refH;
   const st = c.style;
   return (
     <div
@@ -190,6 +202,8 @@ export default function Preview({
   onToggle,
   notice,
   overlay,
+  frame,
+  onLayout,
 }: {
   videoRef: RefObject<HTMLVideoElement | null>;
   stageRef: RefObject<HTMLDivElement | null>;
@@ -199,52 +213,41 @@ export default function Preview({
   onToggle: () => void;
   notice: string;
   overlay: OverlayData;
+  frame: { w: number; h: number } | null;
+  onLayout: (w: number, h: number) => void;
 }) {
   const [fit, setFit] = useState<(typeof FITS)[number]>(FITS[0]);
   const [fitOpen, setFitOpen] = useState(false);
+  const [layoutOpen, setLayoutOpen] = useState(false);
   const [showOv, setShowOv] = useState(true);
-  const [dims, setDims] = useState({ bw: 0, bh: 0, vw: 0, vh: 0 });
+  const [dims, setDims] = useState({ bw: 0, bh: 0 });
 
-  // ขนาดเวที + ขนาดจริงของวิดีโอ — ไว้คำนวณกรอบภาพ (หัก letterbox)
+  // ขนาดเวที — ไว้คำนวณกรอบผืนหนัง (layout) ที่ใหญ่สุดที่ยังพอดีเวที
   useEffect(() => {
     const stage = stageRef.current;
-    const v = videoRef.current;
-    if (!stage || !v) return;
+    if (!stage) return;
     const upd = () =>
-      setDims({
-        bw: stage.clientWidth,
-        bh: stage.clientHeight,
-        vw: v.videoWidth,
-        vh: v.videoHeight,
-      });
+      setDims({ bw: stage.clientWidth, bh: stage.clientHeight });
     upd();
     const ro = new ResizeObserver(upd);
     ro.observe(stage);
-    v.addEventListener("loadedmetadata", upd);
-    v.addEventListener("resize", upd);
-    return () => {
-      ro.disconnect();
-      v.removeEventListener("loadedmetadata", upd);
-      v.removeEventListener("resize", upd);
-    };
-  }, [stageRef, videoRef]);
+    return () => ro.disconnect();
+  }, [stageRef]);
 
-  // กรอบที่ภาพวิดีโอถูกวาดจริงภายในเวที ตาม object-fit
+  // กรอบผืนหนังตามสัดส่วน layout ที่เลือก — เปลี่ยน layout แล้วกรอบเปลี่ยนทันที
+  // สตรีมเก่า (สัดส่วนเดิม) ถูกจัดวางในกรอบตามโหมด Fit/Fill/Stretch จนกว่าจะ
+  // Export ใหม่  ตัวอย่างซ้อนยึดกรอบนี้ = ตำแหน่งเดียวกับที่ ffmpeg จะเผาจริง
   const { bw, bh } = dims;
-  const vw = dims.vw || 1920;
-  const vh = dims.vh || 1080;
-  let W = bw, H = bh, L = 0, T = 0;
-  if (fit.v !== "fill" && bw > 0 && bh > 0) {
-    const k =
-      fit.v === "contain"
-        ? Math.min(bw / vw, bh / vh)
-        : Math.max(bw / vw, bh / vh);
-    W = vw * k;
-    H = vh * k;
-    L = (bw - W) / 2;
-    T = (bh - H) / 2;
+  const fw = frame?.w || 1920;
+  const fh = frame?.h || 1080;
+  let W = 0, H = 0;
+  if (bw > 0 && bh > 0) {
+    const k = Math.min(bw / fw, bh / fh);
+    W = fw * k;
+    H = fh * k;
   }
 
+  const refH = frame?.h || REF_H;
   const ph = playhead;
   const activeTexts = overlay.texts.filter(
     ({ item, tl }) => ph >= tl && ph < tl + item.dur,
@@ -260,28 +263,31 @@ export default function Preview({
         ref={stageRef}
         className="relative m-4 mb-2 flex min-h-0 flex-1 items-center justify-center"
       >
-        <video
-          ref={videoRef}
-          playsInline
-          className="max-h-full max-w-full bg-black"
-          style={{ objectFit: fit.v, width: "100%", height: "100%" }}
-          onClick={onToggle}
-        />
-        {/* ชั้นซ้อนสด — ตัวเลขชุดเดียวกับที่ ffmpeg จะเผาใน render ขั้น 5 */}
-        {showOv && W > 0 && (
-          <div
-            className="pointer-events-none absolute overflow-hidden"
-            style={{ left: L, top: T, width: W, height: H }}
-          >
-            {activeTexts.map(({ item, tl }, i) => (
-              <TextOv key={`t${i}`} t={item} ph={ph} tl={tl} W={W} H={H} />
-            ))}
-            {activeStickers.map(({ item, tl, kind }, i) => (
-              <StickerOv key={`s${i}`} o={item} kind={kind} ph={ph} tl={tl} W={W} H={H} />
-            ))}
-            {activeCue && <CueOv c={activeCue} W={W} H={H} />}
-          </div>
-        )}
+        {/* กรอบผืนหนัง — สัดส่วนตาม layout ที่เลือก ไม่ใช่ตามสตรีม */}
+        <div
+          className="relative overflow-hidden bg-black"
+          style={{ width: W || "100%", height: H || "100%" }}
+        >
+          <video
+            ref={videoRef}
+            playsInline
+            className="h-full w-full"
+            style={{ objectFit: fit.v }}
+            onClick={onToggle}
+          />
+          {/* ชั้นซ้อนสด — ตัวเลขชุดเดียวกับที่ ffmpeg จะเผาใน render ขั้น 5 */}
+          {showOv && W > 0 && (
+            <div className="pointer-events-none absolute inset-0 overflow-hidden">
+              {activeTexts.map(({ item, tl }, i) => (
+                <TextOv key={`t${i}`} t={item} ph={ph} tl={tl} W={W} H={H} refH={refH} />
+              ))}
+              {activeStickers.map(({ item, tl, kind }, i) => (
+                <StickerOv key={`s${i}`} o={item} kind={kind} ph={ph} tl={tl} W={W} H={H} />
+              ))}
+              {activeCue && <CueOv c={activeCue} W={W} H={H} refH={refH} />}
+            </div>
+          )}
+        </div>
         {notice && (
           <div className="pointer-events-none absolute bottom-2 left-1/2 z-10 -translate-x-1/2 rounded-lg bg-black/75 px-3 py-1.5 text-[11.5px] text-white">
             {notice}
@@ -309,6 +315,62 @@ export default function Preview({
             )}
           </button>
         </div>
+
+        {/* layout ขนาดหนัง — เขียน video.width/height ลง config ทันทีที่เลือก */}
+        {frame && (
+          <div className="relative">
+            <button
+              onClick={() => setLayoutOpen((v) => !v)}
+              title="ขนาดหนัง (layout) — เลือกสัดส่วนยอดนิยม เช่น YouTube · TikTok · Instagram"
+              className="flex items-center gap-1 rounded-lg bg-panel-2 px-2.5 py-1.5 text-[12px] text-ink hover:bg-panel-3"
+            >
+              <Proportions size={13} />
+              {ratioLabel(frame.w, frame.h)}
+              <span className="text-[10.5px] text-muted">
+                {frame.w}×{frame.h}
+              </span>
+              <ChevronDown size={12} />
+            </button>
+            {layoutOpen && (
+              <div className="absolute bottom-9 right-0 z-40 max-h-80 w-64 overflow-y-auto rounded-lg border border-line bg-panel-2 shadow-xl">
+                {LAYOUT_GROUPS.map((g) => (
+                  <div key={g.label}>
+                    <div className="px-3 pt-2 pb-1 text-[10px] font-medium text-faint">
+                      {g.label}
+                    </div>
+                    {g.items.map((p) => {
+                      const cur = p.w === frame.w && p.h === frame.h;
+                      return (
+                        <button
+                          key={`${p.w}x${p.h}`}
+                          onClick={() => {
+                            onLayout(p.w, p.h);
+                            setLayoutOpen(false);
+                          }}
+                          className={`flex w-full items-baseline gap-2 px-3 py-1.5 text-left text-[12px] hover:bg-panel-3 ${
+                            cur ? "text-accent" : "text-ink"
+                          }`}
+                        >
+                          <span className="w-12 shrink-0 font-mono text-[11px]">
+                            {p.ratio}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate">{p.label}</span>
+                          <span className="shrink-0 font-mono text-[10px] text-muted">
+                            {p.w}×{p.h}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+                <div className="border-t border-line px-3 py-1.5 text-[10px] leading-4 text-muted">
+                  มีผลตอน Export — ชิ้นที่ตัดไว้ถูก render ใหม่ให้เอง ·
+                  ขนาดกำหนดเองอยู่ในแท็บตั้งค่า
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <button
           onClick={() => setShowOv((v) => !v)}

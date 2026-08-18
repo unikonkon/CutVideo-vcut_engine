@@ -39,14 +39,24 @@ def build_vfilter(seg, ctx):
     pre = f"{seg['rot_override']}," if seg.get("rot_override") else ""
     tail = "setsar=1,format=yuv420p"
 
-    if seg["orient"] == "V":
+    # สัดส่วนคลิปไม่ตรงกับผืน — คลิปตั้งบนผืนนอน · คลิปนอนบนผืนตั้ง · ผืนจัตุรัส
+    # (นับทุกคลิป) — เลือกวิธีถมที่ว่างได้: เบลอ/แถบดำ/ครอป  ฟิลเตอร์ทุกโหมด
+    # เขียนแบบสองทิศ (force_original_aspect_ratio + จัดกึ่งกลางทั้งสองแกน)
+    # จึงใช้กับผืนทุกขนาดที่ตั้งใน video.width/height ได้
+    if (seg["orient"] == "V") != (H > W) or W == H:
         # เลือกได้ทีละคลิปตั้งแต่ขั้น 1 — ไม่ได้ก็ตกมาใช้ค่ากลางของทั้งเรื่อง
         mode = (seg.get("vertical_mode")
                 or (ctx.get("video.vertical_overrides", {}) or {}).get(seg["name"])
                 or ctx.get("video.vertical_mode", "blur_pad"))
         if mode == "blur_pad":
             b = ctx.get("video.blur", {})
-            bw, bh = str(b.get("scale", "480:270")).split(":")
+            # พื้นหลังเบลอทำที่ขนาดจิ๋วสัดส่วนเดียวกับผืน (ด้านยาว = ค่าแรกของ
+            # blur.scale) แล้วค่อยขยาย — ผืน 16:9 ได้ 480:270 ตรงของเดิมเป๊ะ
+            base = int(str(b.get("scale", "480:270")).split(":")[0])
+            if W >= H:
+                bw, bh = base, max(2, round(base * H / W / 2) * 2)
+            else:
+                bw, bh = max(2, round(base * W / H / 2) * 2), base
             return (
                 f"[0:v]{pre}split=2[bg][fg];"
                 f"[bg]scale={bw}:{bh}:force_original_aspect_ratio=increase{rng},"
@@ -54,11 +64,13 @@ def build_vfilter(seg, ctx):
                 f"eq=brightness={b.get('brightness', -0.10)}:"
                 f"saturation={b.get('saturation', 0.85)},"
                 f"scale={W}:{H}:flags=bilinear[bgb];"
-                f"[fg]scale=-2:{H}:flags={flags}{rng}[fgs];"
-                f"[bgb][fgs]overlay=(W-w)/2:0:shortest=1,{tail}[v]")
+                f"[fg]scale={W}:{H}:force_original_aspect_ratio=decrease"
+                f":flags={flags}{rng}[fgs];"
+                f"[bgb][fgs]overlay=(W-w)/2:(H-h)/2:shortest=1,{tail}[v]")
         if mode == "pillarbox":
-            return (f"[0:v]{pre}scale=-2:{H}:flags={flags}{rng},"
-                    f"pad={W}:{H}:(ow-iw)/2:0:black,{tail}[v]")
+            return (f"[0:v]{pre}scale={W}:{H}:force_original_aspect_ratio=decrease"
+                    f":flags={flags}{rng},"
+                    f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:black,{tail}[v]")
         if mode == "crop":
             return (f"[0:v]{pre}scale={W}:{H}:force_original_aspect_ratio=increase"
                     f":flags={flags}{rng},crop={W}:{H},{tail}[v]")

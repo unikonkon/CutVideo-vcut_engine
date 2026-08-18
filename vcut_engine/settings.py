@@ -318,9 +318,9 @@ FIELDS = [
     F("order.reverse", "กลับลำดับ", "bool", "edl", "compose"),
 
     # ── ภาพ (แพง) ──
-    F("video.vertical_mode", "คลิปแนวตั้งทำยังไง", "select", "render", "render",
+    F("video.vertical_mode", "คลิปสัดส่วนไม่ตรงผืนทำยังไง", "select", "render", "render",
       options=["blur_pad", "pillarbox", "crop"],
-      labels={"blur_pad": "พื้นหลังเบลอ", "pillarbox": "แถบดำข้าง", "crop": "ครอปเต็มจอ"}),
+      labels={"blur_pad": "พื้นหลังเบลอ", "pillarbox": "แถบดำ", "crop": "ครอปเต็มจอ"}),
     F("video.width", "ความกว้าง", "int", "render", "render", min=640, max=3840, step=2),
     F("video.height", "ความสูง", "int", "render", "render", min=360, max=2160, step=2),
 

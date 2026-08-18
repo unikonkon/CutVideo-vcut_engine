@@ -39,3 +39,7 @@ gap_merge = 1.3
 
 [jumpcut]
 enabled = true
+
+[video]
+width = 3840
+height = 2160
