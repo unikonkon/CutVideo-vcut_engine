@@ -829,12 +829,15 @@ export default function Editor() {
       if (overlapCount(layers.music, tl, dur) >= MAX_AUDIO_STACK) {
         return flash(`ช่วงนี้มีเสียงซ้อนครบ ${MAX_AUDIO_STACK} ชั้นแล้ว`);
       }
+      let actual = file;
       try {
         if (!fxData.music.tracks.includes(file)) {
           const blob = await (await fetch(sfxUrl(file))).blob();
           const b64 = await fileToBase64(new File([blob], file));
           const r = await api2.saveAsset(file, b64, "audio");
           setFxData(r.fx);
+          // เอนจินอาจเปลี่ยนชื่อตอนชนไฟล์เดิม — แทร็กต้องชี้ชื่อจริง ไม่งั้นเงียบ
+          actual = r.file || file;
         }
       } catch (e) {
         return flash(e instanceof Error ? e.message : "เพิ่มไฟล์เสียงเข้าคลังไม่สำเร็จ");
@@ -844,7 +847,7 @@ export default function Editor() {
           ...fxDraft.music,
           {
             ...fxData.music.defaults,
-            file,
+            file: actual,
             at: Math.max(0, Math.round(tl * 100) / 100),
             dur,
             loop,

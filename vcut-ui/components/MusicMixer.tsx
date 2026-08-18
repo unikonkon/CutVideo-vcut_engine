@@ -35,29 +35,34 @@ export default function MusicMixer({
   const totalRef = useRef(total);
   totalRef.current = total;
 
+  // key ของตัวเล่น = ลำดับ|ชื่อไฟล์ — ห้ามใช้ t.id เพราะแทร็กที่เพิ่งเพิ่มจาก UI
+  // ยังเป็น id ว่าง (เอนจินแจก id ตอนบันทึก FX) เดี๋ยวโดนข้ามแล้วเงียบทั้งแทร็ก
+  const keyOf = (i: number, file: string) => `${i}|${file}`;
+
   // สร้าง/ทิ้ง <audio> ตามรายการแทร็ก (แก้ไฟล์/ลบแทร็กระหว่างเล่นก็ตามทัน)
   useEffect(() => {
     const map = els.current;
     const want = new Set<string>();
-    for (const t of tracks) {
-      if (!t.file || !t.id) continue;
-      want.add(t.id);
-      let a = map.get(t.id);
+    tracks.forEach((t, i) => {
+      if (!t.file) return;
+      const k = keyOf(i, t.file);
+      want.add(k);
+      let a = map.get(k);
       if (!a) {
         a = new Audio();
         a.preload = "auto";
-        map.set(t.id, a);
+        map.set(k, a);
       }
       const src = assetUrl(t.file);
       // a.src เป็น absolute URL — เทียบท้ายพอ
       if (!a.src.endsWith(src)) a.src = src;
       a.loop = !!t.loop;
-    }
-    for (const [id, a] of map) {
-      if (!want.has(id)) {
+    });
+    for (const [k, a] of map) {
+      if (!want.has(k)) {
         a.pause();
         a.removeAttribute("src");
-        map.delete(id);
+        map.delete(k);
       }
     }
   }, [tracks]);
@@ -74,13 +79,13 @@ export default function MusicMixer({
     let raf = 0;
     const tick = () => {
       const ph = phRef.current;
-      for (const t of tracksRef.current) {
-        const a = t.id ? map.get(t.id) : undefined;
-        if (!a) continue;
+      tracksRef.current.forEach((t, i) => {
+        const a = t.file ? map.get(keyOf(i, t.file)) : undefined;
+        if (!a) return;
         const end = t.dur > 0 ? t.at + t.dur : totalRef.current;
         if (ph < t.at || ph >= end) {
           if (!a.paused) a.pause();
-          continue;
+          return;
         }
         let off = ph - t.at;
         if (t.loop && isFinite(a.duration) && a.duration > 0)
@@ -94,7 +99,7 @@ export default function MusicMixer({
           vol *= Math.min(1, Math.max(0, (end - ph) / t.fade_out));
         a.volume = Math.max(0, Math.min(1, vol));
         if (a.paused) a.play().catch(() => {});
-      }
+      });
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
