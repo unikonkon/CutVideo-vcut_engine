@@ -12,6 +12,7 @@ import {
   Upload,
 } from "lucide-react";
 import { engine, type JobState } from "@/lib/api";
+import TabNav, { type Tab } from "@/components/TabNav";
 
 const EXPORTS = [
   {
@@ -33,6 +34,8 @@ const EXPORTS = [
 
 export default function TopBar({
   project,
+  tab,
+  onTab,
   dirty,
   needRender,
   saving,
@@ -49,6 +52,8 @@ export default function TopBar({
   outStale,
 }: {
   project: string;
+  tab: Tab;
+  onTab: (t: Tab) => void;
   dirty: boolean;
   needRender: number;
   saving: boolean;
@@ -79,12 +84,14 @@ export default function TopBar({
   const running = !!job?.running;
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-3 px-3">
-      <div className="flex items-center gap-2.5">
+    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line/60 px-3">
+      <div className="flex shrink-0 items-center gap-2.5">
         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white">
           <Clapperboard size={15} className="text-black" />
         </div>
-        <span className="text-[13px] font-medium text-ink">{project}</span>
+        <span className="hidden text-[13px] font-medium text-ink md:inline">
+          {project}
+        </span>
         {dirty && (
           <span className="rounded-full bg-warn/15 px-2 py-0.5 text-[11px] text-warn">
             ยังไม่บันทึก
@@ -92,14 +99,18 @@ export default function TopBar({
         )}
       </div>
 
-      <div className="flex-1" />
+      <div className="mx-1 h-5 w-px shrink-0 bg-line" />
+
+      <TabNav tab={tab} onTab={onTab} />
+
+      <div className="min-w-2 flex-1" />
 
       {dirty && (
         <>
           <button
             onClick={onRevert}
             title="ทิ้งการแก้ช็อตทั้งหมด กลับเป็นตาม edl.json บนดิสก์"
-            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] text-muted hover:bg-panel-2 hover:text-ink"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] text-muted hover:bg-panel-2 hover:text-ink"
           >
             <RotateCcw size={13} /> ย้อนกลับ
           </button>
@@ -107,7 +118,7 @@ export default function TopBar({
             onClick={onSave}
             disabled={saving}
             title="เขียนไทม์ไลน์ลง edl.json — สำรองของเดิมไว้ให้ (Cmd+S)"
-            className="flex items-center gap-1.5 rounded-lg bg-panel-3 px-3 py-1.5 text-[12px] font-medium text-ink hover:bg-line-2 disabled:opacity-50"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-panel-3 px-3 py-1.5 text-[12px] font-medium text-ink hover:bg-line-2 disabled:opacity-50"
           >
             {saving ? (
               <Loader2 size={13} className="animate-spin" />
@@ -126,7 +137,7 @@ export default function TopBar({
         <>
           <button
             onClick={onRevertFx}
-            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] text-muted hover:bg-panel-2 hover:text-ink"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] text-muted hover:bg-panel-2 hover:text-ink"
             title="ทิ้งที่แก้เลเยอร์/เอฟเฟกต์ทั้งหมด"
           >
             <RotateCcw size={13} /> ทิ้ง FX
@@ -134,7 +145,7 @@ export default function TopBar({
           <button
             onClick={onSaveFx}
             disabled={fxSaving}
-            className="flex items-center gap-1.5 rounded-lg border border-broll/50 bg-broll/20 px-3 py-1.5 text-[12px] font-medium text-ink hover:bg-broll/30 disabled:opacity-50"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-broll/50 bg-broll/20 px-3 py-1.5 text-[12px] font-medium text-ink hover:bg-broll/30 disabled:opacity-50"
             title="บันทึกเลเยอร์ (ข้อความ/สติกเกอร์/เพลง/แผนที่) ลง fx.json (Cmd+S)"
           >
             {fxSaving ? (
@@ -151,7 +162,7 @@ export default function TopBar({
         <a
           href={`${engine}/out`}
           target="_blank"
-          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] text-muted hover:bg-panel-2 hover:text-ink"
+          className="flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] text-muted hover:bg-panel-2 hover:text-ink"
           title={outStale ? "ไฟล์เก่ากว่าไทม์ไลน์ล่าสุด — สั่งสร้างใหม่" : "เปิดไฟล์ที่ต่อเสร็จแล้ว"}
         >
           {outStale ? (
@@ -166,14 +177,14 @@ export default function TopBar({
       {running ? (
         <button
           onClick={onStop}
-          className="flex items-center gap-2 rounded-lg bg-panel-3 px-3 py-1.5 text-[12px] font-medium text-ink hover:bg-line-2"
+          className="flex shrink-0 items-center gap-2 rounded-lg bg-panel-3 px-3 py-1.5 text-[12px] font-medium text-ink hover:bg-line-2"
         >
           <Loader2 size={13} className="animate-spin text-accent" />
           {job?.cmd_label || job?.step}…
           <Square size={11} className="fill-danger text-danger" />
         </button>
       ) : (
-        <div className="relative" ref={menuRef}>
+        <div className="relative shrink-0" ref={menuRef}>
           <button
             onClick={() => setOpen((v) => !v)}
             title="สร้างไฟล์วิดีโอจริงด้วยเอนจิน (render/assemble ขั้น 4-5)"

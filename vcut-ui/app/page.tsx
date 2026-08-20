@@ -42,7 +42,7 @@ import {
 } from "@/lib/layers";
 import { SFX_LIST, sfxUrl } from "@/lib/sfx";
 import TopBar from "@/components/TopBar";
-import IconRail, { type Tab } from "@/components/IconRail";
+import { type Tab } from "@/components/TabNav";
 import AssetsPanel from "@/components/AssetsPanel";
 import Preview from "@/components/Preview";
 import MusicMixer from "@/components/MusicMixer";
@@ -1087,6 +1087,8 @@ export default function Editor() {
     <div className="flex h-full flex-col">
       <TopBar
         project={proj?.project ?? "โปรเจกต์"}
+        tab={tab}
+        onTab={setTab}
         dirty={dirty}
         needRender={needRender}
         saving={saving}
@@ -1103,8 +1105,7 @@ export default function Editor() {
         outStale={!!proj?.out_stale}
       />
 
-      <div className="flex min-h-0 flex-1 gap-2 px-2">
-        <IconRail tab={tab} onTab={setTab} />
+      <div className="flex min-h-0 flex-1 gap-2 px-2 pt-2">
         {tab === "assets" && (
           <AssetsPanel
             clips={clips}
