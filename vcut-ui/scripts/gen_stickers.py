@@ -1,4 +1,4 @@
-"""วาดสติกเกอร์ตัวอย่าง 74 แบบลง public/stickers/ — รันซ้ำได้ ผลลัพธ์เหมือนเดิมทุกครั้ง
+"""วาดสติกเกอร์ตัวอย่าง 134 แบบลง public/stickers/ — รันซ้ำได้ ผลลัพธ์เหมือนเดิมทุกครั้ง
 
     python3 scripts/gen_stickers.py
 
@@ -116,6 +116,24 @@ class Art:
         for c, w in zip(s, widths):
             self.d.text((x, xy[1] * SS), c, font=f, fill=fill, anchor="lm")
             x += w + track * SS
+
+    def arc(self, box, a, b, fill, width):
+        self.d.arc(self._box(box), a, b, fill=fill, width=int(width * SS))
+
+    def drop(self, cx, cy, h, fill=WHITE):
+        """หยดน้ำ — หัวแหลมท้ายมน ใช้ทั้งน้ำตา เหงื่อ และเม็ดฝน"""
+        w = h * 0.66
+        left = bez((cx, cy - h / 2), (cx - w * 0.52, cy + h * 0.04),
+                   (cx - w * 0.56, cy + h * 0.5), (cx, cy + h / 2))
+        right = bez((cx, cy + h / 2), (cx + w * 0.56, cy + h * 0.5),
+                    (cx + w * 0.52, cy + h * 0.04), (cx, cy - h / 2))
+        self.poly(left + right, fill=fill)
+
+    def oval(self, cx, cy, rx, ry, deg=0, fill=None):
+        """วงรีที่เอียงได้ — Pillow วาดวงรีเอียงไม่ได้ ต้องปั้นเป็นรูปหลายเหลี่ยมเอง"""
+        pts = [(cx + rx * math.cos(2 * math.pi * i / 72),
+                cy + ry * math.sin(2 * math.pi * i / 72)) for i in range(72)]
+        self.poly(rot_pts(pts, cx, cy, deg), fill=fill)
 
     def dash(self, pts, fill, width, on=5, off=4):
         """เส้นประบนเส้นโค้ง — รับจุดที่สุ่มถี่ ๆ มาแล้ววาดเว้นเป็นช่วง ๆ"""
@@ -786,11 +804,664 @@ def st_sunset():
     return a.save("st-sunset.png")
 
 
+
+# ── เดินทาง (เพิ่มรอบสอง) ───────────────────────────────────────────────────
+def st_backpack():
+    a = Art(512, 576)
+    a.rrect((196, 78, 316, 186), 40, outline=WHITE, width=22)
+    a.rrect((56, 148, 456, 542), 62, fill=WHITE)
+    a.rrect((56, 148, 456, 316), 62, fill=RED)
+    a.rrect((146, 366, 366, 502), 32, fill=YEL)
+    return a.save("st-backpack.png")
+
+
+def st_map():
+    a = Art(640, 448)
+    a.poly([(28, 116), (220, 56), (420, 126), (612, 66), (612, 376),
+            (420, 436), (220, 366), (28, 426)], fill=WHITE)
+    a.line([(220, 56), (220, 366)], (196, 202, 214, 255), 6, cap=False)
+    a.line([(420, 126), (420, 436)], (196, 202, 214, 255), 6, cap=False)
+    a.dash(bez((110, 330), (240, 250), (380, 330), (500, 176)), RED, 12, on=6, off=5)
+    a.circle(500, 150, 34, fill=RED)
+    a.poly([(474, 176), (526, 176), (500, 226)], fill=RED)
+    a.circle(500, 148, 13, fill=WHITE)
+    return a.save("st-map.png")
+
+
+def st_binoculars():
+    a = Art(576, 512)
+    a.rrect((236, 176, 340, 250), 18, fill=WHITE)
+    a.rrect((88, 44, 212, 150), 26, fill=WHITE)
+    a.rrect((364, 44, 488, 150), 26, fill=WHITE)
+    a.rrect((56, 128, 244, 462), 52, fill=WHITE)
+    a.rrect((332, 128, 520, 462), 52, fill=WHITE)
+    a.circle(150, 372, 58, fill=RED)
+    a.circle(426, 372, 58, fill=RED)
+    a.circle(150, 372, 22, fill=WHITE)
+    a.circle(426, 372, 22, fill=WHITE)
+    return a.save("st-binoculars.png")
+
+
+def st_campfire():
+    a = Art(576, 448)
+    a.line([(96, 396), (480, 316)], WHITE, 34)
+    a.line([(96, 316), (480, 396)], WHITE, 34)
+    a.flame(288, 190, 300, fill=RED)
+    a.flame(288, 226, 176, fill=YEL)
+    return a.save("st-campfire.png")
+
+
+def st_wave():
+    a = Art(640, 384)
+    crest = (bez((40, 250), (140, 120), (300, 100), (392, 186))
+             + bez((392, 186), (330, 150), (240, 190), (214, 268))[1:])
+    a.poly(crest + [(40, 268)], fill=WHITE)
+    a.line(bez((60, 316), (200, 274), (330, 358), (470, 306)), WHITE, 20)
+    a.line(bez((180, 358), (320, 316), (450, 396), (590, 344)), YEL, 18)
+    return a.save("st-wave.png")
+
+
+def st_palm():
+    a = Art(512, 576)
+    a.line(bez((300, 544), (272, 412), (232, 320), (214, 226)), WHITE, 30)
+    # ทางมะพร้าว = ใบอวบ ๆ กางออกจากยอดแล้วสะบัดลง — วาดเป็นวงรีเอียงทีละใบ
+    for deg in (-168, -126, -84, -42, -8):
+        r = math.radians(deg)
+        a.oval(214 + 116 * math.cos(r), 214 + 96 * math.sin(r), 122, 40, deg, fill=WHITE)
+    for x, y in ((238, 236), (198, 258), (262, 262)):
+        a.circle(x, y, 21, fill=YEL)
+    return a.save("st-palm.png")
+
+
+def st_boat():
+    a = Art(640, 448)
+    a.line([(316, 76), (316, 306)], WHITE, 16)
+    a.poly([(336, 92), (486, 292), (336, 292)], fill=RED)
+    a.poly([(56, 300), (584, 300), (496, 404), (144, 404)], fill=WHITE)
+    a.line(bez((30, 424), (170, 396), (300, 448), (440, 420)), YEL, 14)
+    return a.save("st-boat.png")
+
+
+def st_train():
+    a = Art(704, 448)
+    a.rrect((72, 104, 606, 348), 46, fill=WHITE)
+    a.rrect((132, 156, 296, 262), 20, fill=(24, 28, 36, 255))
+    a.rrect((330, 156, 494, 262), 20, fill=(24, 28, 36, 255))
+    a.rrect((520, 104, 606, 348), 46, fill=RED)
+    a.rect((520, 104, 566, 348), fill=RED)
+    for x in (186, 340, 494):
+        a.circle(x, 372, 46, fill=(24, 28, 36, 255))
+        a.circle(x, 372, 18, fill=WHITE)
+    a.rrect((72, 372, 606, 404), 14, fill=YEL)
+    return a.save("st-train.png")
+
+
+def st_bicycle():
+    a = Art(704, 448)
+    a.circle(168, 296, 112, outline=WHITE, width=20)
+    a.circle(536, 296, 112, outline=WHITE, width=20)
+    a.line([(168, 296), (300, 174), (430, 296), (300, 296), (300, 174)], WHITE, 16)
+    a.line([(430, 296), (486, 160)], WHITE, 16)
+    a.line([(444, 152), (536, 152)], WHITE, 16)
+    a.rrect((256, 150, 348, 176), 12, fill=YEL)
+    a.circle(536, 296, 20, fill=WHITE)
+    return a.save("st-bicycle.png")
+
+
+def st_ticket():
+    a = Art(704, 320)
+    a.rrect((28, 36, 676, 284), 30, fill=WHITE)
+    a.circle(420, 36, 34, fill=CLEAR)        # รอยฉีกบน-ล่าง เจาะให้ทะลุจริง
+    a.circle(420, 284, 34, fill=CLEAR)
+    a.dash([(420, y) for y in range(84, 240, 4)], (150, 156, 168, 255), 6, on=5, off=5)
+    a.rrect((78, 96, 236, 124), 10, fill=RED)
+    a.rrect((78, 156, 342, 178), 9, fill=(190, 196, 208, 255))
+    a.rrect((78, 200, 268, 222), 9, fill=(190, 196, 208, 255))
+    a.circle(548, 160, 62, fill=YEL)
+    return a.save("st-ticket.png")
+
+
+def st_passport():
+    a = Art(448, 576)
+    a.rrect((36, 36, 412, 540), 30, fill=RED)
+    a.circle(224, 232, 84, outline=YEL, width=14)
+    a.star(224, 232, 46, fill=YEL)
+    a.rrect((116, 396, 332, 420), 10, fill=YEL)
+    a.rrect((156, 448, 292, 468), 9, fill=YEL)
+    return a.save("st-passport.png")
+
+
+def st_bed():
+    a = Art(704, 448)
+    a.rrect((48, 236, 656, 372), 26, fill=WHITE)
+    a.rrect((48, 128, 124, 372), 26, fill=WHITE)
+    a.rrect((146, 182, 316, 250), 26, fill=YEL)
+    a.rrect((330, 236, 656, 320), 20, fill=RED)
+    a.rrect((72, 372, 108, 424), 10, fill=WHITE)
+    a.rrect((596, 372, 632, 424), 10, fill=WHITE)
+    return a.save("st-bed.png")
+
+
+def st_signpost():
+    a = Art(640, 512)
+    a.rrect((294, 108, 346, 486), 16, fill=WHITE)
+    a.poly([(318, 142), (556, 142), (604, 190), (556, 238), (318, 238)], fill=YEL)
+    a.poly([(322, 286), (84, 286), (36, 334), (84, 382), (322, 382)], fill=WHITE)
+    return a.save("st-signpost.png")
+
+
+def st_footprints():
+    a = Art(448, 576)
+    for cx, cy, deg in ((150, 470, -14), (296, 372, -14), (150, 268, -14),
+                        (296, 168, -14)):
+        a.oval(cx, cy, 46, 74, deg, fill=WHITE)
+        a.oval(cx + 6, cy - 92, 30, 26, deg, fill=WHITE)
+    return a.save("st-footprints.png")
+
+
+def st_temple():
+    a = Art(640, 512)
+    a.rrect((84, 456, 556, 502), 14, fill=YEL)
+    a.rrect((120, 396, 520, 462), 12, fill=WHITE)
+    # เจดีย์ = ชั้นลดหลั่น ไม่ใช่สามเหลี่ยมเดียว (ไม่งั้นอ่านเป็นเต็นท์)
+    for y0, y1, half in ((300, 402, 176), (216, 306, 130), (140, 222, 88)):
+        a.poly([(320, y0 - 34), (320 + half, y1), (320 - half, y1)], fill=WHITE)
+    a.rrect((296, 84, 344, 152), 16, fill=YEL)
+    a.poly([(320, 16), (348, 96), (292, 96)], fill=YEL)
+    a.rrect((248, 402, 392, 462), 10, fill=YEL)
+    return a.save("st-temple.png")
+
+
+# ── อารมณ์ (หมวดใหม่) ───────────────────────────────────────────────────────
+def face(w=512, h=512, cx=256, cy=256, r=232):
+    a = Art(w, h)
+    a.circle(cx, cy, r, fill=YEL)
+    return a
+
+
+def eyes_dot(a, y=206, r=27, xs=(188, 324)):
+    for x in xs:
+        a.circle(x, y, r, fill=INK)
+
+
+def smile_arc(a, box=(150, 176, 362, 380), s=20, e=160, w=22):
+    a.arc(box, s, e, INK, w)
+
+
+def st_em_smile():
+    a = face()
+    eyes_dot(a)
+    smile_arc(a)
+    return a.save("st-em-smile.png")
+
+
+def st_em_joy():
+    a = face()
+    a.arc((148, 168, 244, 250), 200, 340, INK, 20)
+    a.arc((268, 168, 364, 250), 200, 340, INK, 20)
+    a.pie((146, 236, 366, 424), 15, 165, fill=INK)
+    a.pie((214, 330, 300, 400), 0, 180, fill=RED)
+    a.drop(112, 268, 78)
+    a.drop(400, 268, 78)
+    return a.save("st-em-joy.png")
+
+
+def st_em_love():
+    a = face()
+    a.heart(186, 206, 92)
+    a.heart(326, 206, 92)
+    smile_arc(a, (160, 200, 352, 388))
+    return a.save("st-em-love.png")
+
+
+def st_em_cool():
+    a = face()
+    a.rrect((132, 172, 246, 254), 18, fill=INK)
+    a.rrect((266, 172, 380, 254), 18, fill=INK)
+    a.rect((246, 196, 266, 214), fill=INK)
+    a.arc((176, 226, 356, 372), 25, 130, INK, 20)
+    return a.save("st-em-cool.png")
+
+
+def st_em_sad():
+    a = face()
+    eyes_dot(a, y=196)
+    a.arc((156, 288, 356, 448), 200, 340, INK, 22)
+    return a.save("st-em-sad.png")
+
+
+def st_em_cry():
+    a = face()
+    eyes_dot(a, y=196)
+    a.arc((156, 288, 356, 448), 200, 340, INK, 22)
+    a.drop(186, 300, 96)
+    a.drop(186, 380, 62)
+    return a.save("st-em-cry.png")
+
+
+def st_em_angry():
+    a = face()
+    a.line([(136, 150), (238, 196)], INK, 22)
+    a.line([(376, 150), (274, 196)], INK, 22)
+    eyes_dot(a, y=232, r=24)
+    a.arc((160, 300, 352, 444), 200, 340, INK, 22)
+    a.line([(374, 96), (420, 60)], RED, 14)
+    a.line([(410, 110), (452, 96)], RED, 14)
+    return a.save("st-em-angry.png")
+
+
+def st_em_sleep():
+    a = Art(576, 512)
+    a.circle(238, 268, 214, fill=YEL)
+    a.arc((136, 168, 232, 258), 20, 160, INK, 18)
+    a.arc((248, 168, 344, 258), 20, 160, INK, 18)
+    a.ellipse((206, 316, 274, 386), fill=INK)
+    a.text((452, 130), "Z", 96, INK)
+    a.text((522, 62), "Z", 62, INK)
+    return a.save("st-em-sleep.png")
+
+
+def st_em_think():
+    a = face()
+    a.line([(140, 168), (244, 186)], INK, 16)      # คิ้วซ้ายตก
+    a.line([(272, 158), (376, 132)], INK, 16)      # คิ้วขวายก
+    a.circle(190, 244, 26, fill=INK)
+    a.circle(322, 236, 26, fill=INK)
+    a.line([(196, 366), (322, 344)], INK, 20)      # ปากเฉียง
+    a.line([(340, 388), (376, 404)], INK, 14)
+    return a.save("st-em-think.png")
+
+
+def st_em_wink():
+    a = face()
+    a.circle(188, 206, 27, fill=INK)
+    a.arc((272, 168, 372, 254), 200, 340, INK, 20)
+    smile_arc(a)
+    return a.save("st-em-wink.png")
+
+
+def st_em_sweat():
+    a = face()
+    eyes_dot(a)
+    a.arc((176, 216, 356, 372), 25, 140, INK, 20)
+    a.drop(404, 132, 92)
+    return a.save("st-em-sweat.png")
+
+
+def st_em_hungry():
+    a = face()
+    eyes_dot(a, y=196)
+    a.pie((160, 236, 356, 412), 10, 170, fill=INK)
+    a.pie((206, 322, 310, 396), 0, 180, fill=RED)
+    a.drop(316, 400, 66)
+    return a.save("st-em-hungry.png")
+
+
+def st_em_sick():
+    a = face()
+    eyes_dot(a, y=182)
+    a.rrect((136, 252, 376, 412), 44, fill=WHITE)
+    a.line([(136, 274), (72, 240)], WHITE, 14)
+    a.line([(376, 274), (440, 240)], WHITE, 14)
+    a.line([(160, 322), (352, 322)], (198, 204, 216, 255), 8, cap=False)
+    return a.save("st-em-sick.png")
+
+
+def st_em_dizzy():
+    a = face()
+    for cx in (188, 324):
+        a.line([(cx - 30, 176), (cx + 30, 236)], INK, 18)
+        a.line([(cx + 30, 176), (cx - 30, 236)], INK, 18)
+    a.line(bez((156, 348), (216, 300), (296, 400), (356, 348)), INK, 18)
+    return a.save("st-em-dizzy.png")
+
+
+def st_em_party():
+    a = Art(576, 560)
+    a.circle(268, 312, 214, fill=YEL)
+    a.poly([(180, 128), (352, 128), (266, 6)], fill=RED)
+    a.rect((180, 112, 352, 140), fill=WHITE)
+    a.circle(266, 6, 22, fill=YEL)
+    a.arc((172, 244, 364, 424), 20, 160, INK, 20)
+    a.circle(206, 268, 25, fill=INK)
+    a.circle(330, 268, 25, fill=INK)
+    for x, y, c in ((498, 124, RED), (534, 236, YEL), (462, 344, WHITE),
+                    (68, 168, YEL), (44, 292, RED), (110, 60, WHITE)):
+        a.circle(x, y, 16, fill=c)
+    return a.save("st-em-party.png")
+
+
+
+# ── ลูกศร / ชี้จุด (เพิ่มรอบสาม) ────────────────────────────────────────────
+def st_arrow_thin():
+    a = Art(560, 256)
+    a.line([(44, 128), (452, 128)], WHITE, 18)
+    a.head([(400, 128), (462, 128)], 116, WHITE)
+    return a.save("st-arrow-thin.png")
+
+
+def st_chevrons():
+    a = Art(512, 256)
+    for i, x in enumerate((96, 216, 336)):
+        a.line([(x, 62), (x + 84, 128), (x, 194)], YEL if i == 2 else WHITE, 26)
+    return a.save("st-chevrons.png")
+
+
+def st_arrow_diag():
+    a = Art(512, 512)
+    base = [(60, 226), (300, 226), (300, 162), (470, 256), (300, 350),
+            (300, 286), (60, 286)]
+    a.poly(rot_pts(base, 256, 256, -45), fill=YEL)
+    return a.save("st-arrow-diag.png")
+
+
+def st_arrow_double():
+    a = Art(640, 256)
+    a.rrect((150, 102, 490, 154), 10, fill=WHITE)
+    a.poly([(24, 128), (170, 40), (170, 216)], fill=WHITE)
+    a.poly([(616, 128), (470, 40), (470, 216)], fill=WHITE)
+    return a.save("st-arrow-double.png")
+
+
+def st_arrow_loop():
+    a = Art(512, 512)
+    ring = ring_pts(256, 268, 176)[16:150]
+    a.line(ring, WHITE, 28)
+    a.head(ring, 118, WHITE)
+    return a.save("st-arrow-loop.png")
+
+
+def st_hand_point():
+    """นิ้วชี้ไปทางขวา — ชี้ข้าง ไม่ใช่ชี้ขึ้น ไม่งั้นทรงไปซ้ำกับ 'ยกนิ้วโป้ง'"""
+    a = Art(512, 448)
+    a.rrect((104, 122, 216, 232), 50, fill=WHITE)    # นิ้วโป้งพับอยู่ด้านบน
+    a.rrect((56, 158, 306, 412), 62, fill=WHITE)     # กำมือ
+    a.rrect((246, 186, 462, 272), 43, fill=WHITE)    # นิ้วชี้
+    for y in (296, 356):                              # ร่องนิ้วที่พับ
+        a.line([(120, y), (268, y)], CLEAR, 11, cap=False)
+    return a.save("st-hand-point.png")
+
+
+def st_arrow_scribble():
+    a = Art(640, 448)
+    stroke = bez((56, 116), (250, 60), (300, 300), (472, 300))
+    a.line(stroke, YEL, 24)
+    a.head(stroke, 116, YEL)
+    return a.save("st-arrow-scribble.png")
+
+
+def st_crosshair():
+    a = Art(512, 512)
+    a.circle(256, 256, 178, outline=WHITE, width=18)
+    for x0, y0, x1, y1 in ((256, 26, 256, 120), (256, 392, 256, 486),
+                           (26, 256, 120, 256), (392, 256, 486, 256)):
+        a.line([(x0, y0), (x1, y1)], WHITE, 18)
+    a.circle(256, 256, 34, fill=RED)
+    return a.save("st-crosshair.png")
+
+
+def st_scribble_circle():
+    a = Art(640, 512)
+    # วงกลมวนมือเขียน — รัศมีสั่นเล็กน้อยและวนสองรอบเหลื่อมกัน ให้ดูเหมือนวาดสด
+    for lap, (dx, dy) in enumerate(((0, 0), (10, -8))):
+        pts = []
+        for i in range(200):
+            t = 2 * math.pi * i / 180
+            rx = 268 + 12 * math.sin(t * 3 + lap)
+            ry = 196 + 10 * math.cos(t * 2 + lap)
+            pts.append((320 + dx + rx * math.cos(t), 250 + dy + ry * math.sin(t)))
+        a.line(pts, YEL, 18, cap=False)
+    a.line([(556, 342), (612, 424)], YEL, 18)
+    return a.save("st-scribble-circle.png")
+
+
+def st_arrow_bend():
+    a = Art(512, 448)
+    path = [(84, 396), (84, 168), (352, 168)]
+    a.line(path, WHITE, 30)
+    a.head(path, 126, WHITE)
+    return a.save("st-arrow-bend.png")
+
+
+# ── อากาศ / เวลา (เพิ่มรอบสาม) ─────────────────────────────────────────────
+def st_storm():
+    a = Art(576, 512)
+    a.cloud(288, 176, 460)
+    a.poly([(322, 268), (196, 448), (272, 448), (232, 500), (376, 328),
+            (296, 328), (348, 268)], fill=YEL)
+    return a.save("st-storm.png")
+
+
+def st_snow():
+    a = Art(512, 512)
+    for i in range(6):
+        ang = math.radians(i * 60)
+        c, s2 = math.cos(ang), math.sin(ang)
+        a.line([(256 - 210 * c, 256 - 210 * s2), (256 + 210 * c, 256 + 210 * s2)],
+               WHITE, 18)
+        for d in (108, 164):
+            bx, by = 256 + d * c, 256 + d * s2
+            for side in (-40, 40):
+                b = math.radians(i * 60 + side)
+                a.line([(bx, by), (bx + 56 * math.cos(b), by + 56 * math.sin(b))],
+                       WHITE, 14)
+    a.circle(256, 256, 26, fill=WHITE)
+    return a.save("st-snow.png")
+
+
+def st_wind():
+    a = Art(576, 384)
+    for y, w, col in ((110, 300, WHITE), (192, 380, WHITE), (274, 250, YEL)):
+        a.line(bez((60, y), (200, y - 34), (330, y + 34), (60 + w, y)), col, 18)
+        a.circle(60 + w + 6, y - 22, 26, outline=col, width=18)
+    return a.save("st-wind.png")
+
+
+def st_fog():
+    a = Art(576, 400)
+    a.cloud(288, 148, 440)
+    for i, (x0, x1) in enumerate(((84, 470), (130, 512), (64, 420))):
+        a.rrect((x0, 268 + i * 44, x1, 296 + i * 44), 14,
+                fill=WHITE if i % 2 == 0 else YEL)
+    return a.save("st-fog.png")
+
+
+def st_partly():
+    a = Art(576, 448)
+    a.circle(196, 158, 96, fill=YEL)
+    for i in range(8):
+        ang = math.radians(i * 45)
+        c, s2 = math.cos(ang), math.sin(ang)
+        a.line([(196 + 124 * c, 158 + 124 * s2), (196 + 178 * c, 158 + 178 * s2)],
+               YEL, 20)
+    a.cloud(322, 296, 420)
+    return a.save("st-partly.png")
+
+
+def st_rainbow():
+    a = Art(640, 384)
+    for i, col in enumerate((RED, YEL, WHITE)):
+        r = 246 - i * 54
+        a.arc((320 - r, 330 - r, 320 + r, 330 + r), 180, 360, col, 44)
+    a.cloud(112, 322, 220)
+    a.cloud(528, 322, 220)
+    return a.save("st-rainbow.png")
+
+
+def st_umbrella():
+    a = Art(512, 576)
+    a.line([(256, 246), (256, 470)], WHITE, 20)
+    a.arc((176, 400, 340, 530), 0, 180, WHITE, 20)
+    a.pie((44, 76, 468, 500), 180, 360, fill=RED)
+    for x0, x1 in ((124, 190), (256, 322), (388, 454)):
+        a.pie((44, 76, 468, 500), 180 + (x0 - 44) * 180 / 424,
+              180 + (x1 - 44) * 180 / 424, fill=WHITE)
+    a.rrect((44, 268, 468, 292), 12, fill=CLEAR)   # ตัดชายร่มให้เป็นเส้นตรงพอดี
+    return a.save("st-umbrella.png")
+
+
+def st_hourglass():
+    a = Art(448, 576)
+    a.rrect((56, 34, 392, 78), 18, fill=WHITE)
+    a.rrect((56, 498, 392, 542), 18, fill=WHITE)
+    a.poly([(96, 88), (352, 88), (224, 288)], fill=WHITE)
+    a.poly([(96, 488), (352, 488), (224, 288)], fill=WHITE)
+    a.poly([(140, 130), (308, 130), (224, 262)], fill=YEL)
+    a.poly([(150, 446), (298, 446), (224, 352)], fill=YEL)
+    a.line([(224, 268), (224, 356)], YEL, 12, cap=False)
+    return a.save("st-hourglass.png")
+
+
+def st_stopwatch():
+    a = Art(512, 576)
+    a.rrect((196, 24, 316, 84), 22, fill=WHITE)
+    a.rrect((398, 96, 462, 152), 18, fill=WHITE)
+    a.circle(256, 336, 210, fill=WHITE)
+    a.circle(256, 336, 210, outline=RED, width=22)
+    a.line([(256, 336), (256, 196)], INK, 22)
+    a.line([(256, 336), (352, 386)], INK, 22)
+    a.circle(256, 336, 20, fill=INK)
+    return a.save("st-stopwatch.png")
+
+
+def st_calendar():
+    a = Art(576, 512)
+    a.rrect((208, 24, 244, 118), 14, fill=WHITE)
+    a.rrect((332, 24, 368, 118), 14, fill=WHITE)
+    a.rrect((44, 68, 532, 482), 38, fill=WHITE)
+    a.rrect((44, 68, 532, 190), 38, fill=RED)
+    a.rect((44, 150, 532, 190), fill=RED)
+    for r in range(3):
+        for c in range(5):
+            col = YEL if (r, c) == (1, 2) else (198, 204, 216, 255)
+            a.circle(116 + c * 88, 250 + r * 82, 22, fill=col)
+    return a.save("st-calendar.png")
+
+
+# ── เดินทาง (เพิ่มรอบสาม) ───────────────────────────────────────────────────
+def st_motorbike():
+    a = Art(704, 448)
+    a.circle(152, 300, 92, outline=WHITE, width=32)
+    a.circle(552, 300, 92, outline=WHITE, width=32)
+    a.rrect((252, 236, 452, 330), 24, fill=WHITE)     # เครื่องยนต์
+    a.poly([(286, 176), (410, 176), (438, 236), (258, 236)], fill=WHITE)  # ถังน้ำมัน
+    a.rrect((396, 168, 528, 208), 18, fill=RED)       # เบาะ
+    a.line([(528, 196), (566, 262)], WHITE, 22)
+    a.line([(286, 186), (214, 108)], WHITE, 22)       # โช้กหน้า
+    a.line([(214, 122), (152, 268)], WHITE, 22)
+    a.line([(166, 96), (272, 96)], WHITE, 18)         # แฮนด์
+    a.circle(186, 150, 30, fill=YEL)                  # ไฟหน้า
+    a.rrect((436, 330, 560, 362), 16, fill=WHITE)     # ท่อไอเสีย
+    return a.save("st-motorbike.png")
+
+
+def st_boot():
+    a = Art(576, 448)
+    a.poly([(120, 60), (300, 60), (326, 250), (508, 300), (520, 366),
+            (120, 366)], fill=WHITE)
+    a.rrect((96, 350, 536, 412), 22, fill=RED)
+    for y in (120, 176, 232):
+        a.line([(150, y), (272, y - 18)], YEL, 12)
+    return a.save("st-boot.png")
+
+
+def st_bottle():
+    a = Art(384, 576)
+    a.rrect((146, 32, 238, 92), 14, fill=RED)
+    a.rrect((162, 84, 222, 160), 10, fill=WHITE)
+    a.rrect((104, 146, 280, 542), 46, fill=WHITE)
+    a.rect((104, 296, 280, 396), fill=YEL)
+    return a.save("st-bottle.png")
+
+
+def st_balloon():
+    a = Art(512, 576)
+    a.ellipse((76, 30, 436, 402), fill=WHITE)
+    a.poly([(196, 46), (256, 30), (256, 402), (216, 386)], fill=RED)
+    a.poly([(316, 46), (376, 92), (330, 366), (296, 392)], fill=YEL)
+    a.line([(180, 386), (206, 470)], WHITE, 12)
+    a.line([(332, 386), (306, 470)], WHITE, 12)
+    a.rrect((196, 458, 316, 546), 20, fill=YEL)
+    return a.save("st-balloon.png")
+
+
+def st_globe():
+    a = Art(512, 512)
+    a.circle(256, 256, 226, fill=WHITE)
+    a.ellipse((156, 30, 356, 482), outline=RED, width=16)
+    a.ellipse((36, 30, 476, 482), outline=RED, width=16)
+    a.line([(38, 256), (474, 256)], RED, 16, cap=False)
+    a.arc((36, 96, 476, 296), 0, 180, RED, 14)
+    return a.save("st-globe.png")
+
+
+def st_lighthouse():
+    a = Art(512, 576)
+    a.poly([(186, 168), (326, 168), (368, 470), (144, 470)], fill=WHITE)
+    a.poly([(196, 232), (316, 232), (326, 300), (186, 300)], fill=RED)
+    a.poly([(210, 366), (302, 366), (314, 434), (198, 434)], fill=RED)
+    a.rrect((166, 128, 346, 176), 16, fill=WHITE)
+    a.rrect((206, 56, 306, 136), 18, fill=YEL)
+    a.rrect((120, 462, 392, 520), 20, fill=WHITE)
+    for y0, y1 in ((44, 78), (110, 144)):
+        a.line([(40, y0), (150, y0 + 18)], YEL, 12)
+        a.line([(472, y1 - 66), (362, y1 - 48)], YEL, 12)
+    return a.save("st-lighthouse.png")
+
+
+def st_beach_umbrella():
+    a = Art(576, 512)
+    a.line([(300, 150), (330, 470)], WHITE, 18)
+    a.pie((56, 44, 544, 400), 180, 360, fill=RED)
+    for k in range(3):
+        a.pie((56, 44, 544, 400), 195 + k * 60, 225 + k * 60, fill=WHITE)
+    a.rrect((56, 206, 544, 230), 12, fill=CLEAR)
+    a.rrect((176, 452, 486, 486), 16, fill=YEL)
+    return a.save("st-beach-umbrella.png")
+
+
+def st_noodle():
+    a = Art(576, 448)
+    a.line([(330, 92), (500, 46)], WHITE, 16)
+    a.line([(346, 128), (516, 82)], WHITE, 16)
+    a.pie((64, 108, 512, 428), 0, 180, fill=WHITE)
+    a.rrect((44, 96, 532, 140), 20, fill=WHITE)
+    a.rrect((186, 300, 390, 330), 14, fill=YEL)
+    for x in (206, 288, 370):
+        a.line(bez((x, 76), (x - 30, 44), (x + 30, 16), (x, -14)), YEL, 12)
+    return a.save("st-noodle.png")
+
+
+def st_drink():
+    a = Art(448, 576)
+    a.poly([(56, 96), (392, 96), (224, 340)], fill=WHITE)
+    a.poly([(104, 150), (344, 150), (224, 322)], fill=RED)
+    a.rrect((206, 320, 242, 490), 12, fill=WHITE)
+    a.rrect((110, 486, 338, 526), 16, fill=WHITE)
+    a.line([(286, 40), (222, 200)], YEL, 16)
+    a.circle(324, 84, 46, fill=YEL)
+    return a.save("st-drink.png")
+
+
+def st_snorkel():
+    a = Art(576, 448)
+    a.rrect((72, 130, 424, 330), 62, fill=WHITE)
+    a.rrect((110, 168, 386, 274), 40, fill=(24, 28, 36, 255))
+    a.rrect((36, 178, 84, 226), 14, fill=WHITE)
+    a.line([(424, 190), (492, 190)], WHITE, 20)
+    a.rrect((470, 60, 522, 330), 24, fill=RED)
+    a.arc((404, 268, 522, 386), 0, 90, RED, 24)
+    return a.save("st-snorkel.png")
+
+
 ALL = [
     st_new, st_live, st_4k, st_hot, st_ep,
     st_arrow_r, st_arrow_curve, st_pointer, st_ring, st_zigzag,
     st_arrow_l, st_arrow_up, st_arrow_down, st_cursor, st_arrow_dashed,
     st_arrow_u, st_ring_dash, st_underline,
+    st_arrow_thin, st_chevrons, st_arrow_diag, st_arrow_double, st_arrow_loop,
+    st_hand_point, st_arrow_scribble, st_crosshair, st_scribble_circle,
+    st_arrow_bend,
     st_lower3, st_strip, st_corner, st_film, st_banner,
     st_lower3_dark, st_tag, st_frame_round, st_frame_dash, st_scrim,
     st_polaroid, st_title_plate,
@@ -800,8 +1471,18 @@ ALL = [
     st_subscribe, st_like, st_comment, st_share, st_bell, st_hashtag,
     st_pin, st_compass, st_mountain, st_route, st_plane, st_camera,
     st_suitcase, st_tent, st_coffee, st_food, st_car, st_flag, st_sunset,
+    st_backpack, st_map, st_binoculars, st_campfire, st_wave, st_palm, st_boat,
+    st_train, st_bicycle, st_ticket, st_passport, st_bed, st_signpost,
+    st_footprints, st_temple,
+    st_motorbike, st_boot, st_bottle, st_balloon, st_globe, st_lighthouse,
+    st_beach_umbrella, st_noodle, st_drink, st_snorkel,
+    st_em_smile, st_em_joy, st_em_love, st_em_cool, st_em_sad, st_em_cry,
+    st_em_angry, st_em_sleep, st_em_think, st_em_wink, st_em_sweat,
+    st_em_hungry, st_em_sick, st_em_dizzy, st_em_party,
     *[(lambda n: lambda: st_num(n))(i) for i in range(1, 6)],
     st_sun, st_cloud, st_rain, st_thermo, st_moon, st_clock,
+    st_storm, st_snow, st_wind, st_fog, st_partly, st_rainbow, st_umbrella,
+    st_hourglass, st_stopwatch, st_calendar,
 ]
 
 if __name__ == "__main__":

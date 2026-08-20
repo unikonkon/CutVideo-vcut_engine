@@ -2,8 +2,11 @@
 
 import {
   type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
   type RefObject,
+  useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import {
@@ -11,9 +14,11 @@ import {
   Eye,
   EyeOff,
   Maximize,
+  Move,
   Pause,
   Play,
   Proportions,
+  RotateCw,
 } from "lucide-react";
 import { LAYOUT_GROUPS, ratioLabel } from "@/lib/layouts";
 import {
@@ -35,10 +40,42 @@ const FITS = [
 const REF_H = 1080;
 
 export interface OverlayData {
-  texts: { item: FxTextItem; tl: number }[];
-  stickers: { item: FxOverlay; tl: number; kind: string }[];
+  texts: { item: FxTextItem; tl: number; idx: number }[];
+  stickers: { item: FxOverlay; tl: number; kind: string; idx: number }[];
   cues: CaptionCue[];
 }
+
+export type StageKind = "text" | "sticker";
+type DragMode = "move" | "resize" | "rotate";
+
+/** สิ่งที่จำไว้ตอนเริ่มลาก — ทุกก้าวคิดจากค่าตั้งต้นนี้ ไม่ใช่สะสมทีละ delta
+ *  (สะสมแล้วค่าจะเพี้ยนสะสมตามไปด้วยเมื่อโดนหนีบขอบหรือสแนป) */
+interface Drag {
+  mode: DragMode;
+  kind: StageKind;
+  idx: number;
+  px: number;
+  py: number;
+  x0: number;
+  y0: number;
+  w0: number;
+  a0: number;
+  ew: number;
+  eh: number;
+}
+
+const SNAP_PX = 7;        // ระยะที่ถือว่า "ชิด" แล้วดูดเข้าหาแนว
+const SAFE = 0.05;        // ขอบปลอดภัยชั้นนอก (title-safe 90%)
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+const r3 = (v: number) => Math.round(v * 1000) / 1000;
+
+/** จุดจับ 4 มุม — อยู่ในกล่องที่หมุนแล้ว จึงหมุนตามชิ้นงานไปเอง */
+const CORNERS = [
+  { k: "nw", x: 0, y: 0, cur: "nwse-resize" },
+  { k: "ne", x: 1, y: 0, cur: "nesw-resize" },
+  { k: "se", x: 1, y: 1, cur: "nwse-resize" },
+  { k: "sw", x: 0, y: 1, cur: "nesw-resize" },
+] as const;
 
 /** ตำแหน่ง anchor ตามเลข align แบบ ass (numpad: 1=ล่างซ้าย … 9=บนขวา) */
 function anchor(align: number): { tx: string; ty: string } {
@@ -72,6 +109,9 @@ function TextOv({
   W,
   H,
   refH,
+  edit,
+  sel,
+  onDown,
 }: {
   t: FxTextItem;
   ph: number;
@@ -79,6 +119,9 @@ function TextOv({
   W: number;
   H: number;
   refH: number;
+  edit: boolean;
+  sel: boolean;
+  onDown: (mode: DragMode, e: ReactPointerEvent<HTMLElement>) => void;
 }) {
   const s = H / refH;
   const p = ph - tl;
@@ -98,7 +141,9 @@ function TextOv({
     fontStyle: t.italic ? "italic" : "normal",
     letterSpacing: (t.spacing || 0) * s,
     textShadow: outlineShadow((t.border || 0) * s, t.outline),
-    opacity: fadeOpacity(p, q, t.in, t.out),
+    opacity: edit
+      ? Math.max(fadeOpacity(p, q, t.in, t.out), 0.35)
+      : fadeOpacity(p, q, t.in, t.out),
     whiteSpace: "pre",
     textAlign: "center",
     lineHeight: 1.25,
@@ -109,10 +154,25 @@ function TextOv({
           borderRadius: 8 * s,
         }
       : {}),
+    pointerEvents: edit ? "auto" : "none",
+    cursor: edit ? "move" : "default",
+    outline: sel
+      ? "1.5px solid var(--accent)"
+      : edit
+        ? "1px dashed rgba(255,255,255,0.35)"
+        : undefined,
+    outlineOffset: 2,
   };
   const lines = (t.lines as Partial<FxTextItem>[] | undefined) ?? [];
   return (
-    <div style={style}>
+    <div
+      data-ov="text"
+      style={style}
+      onPointerDown={(e) => {
+        if (!edit) return;
+        onDown("move", e);
+      }}
+    >
       <div>{t.text}</div>
       {lines.map((ln, i) => (
         <div
@@ -138,6 +198,9 @@ function StickerOv({
   tl,
   W,
   H,
+  edit,
+  sel,
+  onDown,
 }: {
   o: FxOverlay;
   kind: string;
@@ -145,26 +208,113 @@ function StickerOv({
   tl: number;
   W: number;
   H: number;
+  edit: boolean;
+  sel: boolean;
+  onDown: (mode: DragMode, e: ReactPointerEvent<HTMLElement>) => void;
 }) {
   const p = ph - tl;
   const q = tl + o.dur - ph;
-  const style: CSSProperties = {
-    position: "absolute",
-    left: o.x * W,
-    top: o.y * H,
-    width: o.width * W,
-    transform: `translate(-50%, -50%) rotate(${o.angle || 0}deg)`,
-    opacity:
-      (o.opacity ?? 1) *
-      (o.anim === "none" ? 1 : fadeOpacity(p, q, o.in, o.out)),
+  // ความจางอยู่ที่ตัวรูป ไม่ใช่ที่กล่อง — ไม่งั้นกรอบเลือกกับจุดจับจางตามไปด้วย
+  // จนจับไม่ถูกในจังหวะที่ภาพกำลังเฟดเข้า
+  const op =
+    (o.opacity ?? 1) * (o.anim === "none" ? 1 : fadeOpacity(p, q, o.in, o.out));
+  const media: CSSProperties = {
+    display: "block",
+    width: "100%",
+    opacity: edit ? Math.max(op, 0.35) : op,
   };
-  if (kind === "video") {
-    return (
-      <video src={assetUrl(o.file)} muted playsInline preload="metadata" style={style} />
-    );
-  }
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={assetUrl(o.file)} alt={o.file} style={style} />;
+  return (
+    <div
+      data-ov="sticker"
+      onPointerDown={(e) => {
+        if (!edit) return;
+        onDown("move", e);
+      }}
+      style={{
+        position: "absolute",
+        left: o.x * W,
+        top: o.y * H,
+        width: o.width * W,
+        transform: `translate(-50%, -50%) rotate(${o.angle || 0}deg)`,
+        pointerEvents: edit ? "auto" : "none",
+        cursor: edit ? "move" : "default",
+        outline: sel
+          ? "1.5px solid var(--accent)"
+          : edit
+            ? "1px dashed rgba(255,255,255,0.35)"
+            : undefined,
+      }}
+    >
+      {kind === "video" ? (
+        <video src={assetUrl(o.file)} muted playsInline preload="metadata" style={media} />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={assetUrl(o.file)} alt={o.file} draggable={false} style={media} />
+      )}
+      {edit && sel && (
+        <>
+          {CORNERS.map((c) => (
+            <div
+              key={c.k}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                onDown("resize", e);
+              }}
+              style={{
+                position: "absolute",
+                left: `${c.x * 100}%`,
+                top: `${c.y * 100}%`,
+                width: 11,
+                height: 11,
+                marginLeft: -6,
+                marginTop: -6,
+                borderRadius: 3,
+                background: "var(--accent)",
+                border: "1.5px solid #fff",
+                cursor: c.cur,
+              }}
+            />
+          ))}
+          <div
+            style={{
+              position: "absolute",
+              left: "50%",
+              top: -26,
+              width: 1.5,
+              height: 20,
+              marginLeft: -0.75,
+              background: "var(--accent)",
+            }}
+          />
+          <div
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onDown("rotate", e);
+            }}
+            title="ลากเพื่อหมุน (กด Shift = ทีละ 15°)"
+            style={{
+              position: "absolute",
+              left: "50%",
+              top: -44,
+              width: 20,
+              height: 20,
+              marginLeft: -10,
+              borderRadius: "50%",
+              background: "var(--accent)",
+              border: "1.5px solid #fff",
+              color: "#fff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "grab",
+            }}
+          >
+            <RotateCw size={11} />
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 function CueOv({ c, W, H, refH }: { c: CaptionCue; W: number; H: number; refH: number }) {
@@ -204,6 +354,13 @@ export default function Preview({
   overlay,
   frame,
   onLayout,
+  edit,
+  onEdit,
+  focus,
+  onSelect,
+  onClearSel,
+  onPatchSticker,
+  onPatchText,
 }: {
   videoRef: RefObject<HTMLVideoElement | null>;
   stageRef: RefObject<HTMLDivElement | null>;
@@ -215,7 +372,20 @@ export default function Preview({
   overlay: OverlayData;
   frame: { w: number; h: number } | null;
   onLayout: (w: number, h: number) => void;
+  edit: boolean;
+  onEdit: (v: boolean) => void;
+  focus: { kind: string; idx: number } | null;
+  onSelect: (kind: StageKind, idx: number) => void;
+  onClearSel: () => void;
+  onPatchSticker: (idx: number, p: Partial<FxOverlay>) => void;
+  onPatchText: (idx: number, p: Partial<FxTextItem>) => void;
 }) {
+  const frameRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<Drag | null>(null);
+  // เส้นนำที่กำลังโชว์ (พิกัดบนกรอบหนัง) + ตัวเลขที่อ่านสดตอนลาก
+  const [guide, setGuide] = useState<{ vx?: number; hy?: number }>({});
+  const [readout, setReadout] = useState("");
+
   const [fit, setFit] = useState<(typeof FITS)[number]>(FITS[0]);
   const [fitOpen, setFitOpen] = useState(false);
   const [layoutOpen, setLayoutOpen] = useState(false);
@@ -257,6 +427,141 @@ export default function Preview({
   );
   const activeCue = overlay.cues.find((c) => ph >= c.a && ph < c.b) ?? null;
 
+  // ── ลาก/ย่อขยาย/หมุน บนจอตัวอย่าง ──
+  // ทุกอย่างคิดเป็น "สัดส่วนของเฟรม" ตั้งแต่ต้น ค่าที่ได้จึงเป็นตัวเลขชุดเดียว
+  // กับที่ ffmpeg เอาไปใช้ตอน render — ย้ายบนจอเล็กแล้วออกมาตรงกันที่ 4K
+  const startDrag = useCallback(
+    (kind: StageKind, idx: number, mode: DragMode, e: ReactPointerEvent<HTMLElement>) => {
+      const box = e.currentTarget.closest("[data-ov]") as HTMLElement | null;
+      const el = box ?? e.currentTarget;
+      const item =
+        kind === "sticker"
+          ? overlay.stickers.find((x) => x.idx === idx)?.item
+          : overlay.texts.find((x) => x.idx === idx)?.item;
+      if (!item) return;
+      e.preventDefault();
+      e.stopPropagation();
+      // จับ pointer ไว้กับชิ้นที่กด — ลากเลยขอบจอแล้วยังตามต่อ ไม่หลุดกลางคัน
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        /* บางเบราว์เซอร์/เหตุการณ์สังเคราะห์จับไม่ได้ — ลากในกรอบยังทำงานปกติ */
+      }
+      onSelect(kind, idx);
+      drag.current = {
+        mode,
+        kind,
+        idx,
+        px: e.clientX,
+        py: e.clientY,
+        x0: item.x,
+        y0: item.y,
+        w0: kind === "sticker" ? (item as FxOverlay).width : 0,
+        a0: item.angle || 0,
+        ew: el.offsetWidth,
+        eh: el.offsetHeight,
+      };
+    },
+    [overlay, onSelect],
+  );
+
+  const onStageMove = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      const d = drag.current;
+      const r = frameRef.current?.getBoundingClientRect();
+      if (!d || !r || W <= 0) return;
+      const patch = d.kind === "sticker" ? onPatchSticker : onPatchText;
+
+      if (d.mode === "move") {
+        let nx = d.x0 + (e.clientX - d.px) / W;
+        let ny = d.y0 + (e.clientY - d.py) / H;
+        const g: { vx?: number; hy?: number } = {};
+        if (!e.altKey) {
+          // ดูดเข้าหากึ่งกลาง + ขอบจอ + เส้นปลอดภัย — เทียบที่ "ขอบชิ้นงาน"
+          // สำหรับสติกเกอร์ (รู้ขนาดจริง) ส่วนข้อความเทียบที่จุดยึดของมันเอง
+          const hw = d.kind === "sticker" ? d.ew / 2 / W : 0;
+          const hh = d.kind === "sticker" ? d.eh / 2 / H : 0;
+          const xs: [number, number][] = [
+            [0.5, 0.5],
+            [hw, 0],
+            [1 - hw, 1],
+            [SAFE + hw, SAFE],
+            [1 - SAFE - hw, 1 - SAFE],
+          ];
+          const ys: [number, number][] = [
+            [0.5, 0.5],
+            [hh, 0],
+            [1 - hh, 1],
+            [SAFE + hh, SAFE],
+            [1 - SAFE - hh, 1 - SAFE],
+          ];
+          for (const [target, line] of xs) {
+            if (Math.abs(nx - target) * W < SNAP_PX) {
+              nx = target;
+              g.vx = line * W;
+              break;
+            }
+          }
+          for (const [target, line] of ys) {
+            if (Math.abs(ny - target) * H < SNAP_PX) {
+              ny = target;
+              g.hy = line * H;
+              break;
+            }
+          }
+        }
+        setGuide(g);
+        patch(d.idx, { x: r3(clamp01(nx)), y: r3(clamp01(ny)) });
+        setReadout(`x ${r3(clamp01(nx)).toFixed(3)} · y ${r3(clamp01(ny)).toFixed(3)}`);
+        return;
+      }
+
+      const cx = r.left + d.x0 * W;
+      const cy = r.top + d.y0 * H;
+
+      if (d.mode === "resize" && d.kind === "sticker") {
+        // ย่อขยายจากจุดกึ่งกลาง (จุดยึดเดียวกับที่เอนจินใช้) — หมุนพิกัดเมาส์
+        // กลับตามมุมของชิ้นก่อน ระยะที่วัดได้จึงเป็นระยะบนแกนของตัวมันเอง
+        const a = (-d.a0 * Math.PI) / 180;
+        const dx = e.clientX - cx;
+        const dy = e.clientY - cy;
+        const lx = dx * Math.cos(a) - dy * Math.sin(a);
+        const ly = dx * Math.sin(a) + dy * Math.cos(a);
+        const k = Math.max(
+          Math.abs(lx) / Math.max(d.ew / 2, 1),
+          Math.abs(ly) / Math.max(d.eh / 2, 1),
+        );
+        const nw = Math.min(2, Math.max(0.02, d.w0 * k));
+        setGuide({});
+        onPatchSticker(d.idx, { width: r3(nw) });
+        setReadout(`กว้าง ${(nw * 100).toFixed(1)}% ของจอ`);
+        return;
+      }
+
+      if (d.mode === "rotate") {
+        let ang =
+          (Math.atan2(e.clientY - cy, e.clientX - cx) * 180) / Math.PI + 90;
+        ang = ((ang + 180) % 360) - 180;
+        if (e.shiftKey) ang = Math.round(ang / 15) * 15;
+        else if (Math.abs(ang) < 3) ang = 0;
+        setGuide({});
+        patch(d.idx, { angle: Math.round(ang * 10) / 10 });
+        setReadout(`หมุน ${(Math.round(ang * 10) / 10).toFixed(1)}°`);
+      }
+    },
+    [W, H, onPatchSticker, onPatchText],
+  );
+
+  const endDrag = useCallback(() => {
+    drag.current = null;
+    setGuide({});
+    setReadout("");
+  }, []);
+
+  useEffect(() => {
+    if (!edit) endDrag();
+  }, [edit, endDrag]);
+
   return (
     <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-line bg-panel">
       <div
@@ -265,26 +570,74 @@ export default function Preview({
       >
         {/* กรอบผืนหนัง — สัดส่วนตาม layout ที่เลือก ไม่ใช่ตามสตรีม */}
         <div
+          ref={frameRef}
           className="relative overflow-hidden bg-black"
           style={{ width: W || "100%", height: H || "100%" }}
+          onPointerMove={onStageMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
         >
           <video
             ref={videoRef}
             playsInline
             className="h-full w-full"
             style={{ objectFit: fit.v }}
-            onClick={onToggle}
+            onClick={() => (edit ? onClearSel() : onToggle())}
           />
           {/* ชั้นซ้อนสด — ตัวเลขชุดเดียวกับที่ ffmpeg จะเผาใน render ขั้น 5 */}
           {showOv && W > 0 && (
             <div className="pointer-events-none absolute inset-0 overflow-hidden">
-              {activeTexts.map(({ item, tl }, i) => (
-                <TextOv key={`t${i}`} t={item} ph={ph} tl={tl} W={W} H={H} refH={refH} />
+              {activeTexts.map(({ item, tl, idx }) => (
+                <TextOv
+                  key={`t${idx}`}
+                  t={item}
+                  ph={ph}
+                  tl={tl}
+                  W={W}
+                  H={H}
+                  refH={refH}
+                  edit={edit}
+                  sel={focus?.kind === "text" && focus.idx === idx}
+                  onDown={(m, e) => startDrag("text", idx, m, e)}
+                />
               ))}
-              {activeStickers.map(({ item, tl, kind }, i) => (
-                <StickerOv key={`s${i}`} o={item} kind={kind} ph={ph} tl={tl} W={W} H={H} />
+              {activeStickers.map(({ item, tl, kind, idx }) => (
+                <StickerOv
+                  key={`s${idx}`}
+                  o={item}
+                  kind={kind}
+                  ph={ph}
+                  tl={tl}
+                  W={W}
+                  H={H}
+                  edit={edit}
+                  sel={focus?.kind === "sticker" && focus.idx === idx}
+                  onDown={(m, e) => startDrag("sticker", idx, m, e)}
+                />
               ))}
               {activeCue && <CueOv c={activeCue} W={W} H={H} refH={refH} />}
+            </div>
+          )}
+          {/* เส้นขอบปลอดภัย + เส้นนำตอนลาก — โชว์เฉพาะตอนแก้ตำแหน่ง */}
+          {edit && W > 0 && (
+            <div className="pointer-events-none absolute inset-0 overflow-hidden">
+              <div className="absolute border border-dashed border-white/20"
+                   style={{ left: "5%", top: "5%", right: "5%", bottom: "5%" }} />
+              <div className="absolute border border-dashed border-white/12"
+                   style={{ left: "10%", top: "10%", right: "10%", bottom: "10%" }} />
+              {guide.vx !== undefined && (
+                <div className="absolute top-0 bottom-0 w-px bg-accent"
+                     style={{ left: guide.vx }} />
+              )}
+              {guide.hy !== undefined && (
+                <div className="absolute left-0 right-0 h-px bg-accent"
+                     style={{ top: guide.hy }} />
+              )}
+              {readout && (
+                <div className="absolute left-2 top-2 rounded bg-black/75 px-2 py-1 font-mono text-[10.5px] text-white">
+                  {readout}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -371,6 +724,19 @@ export default function Preview({
             )}
           </div>
         )}
+
+        <button
+          onClick={() => {
+            onEdit(!edit);
+            if (!edit) setShowOv(true);   // เปิดโหมดแก้แต่ชั้นซ้อนปิดอยู่ = จอว่าง ไม่มีอะไรให้ลาก
+          }}
+          className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11.5px] ${
+            edit ? "bg-accent/20 text-accent" : "text-muted hover:text-ink"
+          }`}
+          title="แก้ตำแหน่งบนจอ — ลากย้าย · จุดมุม=ย่อขยาย · ก้านบน=หมุน · ลูกศร=ขยับทีละนิด (Alt=ไม่สแนป)"
+        >
+          <Move size={13} /> แก้ตำแหน่ง
+        </button>
 
         <button
           onClick={() => setShowOv((v) => !v)}

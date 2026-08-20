@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { Check, Film, ImagePlus, Smile, Trash2 } from "lucide-react";
+import { Check, Film, ImagePlus, Move, Smile, Trash2 } from "lucide-react";
 import { api2, assetUrl, fileToBase64, type FxOverlay } from "@/lib/api";
 import { DND_MIME } from "@/lib/layers";
 import { STICKER_CATS, STICKER_LIST, stickerUrl } from "@/lib/stickers";
@@ -30,17 +30,37 @@ const CHECKER = {
   backgroundPosition: "0 0,0 5px,5px -5px,-5px 0",
 };
 
+// จุดจัดตำแหน่ง 3×3 — ค่าที่ได้คือ "จุดกึ่งกลางของชิ้น" ที่ทำให้ขอบของมันไปพอดี
+// เส้นปลอดภัย ไม่ใช่พิกัดตายตัว ป้ายกว้าง ๆ กับไอคอนเล็ก ๆ จึงชิดมุมได้เท่ากัน
+const SAFE = 0.05;
+const ALIGN_ROWS = [
+  { y: "top", label: "บน" },
+  { y: "mid", label: "กลาง" },
+  { y: "bot", label: "ล่าง" },
+] as const;
+const ALIGN_COLS = [
+  { x: "left", label: "ซ้าย" },
+  { x: "mid", label: "กลาง" },
+  { x: "right", label: "ขวา" },
+] as const;
+
 export default function StickerPanel({
   fxs,
   onPlaceAtPlayhead,
   onPlaceSampleAtPlayhead,
   focusIdx,
+  frame,
+  stageEdit,
+  onStageEdit,
   flash,
 }: {
   fxs: FxStore;
   onPlaceAtPlayhead: (file: string) => void;
   onPlaceSampleAtPlayhead: (file: string) => void;
   focusIdx: number | null;
+  frame: { w: number; h: number } | null;
+  stageEdit: boolean;
+  onStageEdit: (idx: number) => void;
   flash: (m: string) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -62,6 +82,24 @@ export default function StickerPanel({
 
   const patch = (i: number, p: Partial<FxOverlay>) =>
     fxs.patch({ overlays: overlays.map((o, k) => (k === i ? { ...o, ...p } : o)) });
+
+  // ความสูงของชิ้น คิดเป็นสัดส่วนของความสูงเฟรม (รู้จากสัดส่วนไฟล์จริงในคลัง)
+  const frameAR = (frame?.w || 1920) / (frame?.h || 1080);
+  const heightOf = (o: FxOverlay) => {
+    const a = data.overlay.assets.find((x) => x.file === o.file);
+    const ar = a && a.w && a.h ? a.h / a.w : 1;
+    return o.width * frameAR * ar;
+  };
+  const alignTo = (i: number, col: string, row: string) => {
+    const o = overlays[i];
+    const hw = o.width / 2;
+    const hh = heightOf(o) / 2;
+    const fix = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 1000) / 1000;
+    patch(i, {
+      x: fix(col === "left" ? SAFE + hw : col === "right" ? 1 - SAFE - hw : 0.5),
+      y: fix(row === "top" ? SAFE + hh : row === "bot" ? 1 - SAFE - hh : 0.5),
+    });
+  };
 
   const upload = async (f: File) => {
     if (f.size > 40 * 1024 * 1024) {
@@ -244,6 +282,17 @@ export default function StickerPanel({
                   @{o.name || "?"}
                 </span>
                 <button
+                  onClick={() => onStageEdit(i)}
+                  title="เลือกชิ้นนี้แล้วเปิดโหมดแก้ตำแหน่งบนจอตัวอย่าง"
+                  className={`shrink-0 rounded-md p-1 ${
+                    stageEdit && focusIdx === i
+                      ? "text-accent"
+                      : "text-muted hover:text-ink"
+                  }`}
+                >
+                  <Move size={13} />
+                </button>
+                <button
                   onClick={() =>
                     fxs.patch({ overlays: overlays.filter((_, k) => k !== i) })
                   }
@@ -277,6 +326,28 @@ export default function StickerPanel({
                 <Field label="หมุน (องศา)">
                   <NInput value={o.angle} step={5} onChange={(v) => patch(i, { angle: v })} />
                 </Field>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <div className="grid shrink-0 grid-cols-3 gap-0.5 rounded-md border border-line bg-panel p-0.5">
+                  {ALIGN_ROWS.map((r) =>
+                    ALIGN_COLS.map((c) => (
+                      <button
+                        key={`${r.y}-${c.x}`}
+                        onClick={() => alignTo(i, c.x, r.y)}
+                        title={`จัดไป${r.label}${c.label === "กลาง" && r.label === "กลาง" ? "" : c.label}`}
+                        className="flex h-4 w-4 items-center justify-center rounded-[3px] text-faint hover:bg-panel-3 hover:text-accent"
+                      >
+                        <span className="h-1 w-1 rounded-full bg-current" />
+                      </button>
+                    )),
+                  )}
+                </div>
+                <p className="min-w-0 flex-1 text-[10px] leading-4 text-faint">
+                  {stageEdit && focusIdx === i
+                    ? "ลากบนจอตัวอย่างได้เลย · จุดมุม=ย่อขยาย · ก้านบน=หมุน · ลูกศร=ขยับทีละนิด (Shift=ทีละมาก · Alt=ไม่สแนป)"
+                    : "กดไอคอนลูกศรสี่ทิศด้านบนเพื่อแก้ตำแหน่งด้วยการลากบนจอตัวอย่าง หรือกดจุดข้าง ๆ เพื่อจัดชิดขอบ/กึ่งกลาง"}
+                </p>
               </div>
             </div>
           ))

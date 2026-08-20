@@ -169,6 +169,9 @@ export default function Editor() {
   }, []);
 
   const [playing, setPlaying] = useState(false);
+  // โหมดแก้ตำแหน่งบนจอตัวอย่าง — อยู่ที่นี่เพราะทั้ง Preview (ลาก), คีย์ลัด (ลูกศร)
+  // และแผงสติกเกอร์ (ปุ่ม "แก้บนจอ") ต้องเห็นสวิตช์ตัวเดียวกัน
+  const [posEdit, setPosEdit] = useState(false);
   const [playhead, setPlayhead] = useState(0);
   const [mixerOpen, setMixerOpen] = useState(false);
   // ขนาดหนัง (layout) จาก config — ใช้โชว์ตัวเลือกใต้จอ + สเกลตัวอย่างซ้อนให้ตรง
@@ -675,12 +678,17 @@ export default function Editor() {
     return {
       texts: layers.text
         .filter((b) => !b.orphan)
-        .map((b) => ({ item: fxDraft.texts[b.idx], tl: b.tl })),
+        .map((b) => ({ item: fxDraft.texts[b.idx], tl: b.tl, idx: b.idx })),
       stickers: layers.sticker
         .filter((b) => !b.orphan)
         .map((b) => {
           const it = fxDraft.overlays[b.idx];
-          return { item: it, tl: b.tl, kind: kindOf.get(it.file) ?? extKind(it.file) };
+          return {
+            item: it,
+            tl: b.tl,
+            kind: kindOf.get(it.file) ?? extKind(it.file),
+            idx: b.idx,
+          };
         }),
       cues: capData?.cues ?? [],
     };
@@ -753,6 +761,44 @@ export default function Editor() {
       }
     },
     [fxDraft, shots, offsets, layers, total, patchFx, flash],
+  );
+
+  const patchOverlayAt = useCallback(
+    (idx: number, p: Partial<FxOverlay>) => {
+      if (!fxDraft) return;
+      patchFx({
+        overlays: fxDraft.overlays.map((o, k) => (k === idx ? { ...o, ...p } : o)),
+      });
+    },
+    [fxDraft, patchFx],
+  );
+
+  const patchTextAt = useCallback(
+    (idx: number, p: Partial<FxTextItem>) => {
+      if (!fxDraft) return;
+      patchFx({
+        texts: fxDraft.texts.map((t, k) => (k === idx ? { ...t, ...p } : t)),
+      });
+    },
+    [fxDraft, patchFx],
+  );
+
+  // ขยับทีละนิดด้วยลูกศร — ค่าที่เห็นบนจอกับใน fx.json เป็นก้อนเดียวกัน
+  const nudge = useCallback(
+    (dx: number, dy: number) => {
+      if (!focus || (focus.kind !== "text" && focus.kind !== "sticker")) return false;
+      const cur =
+        focus.kind === "sticker"
+          ? fxDraft?.overlays[focus.idx]
+          : fxDraft?.texts[focus.idx];
+      if (!cur) return false;
+      const nx = Math.round(Math.min(1, Math.max(0, cur.x + dx)) * 1000) / 1000;
+      const ny = Math.round(Math.min(1, Math.max(0, cur.y + dy)) * 1000) / 1000;
+      if (focus.kind === "sticker") patchOverlayAt(focus.idx, { x: nx, y: ny });
+      else patchTextAt(focus.idx, { x: nx, y: ny });
+      return true;
+    },
+    [focus, fxDraft, patchOverlayAt, patchTextAt],
   );
 
   const removeLayerItem = useCallback(
@@ -1082,6 +1128,16 @@ export default function Editor() {
         setPxPerSec((p) => Math.min(120, p * 1.3));
       } else if (e.key === "0") {
         zoomFit();
+      } else if (e.key.startsWith("Arrow")) {
+        const step = e.shiftKey ? 0.02 : 0.005;
+        const d: Record<string, [number, number]> = {
+          ArrowLeft: [-step, 0],
+          ArrowRight: [step, 0],
+          ArrowUp: [0, -step],
+          ArrowDown: [0, step],
+        };
+        const v = d[e.key];
+        if (v && nudge(v[0], v[1])) e.preventDefault();
       }
     };
     window.addEventListener("keydown", h);
@@ -1097,6 +1153,7 @@ export default function Editor() {
     redo,
     saveAll,
     zoomFit,
+    nudge,
   ]);
 
   // ── จอสถานะพิเศษ ──
@@ -1193,6 +1250,13 @@ export default function Editor() {
             onPlaceAtPlayhead={(f) => addStickerAt(playhead, f)}
             onPlaceSampleAtPlayhead={(f) => addStickerSampleAt(playhead, f)}
             focusIdx={focus?.kind === "sticker" ? focus.idx : null}
+            frame={frame}
+            stageEdit={posEdit}
+            onStageEdit={(i) => {
+              setSel(null);
+              setFocus({ kind: "sticker", idx: i });
+              setPosEdit(true);
+            }}
             flash={flash}
           />
         )}
@@ -1233,6 +1297,13 @@ export default function Editor() {
           overlay={overlayData}
           frame={frame}
           onLayout={applyLayout}
+          edit={posEdit}
+          onEdit={setPosEdit}
+          focus={focus}
+          onSelect={(k, i) => selectLayerItem(k, i)}
+          onClearSel={() => setFocus(null)}
+          onPatchSticker={patchOverlayAt}
+          onPatchText={patchTextAt}
         />
         <MusicMixer
           tracks={fxDraft?.music ?? []}
