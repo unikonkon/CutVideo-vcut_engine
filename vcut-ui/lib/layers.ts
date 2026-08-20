@@ -180,5 +180,6 @@ export type DropPayload =
   | { type: "music-file"; file: string }
   | { type: "sfx"; file: string; dur: number; loop?: boolean }
   | { type: "sticker"; file: string }
+  | { type: "sticker-sample"; file: string }
   | { type: "text-new"; text?: string }
   | { type: "transcript"; text: string };

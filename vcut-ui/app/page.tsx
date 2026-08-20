@@ -41,6 +41,7 @@ import {
   type LayerKind,
 } from "@/lib/layers";
 import { SFX_LIST, sfxUrl } from "@/lib/sfx";
+import { STICKER_LIST, stickerUrl } from "@/lib/stickers";
 import TopBar from "@/components/TopBar";
 import { type Tab } from "@/components/TabNav";
 import AssetsPanel from "@/components/AssetsPanel";
@@ -836,6 +837,55 @@ export default function Editor() {
     [fxDraft, fxData, shots, offsets, layers, patchFx, flash],
   );
 
+  // สติกเกอร์ตัวอย่างอยู่ใน public/stickers ของ UI — เอนจินอ่านจากคลัง assets ของ
+  // โปรเจกต์ที่เดียว ครั้งแรกที่ใช้จึงต้องยกไฟล์เข้าคลังก่อน แล้วค่อยวางด้วย
+  // ขนาด/ตำแหน่งที่ติดมากับแบบนั้น (แบดจ์เกาะมุม · แถบนอนล่าง · กรอบเต็มจอ)
+  const addStickerSampleAt = useCallback(
+    async (tl: number, file: string) => {
+      if (!fxDraft || !fxData) return;
+      const def = STICKER_LIST.find((s) => s.file === file);
+      if (!def) return;
+      const bind = tlToClip(shots, offsets, tl);
+      if (!bind) return flash("ตำแหน่งนี้อยู่นอกช่วงหนัง");
+      if (overlapCount(layers.sticker, tl, 2.5) >= MAX_STACK) {
+        return flash(`ช่วงนี้มีภาพซ้อนครบ ${MAX_STACK} ชั้นแล้ว`);
+      }
+      let actual = file;
+      try {
+        if (!fxData.overlay.assets.some((a) => a.file === file)) {
+          const blob = await (await fetch(stickerUrl(file))).blob();
+          const b64 = await fileToBase64(new File([blob], file));
+          const r = await api2.saveAsset(file, b64, "media");
+          setFxData(r.fx);
+          // เอนจินอาจเปลี่ยนชื่อตอนชนไฟล์เดิม — ต้องชี้ชื่อจริง ไม่งั้นภาพไม่ขึ้น
+          actual = r.file || file;
+        }
+      } catch (e) {
+        return flash(e instanceof Error ? e.message : "เพิ่มรูปเข้าคลังไม่สำเร็จ");
+      }
+      patchFx({
+        overlays: [
+          ...fxDraft.overlays,
+          {
+            ...(fxData.defaults.overlay as Omit<FxOverlay, "at" | "dur" | "id" | "name">),
+            ...(def.anim ? { anim: def.anim } : {}),
+            file: actual,
+            width: def.width,
+            x: def.x,
+            y: def.y,
+            at: bind.at,
+            dur: 2.5,
+            name: bind.name,
+            id: "",
+          },
+        ],
+      });
+      setFocus({ kind: "sticker", idx: fxDraft.overlays.length });
+      flash(`วาง ${def.label} ที่ ${bind.name} — ลากบนจอตัวอย่างเพื่อจัดตำแหน่งต่อได้`);
+    },
+    [fxDraft, fxData, shots, offsets, layers, patchFx, flash],
+  );
+
   const addMusicAt = useCallback(
     (tl: number, file: string) => {
       if (!fxDraft || !fxData) return;
@@ -911,10 +961,11 @@ export default function Editor() {
       if (p.type === "music-file") addMusicAt(tl, p.file);
       else if (p.type === "sfx") addSfxAt(tl, p.file, p.dur, p.loop);
       else if (p.type === "sticker") addStickerAt(tl, p.file);
+      else if (p.type === "sticker-sample") addStickerSampleAt(tl, p.file);
       else if (p.type === "text-new") addTextAt(tl, p.text);
       else if (p.type === "transcript") addTextAt(tl, p.text);
     },
-    [addMusicAt, addSfxAt, addStickerAt, addTextAt],
+    [addMusicAt, addSfxAt, addStickerAt, addStickerSampleAt, addTextAt],
   );
 
   const addClip = useCallback(
@@ -1140,6 +1191,7 @@ export default function Editor() {
           <StickerPanel
             fxs={fxs}
             onPlaceAtPlayhead={(f) => addStickerAt(playhead, f)}
+            onPlaceSampleAtPlayhead={(f) => addStickerSampleAt(playhead, f)}
             focusIdx={focus?.kind === "sticker" ? focus.idx : null}
             flash={flash}
           />

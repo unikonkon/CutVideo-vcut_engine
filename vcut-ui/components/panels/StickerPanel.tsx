@@ -1,9 +1,10 @@
 "use client";
 
 import { useRef } from "react";
-import { Film, ImagePlus, Smile, Trash2 } from "lucide-react";
+import { Check, Film, ImagePlus, Smile, Trash2 } from "lucide-react";
 import { api2, assetUrl, fileToBase64, type FxOverlay } from "@/lib/api";
 import { DND_MIME } from "@/lib/layers";
+import { STICKER_CATS, STICKER_LIST, stickerUrl } from "@/lib/stickers";
 import {
   Empty,
   Field,
@@ -16,14 +17,29 @@ import {
 } from "@/components/ui";
 import type { FxStore } from "./types";
 
+// ตารางหมากรุกหลังรูป — สติกเกอร์ส่วนใหญ่เป็นสีขาวบนพื้นใส ถ้าวางบนพื้นทึบสีเดียว
+// จะแยกไม่ออกว่าส่วนไหนคือตัวรูป ส่วนไหนคือพื้นที่โปร่ง
+const CHECKER = {
+  backgroundColor: "#2a2a2a",
+  backgroundImage:
+    "linear-gradient(45deg,#383838 25%,transparent 25%)," +
+    "linear-gradient(-45deg,#383838 25%,transparent 25%)," +
+    "linear-gradient(45deg,transparent 75%,#383838 75%)," +
+    "linear-gradient(-45deg,transparent 75%,#383838 75%)",
+  backgroundSize: "10px 10px",
+  backgroundPosition: "0 0,0 5px,5px -5px,-5px 0",
+};
+
 export default function StickerPanel({
   fxs,
   onPlaceAtPlayhead,
+  onPlaceSampleAtPlayhead,
   focusIdx,
   flash,
 }: {
   fxs: FxStore;
   onPlaceAtPlayhead: (file: string) => void;
+  onPlaceSampleAtPlayhead: (file: string) => void;
   focusIdx: number | null;
   flash: (m: string) => void;
 }) {
@@ -62,6 +78,9 @@ export default function StickerPanel({
   };
 
   const used = new Set(overlays.map((o) => o.file));
+  // ตัวอย่างที่ถูกยกเข้าคลังของโปรเจกต์ไปแล้ว — โผล่ทั้งสองที่ ติดเครื่องหมายไว้
+  // จะได้ไม่อ่านว่ารูปซ้ำกันสองอัน
+  const inLib = new Set(data.overlay.assets.map((a) => a.file));
 
   return (
     <Panel
@@ -149,6 +168,58 @@ export default function StickerPanel({
             ))}
           </div>
         )}
+      </Section>
+
+      <Section
+        title={`สติกเกอร์ตัวอย่าง (${STICKER_LIST.length} แบบ · ${STICKER_CATS.length} หมวด)`}
+      >
+        {STICKER_CATS.map((c) => (
+          <div key={c.key} className="flex flex-col gap-1">
+            <div className="text-[10.5px] font-medium text-muted">{c.label}</div>
+            <div className="grid grid-cols-4 items-start gap-1.5">
+              {STICKER_LIST.filter((s) => s.cat === c.key).map((s) => (
+                <button
+                  key={s.file}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData(
+                      DND_MIME,
+                      JSON.stringify({ type: "sticker-sample", file: s.file }),
+                    );
+                    e.dataTransfer.effectAllowed = "copy";
+                  }}
+                  onClick={() => onPlaceSampleAtPlayhead(s.file)}
+                  title={`${s.label} — คลิก=วางที่หัวเล่น · ลากลงไทม์ไลน์=วางตรงจุดนั้น${
+                    inLib.has(s.file) ? " (อยู่ในคลังแล้ว)" : ""
+                  }`}
+                  className="group flex cursor-grab flex-col overflow-hidden rounded-lg border border-dashed border-line-2 active:cursor-grabbing"
+                >
+                  <div
+                    className="relative flex aspect-square w-full min-h-0 items-center justify-center overflow-hidden p-1"
+                    style={CHECKER}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={stickerUrl(s.file)}
+                      alt={s.label}
+                      draggable={false}
+                      className="max-h-full min-h-0 max-w-full object-contain"
+                    />
+                    {inLib.has(s.file) && (
+                      <Check
+                        size={11}
+                        className="absolute right-0.5 top-0.5 text-ok"
+                      />
+                    )}
+                  </div>
+                  <span className="truncate bg-panel-2 px-1 py-0.5 text-[9.5px] text-muted group-hover:text-ink">
+                    {s.label}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
       </Section>
 
       <Section title={`วางอยู่ในหนัง (${overlays.length})`}>
