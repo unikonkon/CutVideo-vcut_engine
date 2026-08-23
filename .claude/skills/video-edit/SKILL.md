@@ -289,20 +289,15 @@ print(settings.estimate(config.Ctx(config.load('<preset>',['talk.min_shot=6'])))
 ## ทำครบวงจร
 
 ```bash
-./vcut run -c <preset>                # ทำตามแผนใน [run] — พิมพ์แผนออกมาก่อนเสมอ
+./vcut run -c <preset>                # ครบขั้น 1→5 — พิมพ์แผนออกมาก่อนเสมอ
 ./vcut run -c <preset> --from compose # ข้ามขั้นที่ทำไปแล้ว
 ```
 
-`vcut run` เลือกได้ทีละ Phase จาก `[run]` ในไฟล์โปรเจกต์ — ปิดไว้ = ข้ามไปใช้ของเดิม
+ไม่มีสวิตช์ `[run]` ให้ปิดเป็นราย Phase แล้ว — อยากรันไม่ครบใช้ `--from` หรือสั่งชื่อ
+ขั้นตรง ๆ (`./vcut compose` · `./vcut caption` · `./vcut fx`)  ขั้นที่ทำไว้แล้วและค่า
+ยังไม่เปลี่ยนจะข้ามจาก cache อยู่ดี
 
-```toml
-[run]
-source  = true   # ขั้น 1 · scan + thumbs
-prepare = true   # ขั้น 2 · listen + ai + prepare
-compose = true   # ขั้น 3 · compose + render + assemble
-```
-
-`run.prepare = false` ≠ `ai.enabled = false` — อันแรกคือไม่ทำขั้น 2 ใหม่แต่ยังใช้
+`--from compose` ≠ `ai.enabled = false` — อันแรกคือไม่ทำขั้น 1–2 ใหม่แต่ยังใช้
 `pool.json` เดิม อันหลังคือไม่เอาความเห็น AI ไปใช้เลย
 
 ## อ่านผลให้ผู้ใช้ฟัง

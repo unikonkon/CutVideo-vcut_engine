@@ -444,10 +444,11 @@ def cmd_reset(ctx, args):
 
 
 def cmd_run(ctx, args):
-    """ทำตามแผนใน [run] — ขั้นที่ปิดไว้จะข้ามไปใช้ของที่ทำไว้แล้ว
+    """ทำครบขั้น 1→5 — ขั้นที่ทำไว้แล้วและค่ายังไม่เปลี่ยนจะข้ามจาก cache
 
     แผนมาจาก settings.plan() ตัวเดียวกับที่หน้าเว็บใช้ ปุ่มในเบราว์เซอร์กับ
-    คำสั่งในเทอร์มินัลจึงทำเหมือนกันเสมอ
+    คำสั่งในเทอร์มินัลจึงทำเหมือนกันเสมอ  ไม่มีสวิตช์ `[run]` ให้ปิดเป็นราย
+    Phase อีกแล้ว — อยากรันไม่ครบใช้ --from หรือสั่งชื่อขั้นตรง ๆ
     """
     t0 = time.time()
     steps = settings.plan(ctx.cfg, start=args.start_at, no_thumbs=args.no_thumbs)
@@ -458,7 +459,7 @@ def cmd_run(ctx, args):
         if not s["run"]:
             info(f"  {c('ข้าม ' + s['label'] + ' — ' + s['skip'], 'd')}")
     if not todo:
-        die("ไม่มีขั้นไหนให้รันเลย — เปิด Phase สักอันใน [run] ก่อน")
+        die("ไม่มีขั้นไหนให้รันเลย — --from ชี้เลยขั้นสุดท้ายไปแล้ว")
 
     runner = {
         "scan": lambda: scan.run(ctx, force=args.force),

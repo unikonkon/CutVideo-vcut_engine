@@ -59,20 +59,20 @@ PHASES = [
     {"id": "source", "no": 1, "label": "เลือกฟุตเทจ",
      "why": "ชี้ไปที่โฟลเดอร์คลิปดิบ แล้วอ่านคุณสมบัติทุกคลิปครั้งเดียวจบ "
             "— หลังจากนี้ไม่ต้องแตะไฟล์วิดีโออีกเลย",
-     "steps": ["scan", "thumbs"], "key": "run.source"},
+     "steps": ["scan", "thumbs"]},
     {"id": "prepare", "no": 2, "label": "เตรียมวิดีโอ",
      "why": "ดูทีละคลิป — แยกคลิปพูดกับคลิปวิว ตัดเอาเฉพาะช่วงที่ใช้ได้ "
             "เก็บเข้าคลังไว้รอประกอบในขั้นถัดไป",
-     "steps": ["listen", "ai", "silence", "prepare"], "key": "run.prepare"},
+     "steps": ["listen", "ai", "silence", "prepare"]},
     {"id": "compose", "no": 3, "label": "รวมเป็นหนัง",
      "why": "หยิบชิ้นจากคลังมาเรียง แล้วผลิตเป็นไฟล์เดียว",
-     "steps": ["compose", "render", "assemble"], "key": "run.compose"},
+     "steps": ["compose", "render", "assemble"]},
     # ขั้น 4 ไม่ตัดอะไรใหม่ — ใช้ไทม์ไลน์กับ segment ชุดเดียวกับขั้น 3 ทั้งหมด
     # เพิ่มแค่ชั้นข้อความแล้วต่อเป็นไฟล์ตัวที่สอง ของขั้น 3 ไม่ถูกแตะ
     {"id": "text", "no": 4, "label": "รวมเป็นหนังแบบมีText",
      "why": "ใช้ไทม์ไลน์เดียวกับขั้น 3 แล้วเขียนข้อความลงไปในภาพ "
             "— ซับจากบทพูดที่ถอดไว้ กับข้อความที่ใส่เอง",
-     "steps": ["caption"], "key": "run.text"},
+     "steps": ["caption"]},
     # ขั้น 5 เป็นสาขาคู่ขนานของขั้น 4 ไม่ใช่ขั้นที่ต่อจากมัน — อ่านไทม์ไลน์ของ
     # ขั้น 3 กับชั้นข้อความของขั้น 4 แล้วผลิตไฟล์ตัวที่สาม ทั้งสองขั้นก่อนหน้า
     # ไม่ถูกแตะ · ของใหม่ทุกอย่าง (แอนิเมชันข้อความ · ภาพซ้อน · สโลว์โม · เพลง)
@@ -80,7 +80,7 @@ PHASES = [
     {"id": "fx", "no": 5, "label": "แต่งหนัง",
      "why": "ใช้ไทม์ไลน์ของขั้น 3 กับข้อความของขั้น 4 แล้วแต่งเป็นไฟล์ตัวที่สาม "
             "— ข้อความเคลื่อนไหว · รูปทรง · สโลว์โม/ซูม/สี · ภาพซ้อน · เพลง",
-     "steps": ["finish"], "key": "run.fx"},
+     "steps": ["finish"]},
 ]
 
 # ── คีย์ไหนเป็นของขั้นไหน — ใช้ตอนรีเซ็ตทีละขั้น ────────────────
@@ -107,10 +107,7 @@ def scope_keys(scope):
     stages = PHASE_STAGES.get(scope)
     if stages is None:
         return []
-    keys = [f["key"] for f in FIELDS if f["stage"] in stages]
-    if f"run.{scope}" in FIELD_BY_KEY:      # สวิตช์เปิด/ปิดขั้น อยู่ stage "run"
-        keys.append(f"run.{scope}")
-    return keys
+    return [f["key"] for f in FIELDS if f["stage"] in stages]
 
 
 def F(key, label, typ, tier, stage, **kw):
@@ -121,13 +118,6 @@ def F(key, label, typ, tier, stage, **kw):
 
 
 FIELDS = [
-    # ── จะรัน Phase ไหนบ้าง (หน้าเว็บวาดเป็นสวิตช์บนหัวการ์ด ไม่ใช่ช่องในฟอร์ม) ──
-    F("run.source", "รันขั้น 1", "bool", "free", "run"),
-    F("run.prepare", "รันขั้น 2", "bool", "free", "run"),
-    F("run.compose", "รันขั้น 3", "bool", "free", "run"),
-    F("run.text", "รันขั้น 4", "bool", "free", "run"),
-    F("run.fx", "รันขั้น 5", "bool", "free", "run"),
-
     # ── โปรเจกต์ ──
     F("project.name", "ชื่อโปรเจกต์", "str", "free", "project"),
     F("project.source", "โฟลเดอร์ฟุตเทจ", "path", "scan", "project",
@@ -435,6 +425,15 @@ def plan(cfg, start=None, no_thumbs=False):
 
     ทั้ง `vcut run` และปุ่มในหน้าเว็บอ่านจากฟังก์ชันนี้ตัวเดียว — สองทางจึงทำ
     เหมือนกันเสมอ ไม่มีทางที่หน้าเว็บบอกอย่างแล้ว CLI ทำอีกอย่าง
+
+    เดิมมีสวิตช์ `[run]` เปิด/ปิดเป็นราย Phase อยู่ด้วย — เอาออกแล้ว แผนจึงวิ่ง
+    ครบขั้น 1→5 เสมอ ที่เอาออกเพราะทุกขั้นมีปุ่มสั่งตรงของตัวเองอยู่แล้ว (การ์ด
+    ราย Phase กับปุ่ม Export ขั้น 3/4/5) สวิตช์ชุดนั้นจึงเหลือความหมายเดียวคือ
+    "ปุ่มทำทุกขั้นจะแวะไหนบ้าง" ซึ่งคนอ่านสลับกับ "ปิดฟีเจอร์ขั้นนั้น" ตลอด และ
+    ค่าตั้งต้นที่ปิดขั้น 4/5 ไว้ทำให้กดทำทุกขั้นแล้วไม่มีไฟล์ข้อความ/ไฟล์แต่งออกมา
+    โดยไม่มีอะไรบอกสาเหตุ  ถ้าอยากรันไม่ครบ ใช้ --from หรือสั่งทีละขั้นแทน
+
+    ที่ยังข้ามได้อยู่คือขั้นที่ "ปิดฟีเจอร์" จริง ๆ — [ai] · [jumpcut] · [listen]
     """
     from_i = STEP_ORDER.index(start) if start in STEP_ORDER else 0
     out = []
@@ -443,8 +442,6 @@ def plan(cfg, start=None, no_thumbs=False):
         skip = None
         if i < from_i:
             skip = f"ข้ามด้วย --from {start}"
-        elif not get_at(cfg, ph["key"], True):
-            skip = f"ปิด Phase {ph['no']} ไว้"
         elif sid == "thumbs" and no_thumbs:
             skip = "สั่ง --no-thumbs"
         elif sid == "ai" and not (get_at(cfg, "ai.enabled", False)

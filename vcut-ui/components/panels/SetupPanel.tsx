@@ -17,7 +17,6 @@ import {
 
 const STAGE_LABEL: Record<string, string> = {
   project: "โปรเจกต์",
-  run: "แผนการรัน (ปุ่มทำทุกขั้น)",
   scan: "① อ่านคลิป",
   thumbs: "① ภาพตัวอย่าง",
   listen: "② ถอดเสียง",
@@ -110,6 +109,9 @@ export default function SetupPanel({
     if (!data) return [];
     const by = new Map<string, SetupField[]>();
     for (const f of data.fields) {
+      // สวิตช์ "รันขั้น 1-5" ถูกถอดออกจากเอนจินแล้ว — กันไว้เผื่อต่อกับเอนจินรุ่นเก่า
+      // ที่ยังส่งมา จะได้ไม่มีการ์ดสวิตช์ที่กดแล้วไม่มีอะไรในหน้านี้เปลี่ยนโผล่กลับมา
+      if (f.stage === "run") continue;
       if (!by.has(f.stage)) by.set(f.stage, []);
       by.get(f.stage)!.push(f);
     }
