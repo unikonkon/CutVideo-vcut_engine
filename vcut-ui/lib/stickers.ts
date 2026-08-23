@@ -84,7 +84,7 @@ export const STICKER_LIST: StickerDef[] = [
   { file: "st-crosshair.png", label: "เป้าเล็ง", cat: "arrow", width: 0.15, x: 0.5, y: 0.5 },
   { file: "st-scribble-circle.png", label: "วงลายมือ", cat: "arrow", width: 0.3, x: 0.5, y: 0.5 },
   { file: "st-arrow-bend.png", label: "ลูกศรหักมุม", cat: "arrow", width: 0.14, x: 0.44, y: 0.48 },
-  // กรอบ / แถบ — แผ่นรองสำหรับพิมพ์ข้อความทับในแท็บเอฟเฟกต์
+  // กรอบ / แถบ — แผ่นรองสำหรับพิมพ์ข้อความทับในแท็บข้อความ
   { file: "st-lower3.png", label: "แถบชื่อ (lower-third)", cat: "frame", width: 0.52, x: 0.32, y: 0.8, anim: "slide" },
   { file: "st-strip.png", label: "แถบดำโปร่ง", cat: "frame", width: 0.6, x: 0.35, y: 0.84, anim: "slide" },
   { file: "st-corner.png", label: "กรอบมุม", cat: "frame", width: 1, x: 0.5, y: 0.5 },

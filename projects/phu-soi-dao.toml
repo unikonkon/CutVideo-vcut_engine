@@ -16,6 +16,8 @@ min_free_gb = 4.0        # ดิสก์เหลือน้อย เตื�
 
 [run]
 advise = true
+text   = true
+fx     = true
 [scan.rotation_overrides]
 IMG_7079 = "transpose=2"
 IMG_7170 = "transpose=2"

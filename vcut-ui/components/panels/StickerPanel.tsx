@@ -1,11 +1,19 @@
 "use client";
 
-import { useRef } from "react";
-import { Check, Film, ImagePlus, Move, Smile, Trash2 } from "lucide-react";
-import { api2, assetUrl, fileToBase64, type FxOverlay } from "@/lib/api";
+import { useRef, useState } from "react";
+import { Check, Film, ImagePlus, MapPin, Move, Smile, Trash2 } from "lucide-react";
+import {
+  api2,
+  assetUrl,
+  fileToBase64,
+  type FxOverlay,
+  type JourneyStop,
+} from "@/lib/api";
 import { DND_MIME } from "@/lib/layers";
 import { STICKER_CATS, STICKER_LIST, stickerUrl } from "@/lib/stickers";
+import { dur } from "@/lib/time";
 import {
+  CInput,
   Empty,
   Field,
   NInput,
@@ -14,6 +22,8 @@ import {
   Section,
   Sel,
   Spin,
+  TInput,
+  Toggle,
 } from "@/components/ui";
 import type { FxStore } from "./types";
 
@@ -64,6 +74,7 @@ export default function StickerPanel({
   flash: (m: string) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const [showJourney, setShowJourney] = useState(false);
 
   if (!fxs.data || !fxs.draft) {
     return (
@@ -75,6 +86,18 @@ export default function StickerPanel({
 
   const { data, draft } = fxs;
   const overlays = draft.overlays;
+  // แผนที่เส้นทางคือภาพซ้อนชนิดหนึ่ง (เก็บใน fx.json ก้อนเดียวกับสติกเกอร์) —
+  // ย้ายมาอยู่แท็บนี้แทนที่จะค้างอยู่ท้ายแท็บข้อความอย่างที่เคยเป็น
+  const journey = draft.journey;
+  const stops = (journey.stops as JourneyStop[]) ?? [];
+
+  const patchStop = (i: number, p: Partial<JourneyStop>) =>
+    fxs.patch({
+      journey: {
+        ...journey,
+        stops: stops.map((s, k) => (k === i ? { ...s, ...p } : s)),
+      },
+    });
 
   const animOpts = Object.keys(
     (data.defaults.overlay_anim as Record<string, unknown>) ?? { fade: 1 },
@@ -353,6 +376,57 @@ export default function StickerPanel({
           ))
         )}
       </Section>
+      <Section
+        title={`แผนที่เส้นทาง (${stops.length} หมุด)`}
+        right={
+          <Toggle
+            value={Boolean(journey.enabled)}
+            onChange={(v) => fxs.patch({ journey: { ...journey, enabled: v } })}
+            label=""
+          />
+        }
+      >
+        <button
+          onClick={() => setShowJourney((v) => !v)}
+          className="flex items-center gap-1.5 text-left text-[11.5px] text-muted hover:text-ink"
+        >
+          <MapPin size={12} />
+          {showJourney ? "ซ่อนรายการหมุด" : "แสดงรายการหมุด"}
+        </button>
+        {showJourney &&
+          stops.map((s, i) => (
+            <div
+              key={i}
+              className="grid grid-cols-[1fr_5rem_5rem_auto] items-end gap-1.5 rounded-lg border border-line bg-panel-2 p-2"
+            >
+              <Field label={`หมุด ${i + 1} · ${s.name || "?"} @${dur(s.at)}`}>
+                <TInput value={s.label} onChange={(v) => patchStop(i, { label: v })} />
+              </Field>
+              <Field label="ระยะ (ม.)">
+                <NInput value={s.dist} step={100} min={0} onChange={(v) => patchStop(i, { dist: v })} />
+              </Field>
+              <Field label="สี">
+                <CInput value={s.color} onChange={(v) => patchStop(i, { color: v })} />
+              </Field>
+              <button
+                onClick={() =>
+                  fxs.patch({
+                    journey: { ...journey, stops: stops.filter((_, k) => k !== i) },
+                  })
+                }
+                className="mb-1 rounded-md p-1.5 text-muted hover:text-danger"
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          ))}
+        {showJourney && (
+          <div className="text-[10.5px] leading-4 text-faint">
+            ตำแหน่งหมุดบนภาพแผนที่ (ลากบน SVG) ยังแก้ผ่าน viewer เดิม
+          </div>
+        )}
+      </Section>
+
       {data.overlay.missing.length > 0 && (
         <div className="text-[11px] text-danger">
           ไฟล์หาย: {data.overlay.missing.join(", ")}

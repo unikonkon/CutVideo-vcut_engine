@@ -8,7 +8,6 @@ import {
   Settings,
   Smile,
   Type,
-  WandSparkles,
 } from "lucide-react";
 
 export type Tab =
@@ -16,7 +15,6 @@ export type Tab =
   | "text"
   | "music"
   | "stickers"
-  | "fx"
   | "cc"
   | "review"
   | "setup";
@@ -29,10 +27,9 @@ const ITEMS: {
   title: string;
 }[] = [
   { id: "assets", icon: FolderOpen, label: "คลิป", title: "คลังคลิป" },
-  { id: "text", icon: Type, label: "ข้อความ", title: "ข้อความ / ซับ (ขั้น 4)" },
+  { id: "text", icon: Type, label: "ข้อความ", title: "ข้อความบนหนัง + ซับจากบทพูด" },
   { id: "music", icon: Music, label: "เพลง", title: "เพลงประกอบ" },
-  { id: "stickers", icon: Smile, label: "สติกเกอร์", title: "สติกเกอร์ / ภาพซ้อน" },
-  { id: "fx", icon: WandSparkles, label: "เอฟเฟกต์", title: "เอฟเฟกต์ (ขั้น 5)" },
+  { id: "stickers", icon: Smile, label: "สติกเกอร์", title: "สติกเกอร์ / ภาพซ้อน / แผนที่เส้นทาง" },
   { id: "cc", icon: Captions, label: "บทพูด", title: "บทพูดที่ถอดไว้" },
   { id: "review", icon: Bot, label: "AI", title: "AI ดูหนัง" },
   { id: "setup", icon: Settings, label: "ตั้งค่า", title: "ตั้งค่าเอนจิน" },

@@ -42,6 +42,7 @@ import {
 } from "@/lib/layers";
 import { SFX_LIST, sfxUrl } from "@/lib/sfx";
 import { STICKER_LIST, stickerUrl } from "@/lib/stickers";
+import type { CapDraft } from "@/components/panels/types";
 import TopBar from "@/components/TopBar";
 import { type Tab } from "@/components/TabNav";
 import AssetsPanel from "@/components/AssetsPanel";
@@ -54,7 +55,6 @@ import JobPanel from "@/components/JobPanel";
 import TextPanel from "@/components/panels/TextPanel";
 import MusicPanel from "@/components/panels/MusicPanel";
 import StickerPanel from "@/components/panels/StickerPanel";
-import FxPanel from "@/components/panels/FxPanel";
 import TranscriptPanel from "@/components/panels/TranscriptPanel";
 import ReviewPanel from "@/components/panels/ReviewPanel";
 import SetupPanel from "@/components/panels/SetupPanel";
@@ -85,10 +85,16 @@ export default function Editor() {
     texts: FxTextItem[];
     overlays: FxOverlay[];
     journey: Record<string, unknown>;
+    auto_sub: { enabled: boolean };
   } | null>(null);
   const [fxDirty, setFxDirty] = useState(false);
   const [fxSaving, setFxSaving] = useState(false);
   const [capData, setCapData] = useState<CaptionsData | null>(null);
+  // ซับขั้น 4 แก้ที่ draft เหมือน fx — แผงเดียวจึงกดบันทึกทีเดียวได้ทั้งสองไฟล์
+  // และ Cmd+S เก็บของค้างครบ (เดิม state ชุดนี้ซ่อนอยู่ในแผง Cmd+S จึงไม่เห็น)
+  const [capDraft, setCapDraft] = useState<CapDraft | null>(null);
+  const [capDirty, setCapDirty] = useState(false);
+  const [capSaving, setCapSaving] = useState(false);
   const [trData, setTrData] = useState<TranscriptData | null>(null);
   // เลเยอร์ไหนเปิดอยู่บนไทม์ไลน์
   const [vis, setVis] = useState<Record<LayerKind, boolean>>({
@@ -264,6 +270,11 @@ export default function Editor() {
         texts: d.fx.texts.map((t) => ({ ...t })),
         overlays: d.fx.overlays.map((o) => ({ ...o })),
         journey: JSON.parse(JSON.stringify(d.fx.journey)),
+        auto_sub: {
+          enabled: Boolean(
+            (d.fx.auto_sub as { enabled?: boolean } | undefined)?.enabled,
+          ),
+        },
       });
       setFxDirty(false);
       clearHistory();
@@ -272,11 +283,62 @@ export default function Editor() {
     }
   }, [clearHistory]);
 
+  const loadCaps = useCallback(async () => {
+    try {
+      const d = await api2.captions();
+      setCapData(d);
+      setCapDraft({
+        style: { ...d.style },
+        enabled: d.auto.enabled,
+        drop: [...d.auto.drop],
+        edits: { ...d.auto.edits },
+      });
+      setCapDirty(false);
+    } catch {
+      setCapData(null);
+      setCapDraft(null);
+    }
+  }, []);
+
   useEffect(() => {
     loadFx();
-    api2.captions().then(setCapData).catch(() => setCapData(null));
+    loadCaps();
     api2.transcript().then(setTrData).catch(() => setTrData(null));
-  }, [loadFx, reloadKey]);
+  }, [loadFx, loadCaps, reloadKey]);
+
+  const patchCap = useCallback((part: Partial<CapDraft>) => {
+    setCapDraft((d) => (d ? { ...d, ...part } : d));
+    setCapDirty(true);
+  }, []);
+
+  const saveCaps = useCallback(async () => {
+    if (!capDraft || !capData) return;
+    setCapSaving(true);
+    try {
+      const r = await api2.saveCaptions({
+        style: capDraft.style,
+        auto: {
+          enabled: capDraft.enabled,
+          drop: capDraft.drop,
+          edits: capDraft.edits,
+          styles: capData.auto.styles,
+        },
+      });
+      setCapData(r.captions);
+      setCapDraft({
+        style: { ...r.captions.style },
+        enabled: r.captions.auto.enabled,
+        drop: [...r.captions.auto.drop],
+        edits: { ...r.captions.auto.edits },
+      });
+      setCapDirty(false);
+      flash("บันทึก captions.json แล้ว — มีผลตอนสร้างไฟล์แบบมีข้อความ");
+    } catch (e) {
+      flash(e instanceof Error ? e.message : "บันทึกซับไม่สำเร็จ");
+    } finally {
+      setCapSaving(false);
+    }
+  }, [capDraft, capData, flash]);
 
   const patchFx = useCallback(
     (part: Partial<NonNullable<typeof fxDraft>>) => {
@@ -298,6 +360,11 @@ export default function Editor() {
         texts: r.fx.fx.texts.map((t) => ({ ...t })),
         overlays: r.fx.fx.overlays.map((o) => ({ ...o })),
         journey: JSON.parse(JSON.stringify(r.fx.fx.journey)),
+        auto_sub: {
+          enabled: Boolean(
+            (r.fx.fx.auto_sub as { enabled?: boolean } | undefined)?.enabled,
+          ),
+        },
       });
       setFxDirty(false);
       flash("บันทึก fx.json แล้ว — มีผลตอนสร้างไฟล์แบบมีเอฟเฟกต์");
@@ -638,6 +705,19 @@ export default function Editor() {
     [shots, removeShot, reorder, flash],
   );
 
+  const caps = useMemo(
+    () => ({
+      data: capData,
+      draft: capDraft,
+      patch: patchCap,
+      save: saveCaps,
+      revert: loadCaps,
+      dirty: capDirty,
+      saving: capSaving,
+    }),
+    [capData, capDraft, patchCap, saveCaps, loadCaps, capDirty, capSaving],
+  );
+
   // ก้อน props ที่แผง fx ทุกตัวใช้ร่วมกัน
   const fxs = useMemo(
     () => ({
@@ -665,10 +745,74 @@ export default function Editor() {
     [fxDraft, capData, trData, shots, offsets, total],
   );
 
+  // ซับที่จะ "เห็นจริง" ตามที่แก้ค้างอยู่ — ปิดสวิตช์/ซ่อน cue/แก้คำ/เปลี่ยนสไตล์
+  // แล้วจอตัวอย่างเปลี่ยนทันทีโดยไม่ต้องกดบันทึกก่อน (เดิมพรีวิวอ่านจากไฟล์ที่
+  // บันทึกแล้วอย่างเดียว จึงโชว์ cue ที่สั่งซ่อนไว้ด้วย)
+  const previewCues = useMemo(() => {
+    if (!capData) return [];
+    if (!capDraft) return capData.cues;
+    if (!capDraft.enabled) return [];
+    const drop = new Set(capDraft.drop);
+    // ใช้เฉพาะคีย์สไตล์ที่ผู้ใช้เพิ่งแก้ — คีย์อื่นปล่อยไว้ตามที่เอนจินผสมมาให้
+    // (cue บางเส้นมีสไตล์เฉพาะตัวใน auto.styles ถ้าทับหมดจะหายไปจากพรีวิว)
+    const changed = Object.keys(capDraft.style).filter(
+      (k) =>
+        capDraft.style[k] !==
+        (capData.style as unknown as Record<string, unknown>)[k],
+    );
+    return capData.cues
+      .filter((c) => !drop.has(c.id))
+      .map((c) => ({
+        ...c,
+        text: capDraft.edits[c.id] ?? c.text,
+        style: changed.length
+          ? ({
+              ...c.style,
+              ...Object.fromEntries(changed.map((k) => [k, capDraft.style[k]])),
+            } as typeof c.style)
+          : c.style,
+      }));
+  }, [capData, capDraft]);
+
+  // บรรทัดบทพูดที่ตกอยู่ในไทม์ไลน์จริง (คลิปที่ถูกใช้ + ช่วงที่ไม่ถูกตัดทิ้ง)
+  // id ใช้สูตรเดียวกับที่เอนจินตั้งให้ cue ของซับ (`<คลิป>#<ลำดับบรรทัด>`) —
+  // ติ๊กใส่/ติ๊กออก และ "ซ่อน cue" จึงอ้างถึงบรรทัดเดียวกันได้โดยไม่ต้องเดา
+  const speechLines = useMemo(() => {
+    if (!trData) return [];
+    const out: {
+      id: string;
+      name: string;
+      at: number;
+      dur: number;
+      text: string;
+      tl: number;
+    }[] = [];
+    const seen = new Set<string>();
+    shots.forEach((s, i) => {
+      (trData.clips[s.name] ?? []).forEach(([a, b, text], k) => {
+        const x = Math.max(a, s.start);
+        const y = Math.min(b, s.end);
+        if (y - x < 0.15 || !String(text).trim()) return;
+        const id = `${s.name}#${k}`;
+        if (seen.has(id)) return; // คลิปเดียวถูกใช้ซ้ำหลายช็อต — เอาครั้งแรกพอ
+        seen.add(id);
+        out.push({
+          id,
+          name: s.name,
+          at: Math.round(x * 1000) / 1000,
+          dur: Math.round((y - x) * 1000) / 1000,
+          text: String(text).trim(),
+          tl: offsets[i] + (x - s.start),
+        });
+      });
+    });
+    return out.sort((p, q) => p.tl - q.tl);
+  }, [trData, shots, offsets]);
+
   // ข้อมูลให้ตัวอย่างซ้อนสดใน preview — ตัวเลขชุดเดียวกับที่จะถูกเผาตอน render
   const overlayData = useMemo(() => {
     if (!fxDraft) {
-      return { texts: [], stickers: [], cues: capData?.cues ?? [] };
+      return { texts: [], stickers: [], cues: previewCues };
     }
     const kindOf = new Map(
       (fxData?.overlay.assets ?? []).map((a) => [a.file, a.kind]),
@@ -690,9 +834,9 @@ export default function Editor() {
             idx: b.idx,
           };
         }),
-      cues: capData?.cues ?? [],
+      cues: previewCues,
     };
-  }, [layers, fxDraft, fxData, capData]);
+  }, [layers, fxDraft, fxData, previewCues]);
 
   // ย้าย/ยืดบล็อกบนเลเยอร์ → เขียนกลับเป็นหน่วยของเอนจิน (คลิป+วินาที หรือ at รวม)
   const changeLayerItem = useCallback(
@@ -813,8 +957,9 @@ export default function Editor() {
     [fxDraft, patchFx],
   );
 
+  // ตัวหนังสือบนจอทุกชนิดไปแท็บเดียวกันแล้ว — ทั้งข้อความที่วางเองและซับจากบทพูด
   const KIND_TAB: Record<string, Tab> = {
-    text: "fx",
+    text: "text",
     sticker: "stickers",
     music: "music",
     caption: "text",
@@ -823,7 +968,7 @@ export default function Editor() {
   const selectLayerItem = useCallback((kind: LayerKind, idx: number) => {
     setFocus({ kind, idx });
     setSel(null); // ปุ่ม Delete จะได้ชี้ที่บล็อกเลเยอร์ ไม่ใช่ช็อตที่ค้างเลือกไว้
-    setTab(KIND_TAB[kind] ?? "fx");
+    setTab(KIND_TAB[kind] ?? "text");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -851,7 +996,7 @@ export default function Editor() {
         ],
       });
       setFocus({ kind: "text", idx: fxDraft.texts.length });
-      flash(`วางข้อความที่ ${bind.name} — แก้เนื้อหาในแท็บเอฟเฟกต์ แล้วกดบันทึก FX`);
+      flash(`วางข้อความที่ ${bind.name} — แก้เนื้อหาในแท็บข้อความ แล้วกดบันทึก`);
     },
     [fxDraft, fxData, shots, offsets, layers, patchFx, flash],
   );
@@ -1087,10 +1232,11 @@ export default function Editor() {
 
   // Cmd+S — บันทึกทุกอย่างที่ค้างในครั้งเดียว
   const saveAll = useCallback(() => {
-    if (!dirty && !fxDirty) return flash("ไม่มีอะไรค้างบันทึก");
+    if (!dirty && !fxDirty && !capDirty) return flash("ไม่มีอะไรค้างบันทึก");
     if (dirty) save();
     if (fxDirty) saveFx();
-  }, [dirty, fxDirty, save, saveFx, flash]);
+    if (capDirty) saveCaps();
+  }, [dirty, fxDirty, capDirty, save, saveFx, saveCaps, flash]);
 
   // ── คีย์ลัด ──
   useEffect(() => {
@@ -1227,10 +1373,17 @@ export default function Editor() {
         )}
         {tab === "text" && (
           <TextPanel
-            reloadKey={reloadKey}
-            runJob={runJob}
-            onAddTextAtPlayhead={() => addTextAt(playhead)}
-            flash={flash}
+            fxs={fxs}
+            caps={caps}
+            speech={speechLines}
+            onAddAtPlayhead={(t) => addTextAt(playhead, t)}
+            focusIdx={focus?.kind === "text" ? focus.idx : null}
+            stageEdit={posEdit}
+            onStageEdit={(i) => {
+              setSel(null);
+              setFocus({ kind: "text", idx: i });
+              setPosEdit(true);
+            }}
           />
         )}
         {tab === "music" && (
@@ -1257,14 +1410,6 @@ export default function Editor() {
               setFocus({ kind: "sticker", idx: i });
               setPosEdit(true);
             }}
-            flash={flash}
-          />
-        )}
-        {tab === "fx" && (
-          <FxPanel
-            fxs={fxs}
-            onAddAtPlayhead={() => addTextAt(playhead)}
-            focusIdx={focus?.kind === "text" ? focus.idx : null}
             flash={flash}
           />
         )}
