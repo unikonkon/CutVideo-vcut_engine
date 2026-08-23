@@ -1,4 +1,4 @@
-// สติกเกอร์ตัวอย่าง 134 แบบ 9 หมวด — ไฟล์ PNG โปร่งใสอยู่ใน public/stickers/
+// สติกเกอร์ตัวอย่าง 200 แบบ 12 หมวด — ไฟล์ PNG โปร่งใสอยู่ใน public/stickers/
 // (วาดด้วย scripts/gen_stickers.py แก้สี/ทรงแล้วรันซ้ำได้ทั้งชุด)
 //
 // ตอนใช้ครั้งแรกถูกอัปโหลดเข้าโฟลเดอร์ assets ของโปรเจกต์ให้เอง (ผ่าน /api/asset)
@@ -10,23 +10,29 @@
 
 export type StickerCat =
   | "badge"
+  | "bubble"
   | "arrow"
   | "frame"
+  | "decor"
   | "react"
   | "emotion"
   | "social"
   | "travel"
+  | "food"
   | "number"
   | "weather";
 
 export const STICKER_CATS: { key: StickerCat; label: string }[] = [
   { key: "badge", label: "ป้าย / แบดจ์" },
+  { key: "bubble", label: "บับเบิลคำพูด" },
   { key: "arrow", label: "ลูกศร / ชี้จุด" },
   { key: "frame", label: "กรอบ / แถบ" },
+  { key: "decor", label: "ตกแต่ง / ลายมือ" },
   { key: "react", label: "รีแอ็กชัน" },
   { key: "emotion", label: "อารมณ์" },
   { key: "social", label: "โซเชียล" },
   { key: "travel", label: "เดินทาง" },
+  { key: "food", label: "อาหาร / คาเฟ่" },
   { key: "number", label: "ตัวเลข" },
   { key: "weather", label: "อากาศ / เวลา" },
 ];
@@ -41,8 +47,16 @@ export interface StickerDef {
   anim?: string; // ไม่ใส่ = fade ตามค่าตั้งต้นของเอนจิน
 }
 
-const badge = (file: string, label: string): StickerDef => ({
-  file, label, cat: "badge", width: 0.2, x: 0.8, y: 0.13, anim: "slide",
+const badge = (file: string, label: string, width = 0.2): StickerDef => ({
+  file, label, cat: "badge", width, x: 0.8, y: 0.13, anim: "slide",
+});
+// บับเบิลว่างไว้พิมพ์ข้อความทับ = ตัวใหญ่กลางบน · บับเบิลที่มีคำอยู่แล้ว = เล็กกว่า มุมขวา
+const bub = (file: string, label: string, width = 0.26): StickerDef => ({
+  file, label, cat: "bubble", width, x: width > 0.3 ? 0.5 : 0.68, y: 0.3, anim: "rise",
+});
+// ของกิน — ป้ายเล็กมุมซ้ายบน คู่กับข้อความบอกชื่อร้าน/เมนู (ท่าเดียวกับหมวดเดินทาง)
+const food = (file: string, label: string, width: number): StickerDef => ({
+  file, label, cat: "food", width, x: 0.13, y: 0.2,
 });
 const num = (n: number): StickerDef => ({
   file: `st-no${n}.png`, label: `เลข ${n}`, cat: "number",
@@ -60,6 +74,23 @@ export const STICKER_LIST: StickerDef[] = [
   badge("st-4k.png", "4K"),
   badge("st-hot.png", "HOT"),
   badge("st-ep.png", "EP.01"),
+  badge("st-vlog.png", "VLOG"),
+  badge("st-th-new.png", "ใหม่", 0.15),
+  badge("st-th-must.png", "ห้ามพลาด", 0.22),
+  badge("st-th-tip.png", "เคล็ดลับ", 0.22),
+  badge("st-th-follow.png", "กดติดตาม", 0.22),
+  badge("st-th-ep.png", "ตอนที่ 1", 0.22),
+  // บับเบิลคำพูด — สี่แบบแรกว่างไว้พิมพ์ข้อความทับในแท็บข้อความ
+  bub("st-bub-round.png", "บับเบิลกลม", 0.32),
+  bub("st-bub-rect.png", "บับเบิลเหลี่ยม", 0.34),
+  bub("st-bub-dark.png", "บับเบิลโทนเข้ม", 0.34),
+  bub("st-bub-think.png", "บับเบิลความคิด", 0.32),
+  bub("st-bub-shout.png", "บับเบิลตะโกน", 0.34),
+  bub("st-bub-wow.png", "ว้าว!"),
+  bub("st-bub-best.png", "สุดยอด"),
+  bub("st-bub-real.png", "จริงดิ?"),
+  bub("st-bub-go.png", "ไปกันเลย"),
+  bub("st-bub-omg.png", "OMG!"),
   // ลูกศร / ชี้จุด — กลางจอ ผู้ใช้ลากไปชี้ของที่ต้องการเอง
   { file: "st-arrow-r.png", label: "ลูกศรขวา", cat: "arrow", width: 0.18, x: 0.4, y: 0.5 },
   { file: "st-arrow-curve.png", label: "ลูกศรโค้ง", cat: "arrow", width: 0.16, x: 0.4, y: 0.42 },
@@ -97,6 +128,21 @@ export const STICKER_LIST: StickerDef[] = [
   { file: "st-scrim.png", label: "แถบไล่เฉดล่าง", cat: "frame", width: 1, x: 0.5, y: 0.86, anim: "none" },
   { file: "st-polaroid.png", label: "กรอบโพลารอยด์", cat: "frame", width: 0.42, x: 0.5, y: 0.5 },
   { file: "st-title-plate.png", label: "แผ่นไตเติล", cat: "frame", width: 0.5, x: 0.5, y: 0.5, anim: "rise" },
+  { file: "st-caption-box.png", label: "กล่องคำบรรยาย", cat: "frame", width: 0.62, x: 0.5, y: 0.82, anim: "slide" },
+  { file: "st-vignette.png", label: "ขอบมืดรอบเฟรม", cat: "frame", width: 1, x: 0.5, y: 0.5, anim: "none" },
+  // ตกแต่ง / ลายมือ — ของประกอบหน้ากระดาษสไตล์สมุดเดินทาง
+  { file: "st-tape.png", label: "เทปกาว", cat: "decor", width: 0.22, x: 0.22, y: 0.12, anim: "none" },
+  { file: "st-note.png", label: "โน้ตกาว", cat: "decor", width: 0.16, x: 0.82, y: 0.3, anim: "rise" },
+  { file: "st-torn.png", label: "กระดาษฉีก", cat: "decor", width: 0.42, x: 0.5, y: 0.8, anim: "rise" },
+  { file: "st-highlight.png", label: "ไฮไลต์ปากกาเมจิก", cat: "decor", width: 0.32, x: 0.5, y: 0.62, anim: "none" },
+  { file: "st-brush.png", label: "แถบพู่กัน", cat: "decor", width: 0.32, x: 0.5, y: 0.62, anim: "none" },
+  { file: "st-doodle.png", label: "เส้นหยักลายมือ", cat: "decor", width: 0.3, x: 0.5, y: 0.66 },
+  { file: "st-dots.png", label: "จุดไข่ปลา", cat: "decor", width: 0.26, x: 0.5, y: 0.66 },
+  { file: "st-confetti.png", label: "คอนเฟตติ", cat: "decor", width: 0.7, x: 0.5, y: 0.32, anim: "rise" },
+  { file: "st-starburst.png", label: "ประกายแฉก", cat: "decor", width: 0.16, x: 0.74, y: 0.3, anim: "rise" },
+  { file: "st-sparkles3.png", label: "ประกายสามดวง", cat: "decor", width: 0.16, x: 0.72, y: 0.3 },
+  { file: "st-clip.png", label: "คลิปหนีบกระดาษ", cat: "decor", width: 0.05, x: 0.3, y: 0.14, anim: "none" },
+  { file: "st-pushpin.png", label: "หมุดปัก", cat: "decor", width: 0.06, x: 0.5, y: 0.16, anim: "rise" },
   // รีแอ็กชัน — มุมขวาล่าง ลอยขึ้นมา
   { file: "st-heart.png", label: "หัวใจ", cat: "react", width: 0.12, x: 0.8, y: 0.72, anim: "rise" },
   { file: "st-star.png", label: "ดาว", cat: "react", width: 0.12, x: 0.8, y: 0.72, anim: "rise" },
@@ -135,6 +181,8 @@ export const STICKER_LIST: StickerDef[] = [
   { file: "st-share.png", label: "แชร์", cat: "social", width: 0.11, x: 0.24, y: 0.7, anim: "rise" },
   { file: "st-bell.png", label: "กระดิ่งเตือน", cat: "social", width: 0.1, x: 0.72, y: 0.8, anim: "rise" },
   { file: "st-hashtag.png", label: "แฮชแท็ก", cat: "social", width: 0.1, x: 0.86, y: 0.8 },
+  { file: "st-views.png", label: "ยอดวิว", cat: "social", width: 0.12, x: 0.24, y: 0.7, anim: "rise" },
+  { file: "st-save.png", label: "บันทึกไว้ดูทีหลัง", cat: "social", width: 0.08, x: 0.24, y: 0.7, anim: "rise" },
   // เดินทาง
   { file: "st-pin.png", label: "หมุดแผนที่", cat: "travel", width: 0.08, x: 0.5, y: 0.42, anim: "rise" },
   { file: "st-compass.png", label: "เข็มทิศ", cat: "travel", width: 0.12, x: 0.13, y: 0.2 },
@@ -174,8 +222,34 @@ export const STICKER_LIST: StickerDef[] = [
   { file: "st-noodle.png", label: "ชามก๋วยเตี๋ยว", cat: "travel", width: 0.13, x: 0.13, y: 0.2 },
   { file: "st-drink.png", label: "เครื่องดื่ม", cat: "travel", width: 0.08, x: 0.13, y: 0.2 },
   { file: "st-snorkel.png", label: "หน้ากากดำน้ำ", cat: "travel", width: 0.13, x: 0.13, y: 0.2 },
+  { file: "st-waterfall.png", label: "น้ำตก", cat: "travel", width: 0.11, x: 0.13, y: 0.2 },
+  { file: "st-forest.png", label: "ป่าสน", cat: "travel", width: 0.16, x: 0.13, y: 0.2 },
+  { file: "st-bridge.png", label: "สะพานแขวน", cat: "travel", width: 0.2, x: 0.15, y: 0.2 },
+  { file: "st-hammock.png", label: "เปลญวน", cat: "travel", width: 0.18, x: 0.15, y: 0.2 },
+  { file: "st-lantern.png", label: "ตะเกียง", cat: "travel", width: 0.08, x: 0.13, y: 0.22 },
+  { file: "st-headlamp.png", label: "ไฟฉายคาดหัว", cat: "travel", width: 0.13, x: 0.13, y: 0.2 },
+  { file: "st-firstaid.png", label: "ชุดปฐมพยาบาล", cat: "travel", width: 0.12, x: 0.13, y: 0.2 },
+  { file: "st-altitude.png", label: "ป้ายระดับความสูง", cat: "travel", width: 0.16, x: 0.15, y: 0.24, anim: "rise" },
+  { file: "st-island.png", label: "เกาะ", cat: "travel", width: 0.16, x: 0.13, y: 0.2 },
+  { file: "st-sleepbag.png", label: "ถุงนอน", cat: "travel", width: 0.16, x: 0.15, y: 0.2 },
+  { file: "st-elephant.png", label: "ช้าง", cat: "travel", width: 0.18, x: 0.7, y: 0.74, anim: "slide" },
+  { file: "st-tuktuk.png", label: "ตุ๊กตุ๊ก", cat: "travel", width: 0.18, x: 0.7, y: 0.76, anim: "slide" },
+  // อาหาร / คาเฟ่ — สาย vlog กิน-เที่ยว
+  food("st-fd-rice.png", "ข้าวจานเดียว", 0.13),
+  food("st-fd-somtam.png", "ส้มตำ (ครกไม้)", 0.11),
+  food("st-fd-grill.png", "ปิ้งย่าง", 0.14),
+  food("st-fd-cake.png", "เค้ก", 0.12),
+  food("st-fd-bread.png", "ครัวซองต์", 0.13),
+  food("st-fd-fruit.png", "ผลไม้", 0.09),
+  food("st-fd-icecream.png", "ไอศกรีม", 0.09),
+  food("st-fd-beer.png", "เบียร์", 0.1),
+  food("st-fd-tea.png", "ชาเย็น", 0.08),
+  food("st-fd-chopsticks.png", "ตะเกียบ", 0.13),
+  food("st-fd-spicy.png", "เผ็ด", 0.08),
+  { file: "st-fd-yummy.png", label: "ป้าย อร่อย!", cat: "food", width: 0.2, x: 0.8, y: 0.13, anim: "slide" },
   // ตัวเลข — นับสเต็ป/อันดับ มุมซ้ายบน
   num(1), num(2), num(3), num(4), num(5),
+  num(6), num(7), num(8), num(9), num(10),
   // อากาศ / เวลา — ป้ายเล็กมุมซ้ายบน คู่กับข้อความบอกที่/เวลา
   { file: "st-sun.png", label: "แดด", cat: "weather", width: 0.1, x: 0.13, y: 0.18 },
   { file: "st-cloud.png", label: "เมฆ", cat: "weather", width: 0.12, x: 0.13, y: 0.18 },
@@ -193,6 +267,11 @@ export const STICKER_LIST: StickerDef[] = [
   { file: "st-hourglass.png", label: "นาฬิกาทราย", cat: "weather", width: 0.07, x: 0.13, y: 0.2 },
   { file: "st-stopwatch.png", label: "จับเวลา", cat: "weather", width: 0.09, x: 0.13, y: 0.2 },
   { file: "st-calendar.png", label: "ปฏิทิน", cat: "weather", width: 0.11, x: 0.13, y: 0.2 },
+  { file: "st-sunrise.png", label: "พระอาทิตย์ขึ้น", cat: "weather", width: 0.13, x: 0.13, y: 0.18 },
+  { file: "st-night-stars.png", label: "ดาวเต็มฟ้า", cat: "weather", width: 0.12, x: 0.13, y: 0.18 },
+  { file: "st-drizzle.png", label: "ฝนปรอย", cat: "weather", width: 0.13, x: 0.13, y: 0.18 },
+  { file: "st-heat.png", label: "ร้อนจัด", cat: "weather", width: 0.11, x: 0.13, y: 0.18 },
+  { file: "st-cold.png", label: "หนาว (เกล็ดหิมะ)", cat: "weather", width: 0.1, x: 0.13, y: 0.18 },
 ];
 
 export const stickerUrl = (file: string) => `/stickers/${file}`;

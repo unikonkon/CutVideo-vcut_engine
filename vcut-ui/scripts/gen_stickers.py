@@ -1,4 +1,4 @@
-"""วาดสติกเกอร์ตัวอย่าง 134 แบบลง public/stickers/ — รันซ้ำได้ ผลลัพธ์เหมือนเดิมทุกครั้ง
+"""วาดสติกเกอร์ตัวอย่าง 200 แบบลง public/stickers/ — รันซ้ำได้ ผลลัพธ์เหมือนเดิมทุกครั้ง
 
     python3 scripts/gen_stickers.py
 
@@ -27,6 +27,12 @@ RED = (255, 59, 48, 255)
 INK = (18, 20, 24, 255)
 PLATE = (0, 0, 0, 150)
 CLEAR = (0, 0, 0, 0)
+# สีเสริมสำหรับชุดธรรมชาติ/อาหาร — คุมให้เข้มพอจะอ่านออกบนฟุตเทจสว่าง
+GREEN = (52, 199, 89, 255)
+SKY = (90, 178, 255, 255)
+BROWN = (150, 104, 66, 255)
+ORANGE = (255, 138, 32, 255)
+PINK = (255, 108, 168, 255)
 
 FONTS = [
     "/System/Library/Fonts/Supplemental/Arial Black.ttf",
@@ -34,6 +40,16 @@ FONTS = [
     "/System/Library/Fonts/Helvetica.ttc",
 ]
 FONT = next((f for f in FONTS if Path(f).exists()), None)
+
+# ฟอนต์ไทยสำหรับป้ายที่มีตัวอักษรไทย — วรรณยุกต์/สระบนต้องไม่โดนตัด ฟอนต์ละติน
+# วาดภาษาไทยไม่ได้เลย (ได้กล่องสี่เหลี่ยม) จึงต้องมีรายการแยก
+THAI_FONTS = [                      # (ไฟล์, หน้าฟอนต์ในไฟล์ .ttc) — เอาน้ำหนักหนา
+    ("/System/Library/Fonts/Supplemental/SukhumvitSet.ttc", 5),   # Bold
+    ("/System/Library/Fonts/Supplemental/Thonburi.ttc", 1),
+    ("/System/Library/Fonts/ThonburiUI.ttc", 1),
+    ("/System/Library/Fonts/Supplemental/Krungthep.ttf", 0),
+]
+THAI = next((f for f in THAI_FONTS if Path(f[0]).exists()), None)
 
 
 def ring_pts(cx, cy, r, n=180):
@@ -102,8 +118,10 @@ class Art:
             for x, y in (pts[0], pts[-1]):
                 self.circle(x, y, width / 2, fill=fill)
 
-    def text(self, xy, s, size, fill, anchor="mm", track=0):
-        f = ImageFont.truetype(FONT, int(size * SS))
+    def text(self, xy, s, size, fill, anchor="mm", track=0, font=None):
+        src = font or FONT
+        path, idx = src if isinstance(src, tuple) else (src, 0)
+        f = ImageFont.truetype(path, int(size * SS), index=idx)
         if not track:
             self.d.text((xy[0] * SS, xy[1] * SS), s, font=f, fill=fill, anchor=anchor)
             return
@@ -488,7 +506,8 @@ def st_num(n):
     a = Art(384, 384)
     a.circle(192, 192, 176, fill=YEL)
     a.circle(192, 192, 176, outline=WHITE, width=16)
-    a.text((192, 196), str(n), 216, INK)
+    # เลขสองหลักต้องเล็กลง ไม่งั้นล้นออกนอกวงกลม
+    a.text((192, 196), str(n), 216 if n < 10 else 150, INK)
     return a.save(f"st-no{n}.png")
 
 
@@ -1454,6 +1473,680 @@ def st_snorkel():
     return a.save("st-snorkel.png")
 
 
+
+# ── ป้ายไทย (ชุดเพิ่ม) ─────────────────────────────────────────────────────
+def th_pill(name, s, size=104, bg=YEL, fg=INK, pad=84):
+    """ป้ายเม็ดยาที่กว้างพอดีข้อความไทย — วัดความกว้างจริงก่อนตั้งขนาดผืน
+    ไม่งั้นคำยาว ('ห้ามพลาด') ล้นออกนอกป้าย ส่วนคำสั้น ('ใหม่') เหลือที่ว่างเป็นพืด"""
+    f = ImageFont.truetype(THAI[0], int(size * SS), index=THAI[1])
+    w = int(f.getlength(s) / SS + pad * 2)
+    a = Art(w, 256)
+    a.rrect((14, 14, w - 14, 242), 114, fill=bg)
+    a.text((w / 2, 132), s, size, fg, font=THAI)
+    return a.save(name)
+
+
+def st_th_new():
+    return th_pill("st-th-new.png", "ใหม่")
+
+
+def st_th_must():
+    return th_pill("st-th-must.png", "ห้ามพลาด", bg=RED, fg=WHITE)
+
+
+def st_th_tip():
+    return th_pill("st-th-tip.png", "เคล็ดลับ")
+
+
+def st_th_follow():
+    return th_pill("st-th-follow.png", "กดติดตาม", bg=RED, fg=WHITE)
+
+
+def st_th_ep():
+    """ตอนที่ 1 — ครึ่งซ้ายทึบเป็นหัวป้าย ครึ่งขวาขาวไว้ให้เลขเด่น"""
+    f = ImageFont.truetype(THAI[0], int(96 * SS), index=THAI[1])
+    tw = f.getlength("ตอนที่") / SS
+    split = tw + 120
+    # ขอบขวาของป้ายมนรัศมี 114 — เลขต้องอยู่ห่างขอบพอไม่ให้ตกเข้าไปในส่วนโค้ง
+    w = int(split + 236)
+    a = Art(w, 256)
+    a.rrect((14, 14, w - 14, 242), 114, fill=WHITE)
+    a.rrect((14, 14, split, 242), 114, fill=RED)
+    a.rect((split - 60, 14, split, 242), fill=RED)
+    a.text((split / 2 + 22, 132), "ตอนที่", 96, WHITE, font=THAI)
+    a.text((split + 112, 130), "1", 132, INK)
+    return a.save("st-th-ep.png")
+
+
+def st_vlog():
+    a = Art(700, 256)
+    a.rrect((14, 14, 686, 242), 44, fill=WHITE)
+    a.circle(112, 128, 34, fill=RED)
+    a.text((246, 112), "VLOG", 116, INK, anchor="lm", track=6)
+    a.rrect((246, 186, 620, 208), 11, fill=YEL)
+    return a.save("st-vlog.png")
+
+
+# ── โซเชียล (ชุดเพิ่ม) ─────────────────────────────────────────────────────
+def st_views():
+    a = Art(576, 384)
+    a.poly(bez((44, 192), (168, 62), (408, 62), (532, 192))
+           + bez((532, 192), (408, 322), (168, 322), (44, 192)), fill=WHITE)
+    a.circle(288, 192, 92, fill=INK)
+    a.circle(288, 192, 44, fill=WHITE)
+    a.circle(322, 156, 20, fill=WHITE)
+    return a.save("st-views.png")
+
+
+def st_save():
+    a = Art(384, 512)
+    a.poly([(56, 34), (328, 34), (328, 478), (192, 356), (56, 478)], fill=YEL)
+    a.poly([(96, 74), (288, 74), (288, 400), (192, 312), (96, 400)], fill=INK)
+    a.line([(192, 140), (192, 244)], YEL, 22)
+    a.line([(140, 192), (244, 192)], YEL, 22)
+    return a.save("st-save.png")
+
+
+# ── กรอบ (ชุดเพิ่ม) ────────────────────────────────────────────────────────
+def st_caption_box():
+    """แผ่นรองคำบรรยาย — โปร่งพอให้เห็นภาพหลัง แต่ทึบพอให้ตัวหนังสือขาวอ่านออก"""
+    a = Art(1280, 256)
+    a.rrect((24, 24, 1256, 232), 28, fill=(0, 0, 0, 168))
+    a.rrect((24, 24, 1256, 232), 28, outline=(255, 255, 255, 60), width=3)
+    a.rrect((56, 60, 74, 196), 9, fill=YEL)
+    return a.save("st-caption-box.png")
+
+
+def st_vignette():
+    """ขอบมืดรอบเฟรม — ดึงสายตาเข้ากลางภาพ ใช้ทับเต็มจอ (width=1)
+
+    ไม่ใช้เงาตอนเซฟ เพราะชิ้นนี้ *คือ* เงา — ใส่เงาซ้ำจะได้ขอบเข้มเป็นวง"""
+    w, h = 960, 540
+    a = Art(w, h)
+    a.rect((0, 0, w, h), fill=(0, 0, 0, 255))
+    hole = Image.new("L", a.im.size, 255)
+    ImageDraw.Draw(hole).ellipse(
+        [-0.12 * w * SS, -0.20 * h * SS, 1.12 * w * SS, 1.20 * h * SS], fill=0)
+    hole = hole.filter(ImageFilter.GaussianBlur(52 * SS))
+    a.im.putalpha(hole.point(lambda v: int(v * 0.70)))
+    return a.save("st-vignette.png", shadow=False)
+
+
+# ── อากาศ / เวลา (ชุดเพิ่ม) ────────────────────────────────────────────────
+def st_sunrise():
+    a = Art(576, 448)
+    for i in range(7):
+        ang = math.radians(180 + 22.5 * i)
+        a.line([(288 + 132 * math.cos(ang), 300 + 132 * math.sin(ang)),
+                (288 + 186 * math.cos(ang), 300 + 186 * math.sin(ang))], YEL, 20)
+    a.pie((172, 184, 404, 416), 180, 360, fill=YEL)
+    a.line([(56, 302), (520, 302)], WHITE, 22)
+    a.line([(196, 372), (380, 372)], WHITE, 18)
+    return a.save("st-sunrise.png")
+
+
+def st_night_stars():
+    a = Art(512, 448)
+    a.pie((96, 40, 352, 296), 40, 320, fill=YEL)
+    a.circle(268, 152, 100, fill=CLEAR)
+    a.circle(236, 140, 104, fill=(0, 0, 0, 0))
+    a.star(404, 96, 44, fill=WHITE)
+    a.star(438, 236, 30, fill=WHITE)
+    a.sparkle(120, 344, 34)
+    a.star(300, 372, 26, fill=WHITE)
+    return a.save("st-night-stars.png")
+
+
+def st_drizzle():
+    a = Art(576, 448)
+    a.cloud(288, 156, 420)
+    for x, y in ((176, 320), (250, 356), (326, 320), (400, 356)):
+        a.drop(x, y, 62, fill=SKY)
+    return a.save("st-drizzle.png")
+
+
+def st_heat():
+    a = Art(512, 448)
+    a.circle(256, 176, 108, fill=YEL)
+    for i in range(8):
+        ang = math.radians(i * 45)
+        a.line([(256 + 130 * math.cos(ang), 176 + 130 * math.sin(ang)),
+                (256 + 176 * math.cos(ang), 176 + 176 * math.sin(ang))], YEL, 18)
+    for x in (150, 256, 362):
+        a.line(bez((x, 336), (x + 42, 364), (x - 42, 392), (x, 420)), RED, 16)
+    return a.save("st-heat.png")
+
+
+def st_cold():
+    """เกล็ดหิมะ — แขนหกก้าน กิ่งรูปตัว V ชี้ออกที่ปลายและกลางแขน"""
+    a = Art(448, 448)
+    cx = cy = 224
+    for i in range(6):
+        ang = math.radians(i * 60)
+        a.line([(cx, cy), (cx + 172 * math.cos(ang), cy + 172 * math.sin(ang))],
+               SKY, 22)
+        for f, blen in ((0.98, 56), (0.60, 42)):
+            bx, by = cx + 172 * f * math.cos(ang), cy + 172 * f * math.sin(ang)
+            for s in (-1, 1):
+                b = ang + s * math.radians(40)
+                a.line([(bx, by), (bx + blen * math.cos(b), by + blen * math.sin(b))],
+                       SKY, 14)
+    a.circle(cx, cy, 32, fill=WHITE)
+    return a.save("st-cold.png")
+
+
+# ── เดินทาง (ชุดเพิ่ม) ─────────────────────────────────────────────────────
+ROCK = (112, 124, 142, 255)
+
+
+def st_waterfall():
+    a = Art(448, 576)
+    a.rrect((30, 52, 150, 462), 22, fill=ROCK)
+    a.rrect((298, 52, 418, 462), 22, fill=ROCK)
+    for x in (182, 224, 266):
+        a.line([(x, 84), (x, 432)], WHITE, 26)
+    a.oval(224, 494, 176, 46, fill=WHITE)
+    a.oval(224, 492, 116, 26, fill=SKY)
+    return a.save("st-waterfall.png")
+
+
+def st_forest():
+    """ป่าสน — ต้นสนสามต้นเรียงลึก ต้นกลางสูงสุดเพื่อให้ทรงรวมเป็นสามเหลี่ยม"""
+    a = Art(640, 512)
+    def pine(cx, base, h, w, col):
+        for k, f in enumerate((0.58, 0.78, 1.0)):
+            top = base - h * (1 - 0.30 * k)
+            a.poly([(cx, top), (cx - w * f / 2, top + h * 0.42),
+                    (cx + w * f / 2, top + h * 0.42)], fill=col)
+        a.rrect((cx - 14, base - 8, cx + 14, base + 44), 8, fill=BROWN)
+    pine(140, 448, 300, 190, (36, 148, 78, 255))
+    pine(500, 448, 300, 190, (36, 148, 78, 255))
+    pine(320, 462, 400, 250, GREEN)
+    return a.save("st-forest.png")
+
+
+def st_bridge():
+    a = Art(704, 448)
+    a.rrect((44, 96, 74, 384), 10, fill=WHITE)
+    a.rrect((630, 96, 660, 384), 10, fill=WHITE)
+    deck = bez((30, 268), (220, 372), (484, 372), (674, 268))
+    a.line(deck, WHITE, 22)
+    top = bez((58, 110), (240, 300), (464, 300), (646, 110))
+    a.line(top, YEL, 16)
+    for i in range(1, 10):
+        t = i / 10
+        x = 58 + (646 - 58) * t
+        y0 = top[min(int(t * len(top)), len(top) - 1)][1]
+        y1 = deck[min(int(t * len(deck)), len(deck) - 1)][1]
+        a.line([(x, y0), (x, y1)], YEL, 8)
+    return a.save("st-bridge.png")
+
+
+def st_hammock():
+    a = Art(704, 448)
+    a.rrect((62, 120, 92, 402), 12, fill=BROWN)
+    a.rrect((612, 120, 642, 402), 12, fill=BROWN)
+    curve = bez((88, 168), (200, 396), (504, 396), (616, 168))
+    a.line(curve, WHITE, 26)
+    for i in range(1, 12):
+        p = curve[int(i * len(curve) / 12)]
+        a.line([(p[0], p[1]), (p[0], p[1] - 46)], WHITE, 9)
+    a.line([(88, 168), (616, 168)], WHITE, 10)
+    return a.save("st-hammock.png")
+
+
+def st_lantern():
+    a = Art(384, 576)
+    a.arc((136, 32, 248, 144), 180, 360, WHITE, 16)
+    a.rrect((150, 118, 234, 158), 14, fill=WHITE)
+    a.poly([(96, 176), (288, 176), (306, 210), (78, 210)], fill=WHITE)
+    a.rrect((92, 206, 292, 452), 34, fill=YEL)
+    a.rrect((124, 244, 260, 414), 22, fill=WHITE)
+    a.poly([(78, 448), (306, 448), (288, 496), (96, 496)], fill=WHITE)
+    return a.save("st-lantern.png")
+
+
+def st_headlamp():
+    """ไฟฉายคาดหัว — สายรัดเปิดทางขวา โคมไฟอยู่หน้าสุด ลำแสงพุ่งออกนอกกรอบ"""
+    a = Art(640, 448)
+    a.arc((126, 72, 446, 392), 148, 392, (226, 232, 242, 255), 34)
+    a.rrect((386, 158, 502, 290), 28, fill=INK)
+    a.circle(502, 224, 54, fill=YEL)
+    a.circle(502, 224, 24, fill=WHITE)
+    a.poly([(550, 152), (630, 88), (630, 360), (550, 296)],
+           fill=(255, 212, 0, 115))
+    return a.save("st-headlamp.png")
+
+
+def st_firstaid():
+    a = Art(576, 448)
+    a.rrect((44, 96, 532, 412), 40, fill=WHITE)
+    a.rrect((222, 44, 354, 104), 18, fill=WHITE)
+    a.rrect((44, 214, 532, 254), 0, fill=(228, 232, 240, 255))
+    a.rrect((252, 168, 324, 340), 14, fill=RED)
+    a.rrect((202, 218, 374, 290), 14, fill=RED)
+    return a.save("st-firstaid.png")
+
+
+def st_altitude():
+    a = Art(576, 512)
+    a.poly([(58, 400), (232, 148), (330, 288), (382, 220), (532, 400)], fill=WHITE)
+    a.poly([(184, 216), (232, 148), (282, 218), (236, 244), (210, 222)], fill=(228, 236, 248, 255))
+    arr = [(300, 470), (300, 356)]
+    a.line(arr, YEL, 20)
+    a.head(arr, 76, YEL)
+    a.rrect((66, 436, 510, 500), 20, fill=YEL)
+    a.text((288, 466), "1000 m", 44, INK, track=3)
+    return a.save("st-altitude.png")
+
+
+def st_island():
+    a = Art(640, 448)
+    a.oval(320, 336, 268, 62, fill=(246, 226, 168, 255))
+    a.oval(320, 386, 300, 46, fill=SKY)
+    a.rrect((300, 154, 330, 320), 12, fill=BROWN)
+    for d in (-1, 1):
+        for k, (rx, ry) in enumerate(((104, 34), (86, 30), (64, 26))):
+            a.oval(315 + d * (rx * 0.72), 150 + k * 30 - 6, rx, ry,
+                   deg=d * (16 + k * 14), fill=GREEN)
+    a.circle(316, 140, 22, fill=BROWN)
+    return a.save("st-island.png")
+
+
+def st_tuktuk():
+    a = Art(704, 512)
+    a.rrect((116, 92, 588, 168), 26, fill=YEL)          # หลังคา
+    a.line([(150, 160), (150, 300)], YEL, 18)
+    a.line([(556, 160), (556, 300)], YEL, 18)
+    a.rrect((196, 214, 592, 380), 40, fill=RED)          # ตัวถัง
+    a.rrect((232, 240, 402, 344), 20, fill=WHITE)        # ช่องผู้โดยสาร
+    a.poly([(196, 300), (152, 300), (128, 372), (196, 372)], fill=RED)
+    a.circle(160, 250, 40, fill=WHITE)                   # ไฟหน้า
+    a.circle(196, 404, 68, fill=INK)
+    a.circle(196, 404, 30, fill=WHITE)
+    a.circle(516, 404, 68, fill=INK)
+    a.circle(516, 404, 30, fill=WHITE)
+    return a.save("st-tuktuk.png")
+
+
+def st_elephant():
+    a = Art(704, 512)
+    a.oval(392, 274, 196, 152, fill=(158, 166, 182, 255))          # ลำตัว
+    a.circle(196, 244, 128, fill=(178, 186, 202, 255))             # หัว
+    a.oval(258, 226, 84, 96, deg=-12, fill=(140, 148, 166, 255))   # ใบหู
+    trunk = bez((132, 300), (86, 396), (150, 452), (216, 420))
+    a.line(trunk, (178, 186, 202, 255), 46)
+    a.poly([(170, 344), (214, 336), (196, 386)], fill=WHITE)       # งา
+    a.circle(168, 216, 17, fill=INK)
+    for x in (298, 386, 462, 540):
+        a.rrect((x - 34, 380, x + 34, 470), 22, fill=(158, 166, 182, 255))
+    a.line([(586, 262), (612, 356)], (158, 166, 182, 255), 18)
+    return a.save("st-elephant.png")
+
+
+def st_sleepbag():
+    """ถุงนอนทรงมัมมี่ นอนตะแคง หัวโผล่ทางซ้าย — ซิปยาวตลอดตัวบอกว่าเป็นถุงนอน
+    ไม่ใช่หมอนข้าง"""
+    a = Art(704, 384)
+    a.rrect((44, 98, 664, 320), 110, fill=(38, 118, 206, 255))
+    a.rrect((44, 98, 320, 320), 110, fill=(74, 156, 238, 255))     # ฮู้ด
+    a.circle(178, 210, 72, fill=(255, 226, 186, 255))              # หน้า
+    a.circle(156, 194, 11, fill=INK)
+    a.circle(204, 194, 11, fill=INK)
+    a.arc((158, 204, 210, 256), 20, 160, INK, 10)
+    a.line([(348, 148), (630, 148)], WHITE, 14)                    # ซิป
+    for x in range(360, 626, 30):
+        a.line([(x, 134), (x, 162)], WHITE, 8)
+    a.rrect((596, 250, 656, 292), 16, fill=WHITE)                  # ปลายถุงพับ
+    return a.save("st-sleepbag.png")
+
+
+# ── อาหาร / คาเฟ่ ──────────────────────────────────────────────────────────
+def st_fd_rice():
+    """ข้าวจานเดียว — จานสีเทาอมฟ้า ข้าวขาวล้วน ไม่งั้นข้าวจมหายไปกับจาน"""
+    a = Art(576, 448)
+    a.oval(288, 320, 250, 92, fill=(196, 208, 226, 255))
+    a.oval(288, 306, 202, 66, fill=(228, 236, 248, 255))
+    a.pie((178, 152, 398, 324), 180, 360, fill=WHITE)     # ข้าวพูน
+    a.oval(288, 310, 110, 24, fill=WHITE)
+    a.oval(374, 254, 78, 54, fill=WHITE)                  # ไข่ดาว
+    a.circle(376, 254, 30, fill=YEL)
+    a.poly([(198, 222), (244, 196), (236, 244)], fill=GREEN)
+    return a.save("st-fd-rice.png")
+
+
+def st_fd_somtam():
+    """ครกส้มตำ — ครกดินสีน้ำตาล ไม่ใช่ถังขาว ไม่งั้นอ่านเป็นถังน้ำแข็ง"""
+    a = Art(512, 512)
+    clay = (178, 122, 80, 255)
+    a.poly([(118, 210), (394, 210), (348, 442), (164, 442)], fill=clay)
+    a.oval(256, 210, 140, 40, fill=(208, 152, 106, 255))
+    a.oval(256, 206, 108, 28, fill=(198, 62, 46, 255))    # ส้มตำในครก
+    a.rrect((316, 70, 356, 300), 20, fill=BROWN)          # สาก
+    a.circle(336, 74, 34, fill=BROWN)
+    a.rrect((150, 434, 362, 470), 16, fill=(146, 98, 64, 255))
+    return a.save("st-fd-somtam.png")
+
+
+def st_fd_grill():
+    a = Art(576, 384)
+    a.line([(40, 268), (536, 152)], (206, 214, 228, 255), 14)
+    for i, x in enumerate((160, 268, 376)):
+        y = 244 - i * 26
+        a.rrect((x - 62, y - 62, x + 62, y + 62), 30, fill=(168, 92, 56, 255))
+        a.line([(x - 40, y - 20), (x + 40, y - 30)], (206, 128, 82, 255), 10)
+        a.line([(x - 40, y + 22), (x + 40, y + 12)], (206, 128, 82, 255), 10)
+    return a.save("st-fd-grill.png")
+
+
+def st_fd_icecream():
+    a = Art(384, 576)
+    a.circle(192, 168, 96, fill=PINK)
+    a.circle(126, 226, 76, fill=(255, 236, 186, 255))
+    a.circle(258, 226, 76, fill=(174, 226, 186, 255))
+    a.poly([(70, 268), (314, 268), (192, 546)], fill=(214, 158, 96, 255))
+    for i in range(-2, 3):
+        a.line([(192 + i * 46, 292), (192 + i * 22, 470)], (188, 132, 74, 255), 7)
+    a.heart(192, 96, 62, fill=RED)
+    return a.save("st-fd-icecream.png")
+
+
+def st_fd_cake():
+    a = Art(576, 448)
+    a.poly([(96, 388), (480, 388), (480, 196), (96, 196)], fill=(255, 236, 206, 255))
+    a.rect((96, 244, 480, 288), fill=(196, 116, 72, 255))
+    a.poly([(96, 196), (480, 196), (480, 152), (96, 152)], fill=WHITE)
+    a.arc((96, 118, 480, 190), 180, 360, WHITE, 26)
+    a.circle(288, 118, 34, fill=RED)
+    a.rrect((88, 384, 488, 412), 14, fill=(226, 232, 242, 255))
+    return a.save("st-fd-cake.png")
+
+
+def st_fd_bread():
+    a = Art(576, 384)
+    a.oval(288, 214, 208, 96, fill=(226, 162, 82, 255))
+    for d in (-1, 1):
+        a.oval(288 + d * 168, 226, 74, 56, deg=d * 26, fill=(214, 148, 70, 255))
+    for x in (-92, 0, 92):
+        a.oval(288 + x, 200, 44, 78, deg=x * 0.10, fill=(244, 190, 112, 255))
+    return a.save("st-fd-bread.png")
+
+
+def st_fd_fruit():
+    a = Art(448, 512)
+    a.oval(224, 300, 152, 176, deg=-8, fill=(255, 186, 46, 255))
+    a.oval(268, 236, 62, 74, deg=-24, fill=(255, 214, 110, 255))
+    a.rrect((214, 122, 238, 168), 10, fill=BROWN)
+    a.oval(292, 128, 74, 34, deg=-24, fill=GREEN)
+    return a.save("st-fd-fruit.png")
+
+
+def st_fd_beer():
+    a = Art(512, 576)
+    a.rrect((96, 172, 340, 520), 30, fill=(255, 196, 62, 255))
+    a.rrect((132, 220, 214, 470), 20, fill=(255, 224, 140, 255))
+    a.arc((316, 232, 460, 400), 270, 90, (226, 232, 242, 255), 32)
+    a.circle(150, 150, 62, fill=WHITE)
+    a.circle(228, 130, 74, fill=WHITE)
+    a.circle(304, 154, 58, fill=WHITE)
+    a.rrect((90, 152, 346, 210), 28, fill=WHITE)
+    return a.save("st-fd-beer.png")
+
+
+def st_fd_tea():
+    a = Art(384, 576)
+    a.poly([(88, 168), (296, 168), (264, 520), (120, 520)], fill=(226, 234, 246, 255))
+    a.poly([(104, 250), (280, 250), (258, 500), (126, 500)], fill=(186, 122, 66, 255))
+    a.rrect((178, 250, 244, 306), 8, fill=(226, 234, 246, 255))
+    a.line([(238, 60), (206, 200)], PINK, 18)
+    a.oval(192, 250, 96, 22, fill=(228, 200, 168, 255))
+    return a.save("st-fd-tea.png")
+
+
+def st_fd_chopsticks():
+    a = Art(576, 448)
+    a.poly([(500, 40), (540, 58), (120, 402), (96, 372)], fill=(226, 178, 112, 255))
+    a.poly([(544, 116), (572, 152), (156, 424), (136, 392)], fill=(226, 178, 112, 255))
+    a.oval(150, 398, 78, 40, deg=-38, fill=WHITE)
+    a.line([(452, 88), (492, 106)], (188, 138, 78, 255), 10)
+    return a.save("st-fd-chopsticks.png")
+
+
+def st_fd_spicy():
+    a = Art(448, 512)
+    body = bez((262, 152), (400, 214), (352, 452), (176, 446))
+    back = bez((176, 446), (60, 420), (110, 210), (262, 152))
+    a.poly(body + back, fill=RED)
+    a.line(bez((262, 150), (250, 96), (204, 74), (150, 84)), GREEN, 22)
+    a.circle(150, 84, 26, fill=GREEN)
+    a.line(bez((238, 200), (300, 252), (286, 356), (216, 402)), (255, 138, 128, 255), 14)
+    return a.save("st-fd-spicy.png")
+
+
+def st_fd_yummy():
+    f = ImageFont.truetype(THAI[0], int(104 * SS), index=THAI[1])
+    w = int(f.getlength("อร่อย!") / SS + 260)
+    a = Art(w, 256)
+    a.rrect((14, 14, w - 14, 242), 114, fill=YEL)
+    a.star(122, 128, 56, fill=RED)
+    a.text((w / 2 + 56, 132), "อร่อย!", 104, INK, font=THAI)
+    return a.save("st-fd-yummy.png")
+
+
+# ── บับเบิลคำพูด / ป้ายคำ ─────────────────────────────────────────────────
+def bubble(w, h, fill=WHITE, tail=(0.30, 1.0)):
+    """กล่องคำพูดพร้อมหางชี้ลงซ้าย — คืนผืนที่ยังว่าง ให้ผู้เรียกไปเติมข้อความเอง"""
+    a = Art(w, h)
+    body = h - h * 0.22
+    a.rrect((16, 16, w - 16, body), min(w, body) * 0.28, fill=fill)
+    tx = w * tail[0]
+    a.poly([(tx - h * 0.11, body - 12), (tx + h * 0.13, body - 12),
+            (tx - h * 0.02, h - 14)], fill=fill)
+    return a, body
+
+
+def st_bub_round():
+    a = Art(576, 448)
+    a.ellipse((20, 20, 556, 348), fill=WHITE)
+    a.poly([(180, 320), (286, 320), (150, 434)], fill=WHITE)
+    return a.save("st-bub-round.png")
+
+
+def st_bub_rect():
+    a, _ = bubble(640, 384)
+    return a.save("st-bub-rect.png")
+
+
+def st_bub_dark():
+    a, _ = bubble(640, 384, fill=(16, 18, 24, 235))
+    return a.save("st-bub-dark.png")
+
+
+def st_bub_think():
+    a = Art(576, 512)
+    a.circle(300, 178, 148, fill=WHITE)
+    a.circle(154, 218, 96, fill=WHITE)
+    a.circle(432, 224, 90, fill=WHITE)
+    a.circle(196, 356, 52, fill=WHITE)
+    a.circle(126, 428, 34, fill=WHITE)
+    a.circle(74, 476, 22, fill=WHITE)
+    return a.save("st-bub-think.png")
+
+
+def st_bub_shout():
+    a = Art(640, 512)
+    pts = []
+    for i in range(24):
+        ang = math.radians(i * 15)
+        r = 1.0 if i % 2 == 0 else 0.76
+        pts.append((320 + 296 * r * math.cos(ang), 232 + 208 * r * math.sin(ang)))
+    a.poly(pts, fill=YEL)
+    a.poly([(212, 388), (312, 388), (180, 496)], fill=YEL)
+    return a.save("st-bub-shout.png")
+
+
+def th_bubble(name, s, fill=WHITE, fg=INK, size=96):
+    f = ImageFont.truetype(THAI[0], int(size * SS), index=THAI[1])
+    w = int(f.getlength(s) / SS + 150)
+    a, body = bubble(w, 300, fill=fill)
+    a.text((w / 2, body / 2 + 6), s, size, fg, font=THAI)
+    return a.save(name)
+
+
+def st_bub_wow():
+    return th_bubble("st-bub-wow.png", "ว้าว!", fill=YEL)
+
+
+def st_bub_best():
+    return th_bubble("st-bub-best.png", "สุดยอด")
+
+
+def st_bub_real():
+    return th_bubble("st-bub-real.png", "จริงดิ?")
+
+
+def st_bub_go():
+    return th_bubble("st-bub-go.png", "ไปกันเลย", fill=RED, fg=WHITE)
+
+
+def st_bub_omg():
+    a, body = bubble(560, 300, fill=WHITE)
+    a.text((280, body / 2 + 4), "OMG!", 104, RED, track=4)
+    return a.save("st-bub-omg.png")
+
+
+# ── ตกแต่ง / ลายมือ ────────────────────────────────────────────────────────
+def st_tape():
+    """เทปกาววอชิ — ขอบซ้ายขวาเป็นฟันปลาเหมือนตอนฉีกมือ"""
+    a = Art(640, 224)
+    a.poly([(30, 60), (610, 40), (610, 178), (30, 198)], fill=(255, 226, 128, 210))
+    for x in (30, 610):
+        for i in range(7):
+            y = 56 + i * 22
+            a.poly([(x, y), (x + (14 if x < 100 else -14), y + 11), (x, y + 22)],
+                   fill=CLEAR)
+    a.line([(96, 78), (556, 62)], (255, 246, 200, 140), 10)
+    return a.save("st-tape.png")
+
+
+def st_note():
+    a = Art(512, 512)
+    a.poly([(28, 28), (484, 28), (484, 384), (368, 484), (28, 484)], fill=YEL)
+    a.poly([(484, 384), (368, 484), (368, 384)], fill=(214, 176, 0, 255))
+    for i in range(4):
+        a.line([(88, 138 + i * 74), (420 - i * 22, 138 + i * 74)],
+               (218, 180, 12, 255), 12)
+    return a.save("st-note.png")
+
+
+def st_confetti():
+    a = Art(640, 448)
+    bits = [(64, 96, 24, ORANGE), (168, 52, -36, YEL), (280, 128, 12, RED),
+            (392, 64, 44, GREEN), (500, 116, -20, SKY), (592, 56, 30, PINK),
+            (104, 250, -14, YEL), (232, 306, 38, SKY), (356, 244, -42, PINK),
+            (468, 312, 18, ORANGE), (576, 258, -28, GREEN), (150, 402, 22, RED),
+            (302, 396, -34, YEL), (452, 414, 16, SKY)]
+    for x, y, deg, col in bits:
+        a.poly(rot_pts([(x - 20, y - 9), (x + 20, y - 9),
+                        (x + 20, y + 9), (x - 20, y + 9)], x, y, deg), fill=col)
+    for x, y in ((214, 176), (404, 178), (330, 340), (94, 340)):
+        a.circle(x, y, 11, fill=WHITE)
+    return a.save("st-confetti.png")
+
+
+def st_starburst():
+    a = Art(512, 512)
+    for i in range(12):
+        ang = math.radians(i * 30)
+        r0, r1 = (118, 236) if i % 2 == 0 else (118, 186)
+        a.line([(256 + r0 * math.cos(ang), 256 + r0 * math.sin(ang)),
+                (256 + r1 * math.cos(ang), 256 + r1 * math.sin(ang))], YEL, 22)
+    a.circle(256, 256, 96, fill=YEL)
+    a.circle(256, 256, 62, fill=WHITE)
+    return a.save("st-starburst.png")
+
+
+def st_doodle():
+    """เส้นหยักลายมือ — ขีดใต้คำที่อยากเน้น (วางใต้ข้อความแล้วยืดให้พอดี)"""
+    a = Art(768, 192)
+    pts = []
+    for i in range(97):
+        t = i / 96
+        pts.append((40 + t * 688, 108 + 30 * math.sin(t * math.pi * 3.2)
+                    - 22 * t + 8 * math.sin(t * 19)))
+    a.line(pts, YEL, 20)
+    return a.save("st-doodle.png")
+
+
+def st_dots():
+    a = Art(768, 128)
+    for i in range(11):
+        r = 22 if i % 2 == 0 else 13
+        a.circle(56 + i * 66, 64, r, fill=WHITE)
+    return a.save("st-dots.png")
+
+
+def st_highlight():
+    """ไฮไลต์ปากกาเมจิก — ปลายเส้นไม่เท่ากันเหมือนลากมือ ทับใต้ข้อความได้เลย"""
+    a = Art(768, 192)
+    a.poly([(28, 58), (742, 40), (748, 148), (34, 160)],
+           fill=(255, 212, 0, 176))
+    a.poly([(28, 58), (120, 46), (116, 156), (34, 160)],
+           fill=(255, 224, 74, 150))
+    return a.save("st-highlight.png")
+
+
+def st_brush():
+    a = Art(768, 224)
+    top = bez((36, 76), (240, 34), (520, 52), (736, 66))
+    bot = bez((736, 158), (520, 178), (240, 190), (36, 148))
+    a.poly(top + bot, fill=RED)
+    a.poly([(736, 66), (760, 96), (752, 140), (736, 158)], fill=RED)
+    return a.save("st-brush.png")
+
+
+def st_torn():
+    """กระดาษฉีก — แผ่นรองข้อความสไตล์สมุดเดินทาง ขอบล่างขาดเป็นฟันปลา"""
+    a = Art(768, 288)
+    edge = [(24, 236)]
+    for i in range(1, 25):
+        edge.append((24 + i * 30, 236 + (18 if i % 2 else -12)))
+    a.poly([(24, 26), (744, 26)] + list(reversed(edge)), fill=(248, 244, 232, 255))
+    for i in range(3):
+        a.line([(88, 92 + i * 52), (660 - i * 90, 92 + i * 52)],
+               (206, 200, 184, 255), 12)
+    return a.save("st-torn.png")
+
+
+def st_clip():
+    a = Art(320, 576)
+    a.arc((52, 40, 268, 256), 180, 360, (206, 214, 228, 255), 26)
+    a.line([(52, 148), (52, 430)], (206, 214, 228, 255), 26)
+    a.line([(268, 148), (268, 386)], (206, 214, 228, 255), 26)
+    a.arc((52, 344, 268, 472), 0, 180, (206, 214, 228, 255), 26)
+    a.arc((106, 96, 214, 204), 180, 360, WHITE, 22)
+    a.line([(106, 150), (106, 350)], WHITE, 22)
+    return a.save("st-clip.png")
+
+
+def st_pushpin():
+    a = Art(384, 512)
+    a.rrect((132, 40, 252, 116), 22, fill=(226, 232, 242, 255))
+    a.poly([(112, 116), (272, 116), (238, 300), (146, 300)], fill=RED)
+    a.poly([(112, 116), (176, 116), (156, 300), (146, 300)], fill=(255, 122, 112, 255))
+    a.rrect((172, 292, 212, 316), 8, fill=(180, 40, 32, 255))
+    a.poly([(184, 312), (200, 312), (192, 476)], fill=(206, 214, 228, 255))
+    return a.save("st-pushpin.png")
+
+
+def st_sparkles3():
+    a = Art(512, 448)
+    a.sparkle(180, 152, 132, fill=YEL)
+    a.sparkle(370, 268, 88, fill=WHITE)
+    a.sparkle(120, 340, 62, fill=WHITE)
+    return a.save("st-sparkles3.png")
+
+
 ALL = [
     st_new, st_live, st_4k, st_hot, st_ep,
     st_arrow_r, st_arrow_curve, st_pointer, st_ring, st_zigzag,
@@ -1479,14 +2172,32 @@ ALL = [
     st_em_smile, st_em_joy, st_em_love, st_em_cool, st_em_sad, st_em_cry,
     st_em_angry, st_em_sleep, st_em_think, st_em_wink, st_em_sweat,
     st_em_hungry, st_em_sick, st_em_dizzy, st_em_party,
-    *[(lambda n: lambda: st_num(n))(i) for i in range(1, 6)],
+    *[(lambda n: lambda: st_num(n))(i) for i in range(1, 11)],
     st_sun, st_cloud, st_rain, st_thermo, st_moon, st_clock,
     st_storm, st_snow, st_wind, st_fog, st_partly, st_rainbow, st_umbrella,
     st_hourglass, st_stopwatch, st_calendar,
+    # ── ชุดเพิ่มรอบสอง (เน้นสาย vlog ท่องเที่ยว) ──
+    st_th_new, st_th_must, st_th_tip, st_th_follow, st_th_ep, st_vlog,
+    st_views, st_save, st_caption_box, st_vignette,
+    st_sunrise, st_night_stars, st_drizzle, st_heat, st_cold,
+    st_waterfall, st_forest, st_bridge, st_hammock, st_lantern, st_headlamp,
+    st_firstaid, st_altitude, st_island, st_tuktuk, st_elephant, st_sleepbag,
+    st_fd_rice, st_fd_somtam, st_fd_grill, st_fd_icecream, st_fd_cake,
+    st_fd_bread, st_fd_fruit, st_fd_beer, st_fd_tea, st_fd_chopsticks,
+    st_fd_spicy, st_fd_yummy,
+    st_bub_round, st_bub_rect, st_bub_dark, st_bub_think, st_bub_shout,
+    st_bub_wow, st_bub_best, st_bub_real, st_bub_go, st_bub_omg,
+    st_tape, st_note, st_confetti, st_starburst, st_doodle, st_dots,
+    st_highlight, st_brush, st_torn, st_clip, st_pushpin, st_sparkles3,
 ]
 
 if __name__ == "__main__":
     if not FONT:
         raise SystemExit("ไม่พบฟอนต์ที่ใช้วาดตัวอักษร — แก้รายการ FONTS ก่อน")
+    if not THAI:
+        raise SystemExit("ไม่พบฟอนต์ไทย — แก้รายการ THAI_FONTS ก่อน")
     names = [f() for f in ALL]
+    dup = {n for n in names if names.count(n) > 1}
+    if dup:
+        raise SystemExit(f"ชื่อไฟล์ซ้ำ: {sorted(dup)}")
     print(f"เขียน {len(names)} ไฟล์ลง {OUT}")
