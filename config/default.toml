@@ -255,6 +255,16 @@ limiter_level_disabled = true
 #
 # ค่าที่ไม่ได้ตั้งในนี้จะตกไปใช้ของ [ai]
 [review]
+# งานที่ให้ AI ทำตอนดูหนังที่ตัดแล้ว — หน้าเว็บติ๊กเลือกรายรอบได้ ค่านี้คือค่าตั้งต้น
+#   cut      เอาช็อตออก / สลับที่      → edl.json   ไม่ต้อง render ใหม่
+#   trim     ตัดช่วงเงียบหัว-ท้ายช็อต   → edl.json   render เฉพาะชิ้นนั้น
+#   music    เลือกเพลงจากคลังมาวาง     → fx.json    (ขั้น 5 เท่านั้น)
+#   sfx      วางเสียงเอฟเฟกต์          → fx.json    สั่งจากหน้าเว็บเท่านั้น
+#   sticker  วางสติกเกอร์/ภาพซ้อน      → fx.json    สั่งจากหน้าเว็บเท่านั้น
+#   text     เขียนข้อความบนหนัง        → fx.json
+tasks     = ["cut"]
+trim_min  = 0.35         # ตัดได้น้อยกว่านี้ ไม่คุ้มเสนอ (วินาที)
+trim_keep = 1.20         # ตัดแล้วช็อตต้องเหลือยาวอย่างน้อยเท่านี้
 model     = "sonnet"
 timeout   = 1800
 max_ops   = 40           # เสนอได้ไม่เกินกี่รายการต่อครั้ง
@@ -307,6 +317,18 @@ sheet_rows = 5           # 25 ภาพ/แผ่น → 273 คลิปเห�
 # ปิด enabled เมื่อไหร่ ผลลัพธ์กลับไปเหมือน Phase 3 ทุกประการ
 [ai]
 enabled  = false
+# ── ใช้ AI เจ้าไหน ──────────────────────────────────────────────────────────
+# claude_cli  เรียก `claude -p` ในเครื่อง ใช้โควตาที่สมัครไว้ ไม่ต้องมี API key
+#             อ่านไฟล์ในเครื่องเองได้ จึงเห็น contact sheet ด้วย
+# gemini      ยิง HTTP ไป Generative Language API ด้วย API key — เร็วและถูกกว่า
+#             แต่เห็นเฉพาะข้อความ (ไม่มีเครื่องมืออ่านไฟล์) และต้องมี key
+#
+# key ของ gemini ไม่ได้อยู่ในไฟล์นี้โดยตั้งใจ — ไฟล์โปรเจกต์ถูก commit ลง git
+# อ่านจาก env GEMINI_API_KEY ก่อน แล้วค่อย .vcut/secrets.json (อยู่ใน .gitignore)
+provider = "claude_cli"
+gemini_model = "gemini-2.5-flash"
+gemini_max_tokens = 32768
+gemini_temperature = 0.4
 binary   = "claude"
 model    = "sonnet"         # sonnet = คุ้มสุดสำหรับงานนี้ | opus ถ้าอยากให้แบ่งบทละเอียดกว่า
 tasks    = ["story_arc", "shot_scoring", "trim_suggest"]

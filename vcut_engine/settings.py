@@ -179,7 +179,20 @@ FIELDS = [
       help="ขั้น 3 เท่านั้น — ปิดแล้วการรวมเป็นหนังกลับไปเป็นกฎล้วน ไม่ต้องลบ ai.json"),
     F("ai.goal", "โจทย์ที่จะบอก AI", "text", "ai", "ai",
       placeholder="ตัดเหลือ 10 นาที เล่าตามลำดับการเดินทาง"),
-    F("ai.model", "โมเดล", "select", "ai", "ai", options=["sonnet", "opus", "haiku"]),
+    # ผู้ให้บริการ AI — คุมทั้ง `vcut ai` และ `vcut review` พร้อมกัน
+    # (ตั้งแยกรายตัวได้ที่ [review] provider ในไฟล์โปรเจกต์ ถ้าอยากให้คนละเจ้า)
+    F("ai.provider", "ใช้ AI เจ้าไหน", "select", "ai", "ai",
+      options=["claude_cli", "gemini"],
+      labels={"claude_cli": "Claude Code ในเครื่อง (โควตาที่สมัครไว้)",
+              "gemini": "Gemini API (ใช้ API key)"},
+      help="Claude อ่านไฟล์ในเครื่องเองได้จึงเห็น contact sheet ด้วย · "
+           "Gemini ยิง HTTP ครั้งเดียวจบ เร็วกว่าแต่เห็นเฉพาะข้อความ"),
+    F("ai.model", "โมเดล", "select", "ai", "ai", options=["sonnet", "opus", "haiku"],
+      help="ใช้ตอนเลือก Claude Code"),
+    F("ai.gemini_model", "โมเดล Gemini", "select", "ai", "ai",
+      options=["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
+      help="ใช้ตอนเลือก Gemini · key อ่านจาก env GEMINI_API_KEY "
+           "หรือ .vcut/secrets.json ซึ่งไม่ถูก commit"),
     F("ai.tasks", "งานที่ให้ AI ทำ", "multi", "ai", "ai",
       options=["story_arc", "describe", "shot_scoring", "trim_suggest"],
       labels={"story_arc": "แบ่งบทเล่าเรื่อง", "describe": "อ่านความหมายรายคลิป",

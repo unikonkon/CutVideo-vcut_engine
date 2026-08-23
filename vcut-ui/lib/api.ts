@@ -337,12 +337,42 @@ export interface TranscriptData {
   };
 }
 
+export type ReviewTask = "cut" | "trim" | "music" | "sfx" | "sticker" | "text";
+
+/** ข้อเสนอหนึ่งข้อจาก AI — ช่องที่มีจริงขึ้นกับ op (เอนจินตรวจมาแล้วทุกข้อ)
+ *
+ *  drop/move/trim ชี้ช็อตด้วยเลขลำดับ `at` (+ `name` ไว้กันไทม์ไลน์เปลี่ยน)
+ *  music/sfx/sticker/text วางของบนเส้นเวลาด้วย `tl` = วินาทีในหนัง
+ */
 export interface ReviewOp {
-  op: "drop" | "move";
-  at: number;
-  name: string;
-  to?: number;
+  op: "drop" | "move" | "trim" | "music" | "sfx" | "sticker" | "text";
+  id?: number;
+  task?: ReviewTask;
   why: string;
+  // ── ฝั่งไทม์ไลน์ ──
+  at?: number;
+  name?: string;
+  to?: number;
+  side?: "head" | "tail";
+  cut?: number;
+  start?: number;
+  was?: number;
+  // ── ฝั่งชั้นแต่งหนัง ──
+  tl?: number;
+  dur?: number;
+  file?: string;
+  label?: string;
+  loop?: boolean;
+  text?: string;
+}
+
+export interface ReviewTaskInfo {
+  id: ReviewTask;
+  label: string;
+  /** ผลลง fx.json (ขั้น 5) — กดรับแล้วไม่ต้องตัดวิดีโอใหม่ */
+  fx: boolean;
+  /** ต้องมีแคตตาล็อกจากหน้าเว็บถึงจะสั่งได้ */
+  web: boolean;
 }
 
 export interface ReviewData {
@@ -352,7 +382,20 @@ export interface ReviewData {
   version?: number;
   ops?: ReviewOp[];
   note?: string;
+  summary?: string;
+  tasks_all?: ReviewTaskInfo[];
+  tasks_default?: ReviewTask[];
+  tasks?: Record<string, { ops?: ReviewOp[]; note?: string; seconds?: number;
+                           cost_usd?: number; provider?: string }>;
+  provider?: string;
+  gemini?: { ok: boolean; from: string; hint: string };
   [k: string]: unknown;
+}
+
+/** รายการตัวอย่างที่มีอยู่ฝั่งหน้าเว็บ — เอนจินไม่รู้จัก ต้องส่งไปให้ตอนสั่งงาน */
+export interface ReviewCatalog {
+  sfx?: { file: string; label: string; cat: string; dur: number; loop: number }[];
+  sticker?: { file: string; label: string; cat: string }[];
 }
 
 export interface SetupField {
@@ -404,8 +447,15 @@ export const api2 = {
     j<{ ok: boolean; fx: FxData }>(`${engine}/api/asset`, post({ delete: name })),
   transcript: () => j<TranscriptData>(`${engine}/api/transcript`),
   review: () => j<ReviewData>(`${engine}/api/review`),
-  runReview: (context: string, force = false) =>
-    j<{ ok: boolean }>(`${engine}/api/review`, post({ context, force })),
+  runReview: (
+    context: string,
+    force = false,
+    tasks?: ReviewTask[],
+    catalog?: ReviewCatalog,
+  ) =>
+    j<{ ok: boolean }>(`${engine}/api/review`, post({ context, force, tasks, catalog })),
+  saveAiKey: (key: string) =>
+    j<{ ok: boolean; from: string; hint: string }>(`${engine}/api/aikey`, post({ key })),
   setup: () => j<SetupData>(`${engine}/api/setup`),
   saveSetup: (path: string, values: Record<string, unknown>) =>
     j<{ ok: boolean; path: string; setup: SetupData }>(

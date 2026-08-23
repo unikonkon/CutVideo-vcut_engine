@@ -18,10 +18,9 @@
 AI เห็นแค่ข้อความ + contact sheet — ไม่มีการส่งไฟล์วิดีโอออกไปไหน
 """
 import json
-import re
-import subprocess
 import time
 
+from .provider import ask
 from .util import c, die, info, read_json, warn, write_json
 
 TASKS = ("story_arc", "describe", "shot_scoring", "trim_suggest")
@@ -33,8 +32,6 @@ TASK_LABEL = {
     "trim_suggest": "แนะนำช่วงที่ควรเก็บ",
 }
 
-# ตอบยาวเกินเท่านี้แล้วยังแกะ JSON ไม่ได้ = โควตา output หมดไปกับการคิด
-MAX_OUT_WARN = 16000
 # ส่งให้ AI เกินเท่านี้โดยไม่จำกัด = เสี่ยงชนเพดานจนไม่ได้คำตอบ
 ASK_BIG = 150
 
@@ -259,130 +256,6 @@ def build_prompt(task, ctx, rows, goal, out_name, smap=(), total=None, part=None
     return "\n".join(parts)
 
 
-# ─────────────────────────── เรียก claude ───────────────────────────
-
-def _extract_json(text):
-    """ดึง JSON ก้อนแรกออกจากข้อความ — เผื่อโมเดลห่อด้วย ``` หรือพูดนำ"""
-    if not text:
-        return None
-    m = re.search(r"```(?:json)?\s*(.*?)```", text, re.S)
-    if m:
-        text = m.group(1)
-    i = text.find("{")
-    if i < 0:
-        return None
-    depth, in_str, esc = 0, False, False
-    for j in range(i, len(text)):
-        ch = text[j]
-        if in_str:
-            if esc:
-                esc = False
-            elif ch == "\\":
-                esc = True
-            elif ch == '"':
-                in_str = False
-            continue
-        if ch == '"':
-            in_str = True
-        elif ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                try:
-                    return json.loads(text[i:j + 1])
-                except json.JSONDecodeError:
-                    return None
-    return None
-
-
-def _blame(envelope, stdout):
-    """แกะ JSON ไม่ได้เพราะอะไร — เดาจากซองที่ CLI ส่งกลับมา
-
-    เคสที่เจอจริงและเจ็บที่สุด: โจทย์ใหญ่เกินจนโมเดลใช้โควตา output หมดไปกับ
-    การคิด (stop_reason = max_tokens) แล้วยังไม่ทันตอบ JSON — เสียทั้งเวลาและ
-    โควตาโดยได้ศูนย์ ต้องบอกให้ชัดว่าเกิดอะไร ไม่ใช่แค่ "แกะไม่ได้"
-    """
-    env = envelope if isinstance(envelope, dict) else {}
-    out = int((env.get("usage") or {}).get("output_tokens") or 0)
-    if env.get("subtype") and env.get("subtype") != "success":
-        return f"claude จบด้วย {env['subtype']}"
-    if "max_tokens" in (stdout or "") or out >= MAX_OUT_WARN:
-        return (f"โมเดลใช้โควตา output หมดไปกับการคิด (ออกไป {out:,} token) "
-                "จนยังไม่ทันตอบ JSON — stop_reason = max_tokens")
-    if not str(env.get("result") or "").strip():
-        return "claude ตอบกลับมาเป็นข้อความว่าง"
-    return ""
-
-
-def call_claude(ctx, prompt, out_path, section="ai", hint=""):
-    """เรียก claude -p แบบไม่โต้ตอบ · คำตอบมาทางไฟล์ ถ้าไม่มีค่อยแกะจาก stdout
-
-    section เลือกว่าอ่านค่าจาก [ai] หรือ [review] — สอง AI คนละบทบาท
-    ตั้งโมเดล/เวลารอคนละค่าได้ ค่าไหนไม่ได้ตั้งใน [review] จะตกมาใช้ของ [ai]
-    hint = ทางแก้ที่จะบอกผู้ใช้ถ้าแกะคำตอบไม่ได้ (ผู้เรียกรู้บริบทดีกว่า)
-    """
-    def cfg(key, default=None):
-        v = ctx.get(f"{section}.{key}")
-        return ctx.get(f"ai.{key}", default) if v is None or v == "" else v
-
-    binary = cfg("binary", "claude")
-    cmd = [binary, "-p", "--output-format", "json"]
-    if cfg("model"):
-        cmd += ["--model", str(cfg("model"))]
-    cmd += ["--permission-mode", str(cfg("permission_mode", "acceptEdits"))]
-    tools = str(cfg("allowed_tools", "Read,Write")).strip()
-    if tools:
-        cmd += ["--allowedTools", tools]
-
-    out_path.unlink(missing_ok=True)
-    t0 = time.time()
-    try:
-        r = subprocess.run(cmd, input=prompt, capture_output=True, text=True,
-                           cwd=str(ctx.work),
-                           timeout=float(cfg("timeout", 1800)))
-    except FileNotFoundError:
-        die(f"ไม่พบคำสั่ง '{binary}' — ติดตั้ง Claude Code ก่อน หรือตั้ง [{section}] binary")
-    except subprocess.TimeoutExpired:
-        die(f"AI ไม่ตอบภายใน {cfg('timeout', 1800)} วินาที — เพิ่ม [{section}] timeout")
-
-    meta = {"seconds": round(time.time() - t0, 1)}
-    raw_path = out_path.with_name(out_path.stem + ".raw.txt")
-    raw_path.write_text((r.stdout or "") + "\n--- stderr ---\n" + (r.stderr or ""),
-                        encoding="utf-8")
-
-    envelope = None
-    try:
-        envelope = json.loads(r.stdout)
-    except json.JSONDecodeError:
-        pass
-    if isinstance(envelope, dict):
-        meta["cost_usd"] = envelope.get("total_cost_usd")
-        meta["turns"] = envelope.get("num_turns")
-        meta["model"] = next(iter(envelope.get("modelUsage") or {}), None)
-        meta["out_tokens"] = (envelope.get("usage") or {}).get("output_tokens")
-
-    if r.returncode != 0 and not out_path.exists():
-        die(f"claude ตอบกลับด้วย exit {r.returncode}\n{(r.stderr or r.stdout)[-600:]}")
-
-    data = read_json(out_path)
-    if data is None and isinstance(envelope, dict):
-        data = _extract_json(envelope.get("result", ""))
-    elif data is None:
-        # แกะจาก stdout ได้เฉพาะตอนที่ซองพังจนอ่านไม่ออก — ถ้าซองอ่านได้แล้วมา
-        # แกะซ้ำตรงนี้ จะได้ "ซอง" กลับไปเป็นคำตอบ แล้วสาเหตุจริงจะถูกกลบ
-        data = _extract_json(r.stdout)
-    if data is None:
-        why = _blame(envelope, r.stdout)
-        if why:
-            warn(f"AI ตอบกลับมาแต่ใช้ไม่ได้ — {why}")
-        if hint:
-            warn(hint)
-        die("แกะ JSON จากคำตอบไม่ได้ — หยุดไว้ก่อน ไม่เขียนทับของเดิม\n"
-            f"   คำตอบดิบอยู่ที่ {raw_path}")
-    return data, meta
-
-
 # ─────────────────────────── ตรวจ + รวมคำตอบ ───────────────────────────
 
 def _clamp(x, lo, hi, default=None):
@@ -583,7 +456,7 @@ def run(ctx, tasks=None, goal="", force=False):
             (ai_dir / f"{tag}.prompt.md").write_text(prompt, encoding="utf-8")
             info(f"    {c('·', 'd')} ก้อน {n}/{len(chunks)} ({len(prompt) // 1000} KB) …")
 
-            data, meta = call_claude(ctx, prompt, out_path)
+            data, meta = ask(ctx, prompt, out_path)
             part, warns = validate(task, data, chunk)
             for w in warns[:4]:
                 warn(f"  {tag}: {w}")
@@ -721,7 +594,7 @@ schema ที่ต้องตอบ
 
     tip = (f"ทางแก้: ลด [compose] ask_max ลง (ตอนนี้ {cap or 'ไม่จำกัด'} · "
            f"ส่งไปจริง {len(ok)} ชิ้น) แล้วสั่งใหม่ — คลังเล็กลง คำตอบก็สั้นลง")
-    data, meta = call_claude(ctx, prompt, ai_dir / "compose.json",
+    data, meta = ask(ctx, prompt, ai_dir / "compose.json",
                              section="compose", hint=tip)
     valid = {p["id"] for p in ok}
     order, seen, bad = [], set(), 0

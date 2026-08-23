@@ -38,7 +38,8 @@ USAGE = """vcut — ตัดต่อวิดีโออัตโนมัต
   vcut decide                     ทำ prepare + compose รวดเดียว (ของเดิม)
   vcut render                     ตัด+แก้ภาพ/เสียงเป็นชิ้น ๆ (มี cache)
   vcut assemble                   ต่อเป็นไฟล์เดียว
-  vcut review                     ให้ AI ดูหนังที่ตัดแล้ว → เสนอให้เอาออก/สลับที่
+  vcut review                     ให้ AI ดูหนังที่ตัดแล้ว → เสนอการแก้
+                                  (--task cut|trim|music|sfx|sticker|text)
   vcut caption                    เขียนข้อความลงหนัง → final-text.mp4
   vcut fx                         ขั้น 5 · แต่งหนัง → final-fx.mp4
   vcut view                       เปิดหน้าเว็บดู/แก้ EDL ในเครื่อง
@@ -102,6 +103,10 @@ def build_parser():
                            help="บอก AI ว่าอยากให้ดูอะไรเป็นพิเศษ")
             p.add_argument("-f", "--force", action="store_true",
                            help="ถามใหม่แม้ EDL กับโจทย์ไม่เปลี่ยน")
+            p.add_argument("--task", dest="tasks", action="append",
+                           choices=list(review.TASKS),
+                           help="เลือกงานที่จะให้ AI ทำ ใช้ซ้ำได้ "
+                                "(ไม่ระบุ = ตาม [review] tasks)")
         if name in ("ai", "run"):
             p.add_argument("--goal", default="",
                            help="โจทย์ภาษาไทยที่จะบอก AI เช่น 'ตัดเหลือ 10 นาที'")
@@ -542,7 +547,7 @@ def main(argv=None):
     elif args.cmd == "fx":
         finish.run(ctx, out=args.out)
     elif args.cmd == "review":
-        review.run(ctx, context=args.context, force=args.force)
+        review.run(ctx, context=args.context, force=args.force, tasks=args.tasks)
     elif args.cmd == "view":
         serve.run(ctx, port=args.port, open_browser=not args.no_open,
                   config_args=config_args(args), config_name=args.config,

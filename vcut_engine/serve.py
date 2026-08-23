@@ -720,6 +720,7 @@ def build_review(ctx):
     ถ้า EDL ถูกแก้หลังจากที่ AI ดู ตำแหน่งที่มันอ้างจะเลื่อนหมด — ต้องบอกให้รู้
     ไม่ใช่ปล่อยให้กดรับแล้วไปตัดผิดช็อต
     """
+    from . import provider as prov
     from . import review as rv
     st = read_json(ctx.work / "review.json", {}) or {}
     edl = read_json(ctx.edl, {}) or {}
@@ -728,6 +729,13 @@ def build_review(ctx):
     st["stale"] = bool(st.get("ops") is not None and st.get("fingerprint") != now)
     st["context_default"] = str(ctx.get("review.context", "") or "")
     st["has"] = bool(st.get("version"))
+    # งานที่สั่งได้ + ที่เลือกไว้เป็นค่าตั้งต้น — หน้าเว็บไม่ต้องมีรายการของตัวเอง
+    st["tasks_all"] = [{"id": t, "label": rv.TASK_LABEL[t],
+                        "fx": t in rv.FX_TASKS, "web": t in rv.WEB_TASKS}
+                       for t in rv.TASKS]
+    st["tasks_default"] = rv.clean_tasks(ctx.get("review.tasks"))
+    st["provider"] = prov.provider_of(ctx, "review")
+    st["gemini"] = prov.key_state(ctx)
     return st
 
 
@@ -1281,12 +1289,25 @@ def make_handler(ctx, job):
                     return self._json({"error": "มีงานกำลังรันอยู่"}, 409)
                 if not ctx.edl.exists():
                     return self._json({"error": "ยังไม่มี edl.json"}, 400)
+                from . import review as rv
                 argv = [sys.executable, str(ctx.launcher), "review"] + ctx.argv_tail
                 ctxt = str(payload.get("context") or "").strip()
                 if ctxt:
                     argv += ["--context", ctxt]
                 if payload.get("force"):
                     argv.append("--force")
+                for t in rv.clean_tasks(payload.get("tasks"), default=()):
+                    argv += ["--task", t]
+                # แคตตาล็อกเสียง/สติกเกอร์ตัวอย่างยาวเป็นหมื่นตัวอักษร ส่งทาง argv
+                # ไม่ไหว — วางไว้เป็นไฟล์ให้โปรเซสลูกอ่านเอง (ดู review.run)
+                cat = payload.get("catalog")
+                cat_path = ctx.work / "ai" / "catalog.json"
+                cat_path.parent.mkdir(parents=True, exist_ok=True)
+                if isinstance(cat, dict):
+                    cat_path.write_text(json.dumps(cat, ensure_ascii=False),
+                                        encoding="utf-8")
+                else:
+                    cat_path.unlink(missing_ok=True)
                 job.start(argv, "review", ctx.launcher.parent)
                 return self._json({"ok": True})
 
@@ -1316,6 +1337,11 @@ def make_handler(ctx, job):
                         argv += ["--context", ctxt]
                 job.start(argv, "compose", ctx.launcher.parent)
                 return self._json({"ok": True})
+
+            if p == "/api/aikey":
+                # เก็บ API key ลงไฟล์ลับของโปรเจกต์ — ไม่เคยส่งค่ากลับออกไป
+                from . import provider as prov
+                return self._json(prov.save_gemini_key(ctx, payload.get("key")))
 
             if p == "/api/job/stop":
                 return self._json({"ok": job.stop(), "step": job.step})

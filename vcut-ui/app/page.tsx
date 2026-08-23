@@ -24,6 +24,7 @@ import {
   type MusicTrack,
   type ProjectState,
   type ReviewOp,
+  type ReviewTask,
   type Shot,
   type TranscriptData,
 } from "@/lib/api";
@@ -432,9 +433,20 @@ export default function Editor() {
   );
 
   const runReview = useCallback(
-    async (context: string, force: boolean) => {
+    async (context: string, force: boolean, tasks?: ReviewTask[]) => {
       try {
-        await api2.runReview(context, force);
+        // เอนจินไม่รู้จักไฟล์ตัวอย่างที่อยู่ใน public/ ของหน้าเว็บ — ส่งรายการไปด้วย
+        // ทุกครั้ง AI จะได้เลือกได้เฉพาะของที่กดรับแล้วอัปโหลดเข้าคลังได้จริง
+        const catalog = {
+          sfx: SFX_LIST.map((x) => ({
+            file: x.file, label: x.label, cat: x.cat, dur: x.dur,
+            loop: x.loop ? 1 : 0,
+          })),
+          sticker: STICKER_LIST.map((x) => ({
+            file: x.file, label: x.label, cat: x.cat,
+          })),
+        };
+        await api2.runReview(context, force, tasks, catalog);
         setJobOpen(true);
         await pollJob();
       } catch (e) {
@@ -686,23 +698,164 @@ export default function Editor() {
     return null;
   }, [shots, offsets, playhead]);
 
-  const applyReviewOp = useCallback(
-    (op: ReviewOp): boolean => {
-      if (shots[op.at]?.name !== op.name) {
-        flash(`ช็อต ${op.at + 1} ไม่ใช่ ${op.name} แล้ว — ไทม์ไลน์เปลี่ยนไป ให้รัน review ใหม่`);
-        return false;
+  // ── ลงมือทำตามข้อเสนอของ AI ────────────────────────────────────────────
+  //
+  // รับทีละข้อหรือทั้งชุดก็เข้าทางเดียวกัน เพราะ "รับทั้งหมด" ทีละข้อไม่ได้:
+  //  · ลบช็อตแล้วเลขลำดับของข้อถัด ๆ ไปเลื่อนหมด — ต้องคิดทั้งชุดในการแก้ครั้งเดียว
+  //  · ของชั้นแต่งหนังทุกชิ้นอ่าน fxDraft จาก closure เดียวกัน ถ้าเรียกซ้อนกัน
+  //    ชิ้นหลังจะทับชิ้นแรกหายไปเงียบ ๆ — จึงรวบเป็น patchFx ครั้งเดียวเช่นกัน
+  const applyReviewOps = useCallback(
+    async (ops: ReviewOp[]): Promise<{ done: number[]; failed: string[] }> => {
+      const done: number[] = [];
+      const failed: string[] = [];
+      const oid = (o: ReviewOp, i: number) => o.id ?? i;
+
+      // ── ฝั่งไทม์ไลน์: trim → drop → move ในการ mutate ครั้งเดียว ──
+      const tlOps = ops.filter((o) => ["drop", "move", "trim"].includes(o.op));
+      if (tlOps.length) {
+        const stale = tlOps.filter(
+          (o) => o.at == null || shots[o.at]?.name !== o.name,
+        );
+        for (const o of stale) {
+          failed.push(`ช็อต ${(o.at ?? 0) + 1} ไม่ใช่ ${o.name} แล้ว`);
+        }
+        const live = tlOps.filter((o) => !stale.includes(o));
+        if (live.length) {
+          mutate((prev) => {
+            // ติดเลขลำดับ "ของตอนที่ AI ดู" ไว้กับทุกช็อต ทุกข้อเสนอจึงยังชี้ถูก
+            // แม้ข้อก่อนหน้าจะลบหรือย้ายอะไรไปแล้ว
+            let arr = prev.map((sh, i) => ({ i, sh }));
+            for (const o of live) {
+              if (o.op !== "trim" || o.start == null || o.dur == null) continue;
+              const k = arr.findIndex((x) => x.i === o.at);
+              if (k < 0) continue;
+              const start = o.start;
+              arr[k] = {
+                ...arr[k],
+                sh: { ...arr[k].sh, start, end: start + o.dur, dur: o.dur, seg: null },
+              };
+            }
+            const kill = new Set(
+              live.filter((o) => o.op === "drop").map((o) => o.at),
+            );
+            arr = arr.filter((x) => !kill.has(x.i));
+            for (const o of live) {
+              if (o.op !== "move" || o.to == null) continue;
+              const from = arr.findIndex((x) => x.i === o.at);
+              if (from < 0) continue;
+              const [x] = arr.splice(from, 1);
+              const anchor = arr.findIndex((y) => y.i === o.to);
+              arr.splice(anchor < 0 ? arr.length : anchor, 0, x);
+            }
+            return arr.map((x) => x.sh);
+          });
+          setSel(null);
+          live.forEach((o) => done.push(oid(o, ops.indexOf(o))));
+        }
       }
-      if (op.op === "drop") {
-        removeShot(op.at);
-        return true;
+
+      // ── ฝั่งชั้นแต่งหนัง: อัปโหลดไฟล์ที่ยังไม่มีในคลังก่อน แล้วค่อยแก้ draft ──
+      const fxOps = ops.filter((o) =>
+        ["music", "sfx", "sticker", "text"].includes(o.op),
+      );
+      if (fxOps.length) {
+        if (!fxDraft || !fxData) {
+          failed.push("ชั้นแต่งหนังยังโหลดไม่เสร็จ");
+          return { done, failed };
+        }
+        let data = fxData;
+        const music = [...fxDraft.music];
+        const overlays = [...fxDraft.overlays];
+        const texts = [...fxDraft.texts];
+
+        for (const o of fxOps) {
+          const tl = o.tl ?? 0;
+          const id = oid(o, ops.indexOf(o));
+          try {
+            if (o.op === "text") {
+              const bind = tlToClip(shots, offsets, tl);
+              if (!bind) throw new Error("อยู่นอกช่วงหนัง");
+              texts.push({
+                ...(data.defaults.text_item as Omit<
+                  FxTextItem,
+                  "at" | "dur" | "id" | "name" | "lines"
+                >),
+                text: o.text ?? "",
+                at: bind.at,
+                dur: o.dur ?? 2.5,
+                name: bind.name,
+                id: "",
+                lines: [],
+              });
+            } else if (o.op === "sticker") {
+              const def = STICKER_LIST.find((x) => x.file === o.file);
+              const bind = tlToClip(shots, offsets, tl);
+              if (!def) throw new Error("ไม่รู้จักสติกเกอร์นี้");
+              if (!bind) throw new Error("อยู่นอกช่วงหนัง");
+              let file = def.file;
+              if (!data.overlay.assets.some((a) => a.file === file)) {
+                const blob = await (await fetch(stickerUrl(file))).blob();
+                const b64 = await fileToBase64(new File([blob], file));
+                const r = await api2.saveAsset(file, b64, "media");
+                data = r.fx;
+                file = r.file || file;
+              }
+              overlays.push({
+                ...(data.defaults.overlay as Omit<FxOverlay, "at" | "dur" | "id" | "name">),
+                ...(def.anim ? { anim: def.anim } : {}),
+                file,
+                width: def.width,
+                x: def.x,
+                y: def.y,
+                at: bind.at,
+                dur: o.dur ?? 2.5,
+                name: bind.name,
+                id: "",
+              });
+            } else if (o.op === "sfx") {
+              let file = o.file ?? "";
+              if (!data.music.tracks.includes(file)) {
+                const blob = await (await fetch(sfxUrl(file))).blob();
+                const b64 = await fileToBase64(new File([blob], file));
+                const r = await api2.saveAsset(file, b64, "audio");
+                data = r.fx;
+                file = r.file || file;
+              }
+              music.push({
+                ...data.music.defaults,
+                file,
+                at: Math.max(0, Math.round(tl * 100) / 100),
+                dur: o.dur ?? 1,
+                loop: !!o.loop,
+                duck: false,
+                fade_in: 0,
+                fade_out: 0,
+                gain_db: -6,
+                id: "",
+              });
+            } else {
+              music.push({
+                ...data.music.defaults,
+                file: o.file ?? "",
+                at: Math.max(0, Math.round(tl * 100) / 100),
+                ...(o.dur ? { dur: o.dur } : {}),
+                id: "",
+              });
+            }
+            done.push(id);
+          } catch (e) {
+            failed.push(
+              `${o.label || o.file || o.text || "ข้อเสนอ"}: ` +
+                (e instanceof Error ? e.message : "ทำไม่สำเร็จ"),
+            );
+          }
+        }
+        if (data !== fxData) setFxData(data);
+        patchFx({ music, overlays, texts });
       }
-      if (op.op === "move" && op.to != null) {
-        reorder(op.at, Math.min(op.to, shots.length - 1));
-        return true;
-      }
-      return false;
+      return { done, failed };
     },
-    [shots, removeShot, reorder, flash],
+    [shots, offsets, mutate, fxDraft, fxData, patchFx, setFxData],
   );
 
   const caps = useMemo(
@@ -1421,7 +1574,7 @@ export default function Editor() {
             reloadKey={reloadKey}
             busy={!!job?.running}
             onRun={runReview}
-            applyOp={applyReviewOp}
+            applyOps={applyReviewOps}
             flash={flash}
           />
         )}
