@@ -555,8 +555,13 @@ export default function Timeline({
             {/* เลเยอร์เหนือวิดีโอ */}
             {lanesAbove.map(laneRow)}
 
-            {/* แทร็กวิดีโอ */}
-            <div className="relative h-20 border-b border-line/60">
+            {/* แทร็กวิดีโอ — คลิกที่ไหนก็ย้ายเส้นแดงไปตรงนั้น (ทั้งบนช็อตและช่องว่าง) */}
+            <div
+              className="relative h-20 border-b border-line/60"
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) onSeek(timeFromClientX(e.clientX));
+              }}
+            >
               {shots.map((s, i) => {
                 const left = 8 + offsets[i] * pxPerSec;
                 const w = Math.max(s.dur * pxPerSec - 2, 8);
@@ -589,8 +594,10 @@ export default function Timeline({
                     onClick={(e) => {
                       e.stopPropagation();
                       onSelect(i);
+                      // คลิกช็อตไหน เส้นแดงไปยืนตรงจุดที่คลิก แล้วกดเล่นต่อได้เลย
+                      onSeek(timeFromClientX(e.clientX));
                     }}
-                    title={`${s.name} · ${s.start.toFixed(1)}–${s.end.toFixed(1)} วิ${s.seg ? "" : " · ยังไม่มีไฟล์ตัด"}`}
+                    title={`${s.name} · ${s.start.toFixed(1)}–${s.end.toFixed(1)} วิ${s.seg ? "" : " · ยังไม่มีไฟล์ตัด"}\nคลิก = เลือก + ย้ายเส้นหัวเล่นมาตรงนี้ · ลาก = สลับลำดับ`}
                     className={`absolute top-1 h-[4.5rem] cursor-grab overflow-hidden rounded-lg border active:cursor-grabbing ${
                       isSel ? "z-20 border-accent ring-2 ring-accent/60" : "border-line-2"
                     } ${dragOver === i && dragFrom !== i ? "outline outline-2 outline-accent/70" : ""}`}

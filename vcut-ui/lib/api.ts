@@ -133,15 +133,21 @@ export const api = {
   saveEdl: (keep: KeepPiece[]) =>
     j<{ ok: boolean }>(`${engine}/api/edl`, post({ keep })),
   undo: () => j<{ ok: boolean }>(`${engine}/api/undo`, post({})),
+  // keyint = ระยะห่างคีย์เฟรมของชิ้นที่ตัดไว้ (วินาที) — ใช้ปัด at ให้ตรงคีย์เฟรม
   live: (segs: string[]) =>
-    j<{ token: string; count: number }>(`${engine}/api/live`, post({ segs })),
+    j<{ token: string; count: number; keyint: number }>(
+      `${engine}/api/live`,
+      post({ segs }),
+    ),
 };
 
 export const thumbUrl = (name: string) => `${engine}/thumb/${name}.jpg`;
 export const segUrl = (file: string) => `${engine}/seg/${file}`;
 export const clipUrl = (name: string) => `${engine}/clip/${name}`;
-export const liveUrl = (token: string, from: number) =>
-  `${engine}/live/${token}?from=${from}`;
+// at = ข้ามเข้าไปในชิ้นแรกกี่วินาที (เอนจินสั่ง -ss ให้) — เบราว์เซอร์เลื่อนหัวอ่าน
+// ในสตรีม chunked เองไม่ได้ ต้องให้ ffmpeg ตั้งต้นมาให้ตรงจุดตั้งแต่แรก
+export const liveUrl = (token: string, from: number, at = 0) =>
+  `${engine}/live/${token}?from=${from}` + (at > 0.05 ? `&at=${at.toFixed(3)}` : "");
 export const assetUrl = (name: string) =>
   `${engine}/asset/${encodeURIComponent(name)}`;
 

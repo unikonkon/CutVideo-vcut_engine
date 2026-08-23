@@ -580,6 +580,9 @@ export default function Preview({
           <video
             ref={videoRef}
             playsInline
+            // ต้องโหลดเองแม้ยังไม่กดเล่น — ตอนหยุดแล้วเลื่อนเส้นหัวเล่น เราตั้ง
+            // currentTime ให้ไปโชว์เฟรมนั้นค้างไว้ ถ้าไม่โหลดจะได้จอดำ
+            preload="auto"
             className="h-full w-full"
             style={{ objectFit: fit.v }}
             onClick={() => (edit ? onClearSel() : onToggle())}

@@ -275,6 +275,24 @@ def live_paths(ctx, names):
     return out, None
 
 
+def live_keyint(ctx):
+    """ระยะห่างคีย์เฟรมของชิ้นที่ตัดไว้ (วินาที) = gop ÷ fps
+
+    หน้าเว็บใช้ค่านี้ปัด `at` ลงให้ตรงคีย์เฟรมพอดีก่อนขอสตรีม — สำคัญเพราะภาพ
+    ถูก copy ไม่ได้เข้ารหัสใหม่ ffmpeg จึงเริ่มได้แค่ที่คีย์เฟรม ถ้าหน้าเว็บขอ
+    เวลาที่ไม่ใช่คีย์เฟรม มันจะถอยไปคีย์เฟรมก่อนหน้าโดยไม่มีใครบอก แล้วหัวเล่น
+    บนไทม์ไลน์จะเดินนำภาพไปเรื่อย ๆ (รวมถึงข้อความ/ซับที่ซ้อนสดด้วย)
+    """
+    e = ctx.get("encode", {})
+    gop = max(1, int(e.get("gop", 60)))
+    n, _, d = str(ctx.get("video.fps", "60000/1001")).partition("/")
+    try:
+        fps = float(n) / float(d or 1)
+    except (ValueError, ZeroDivisionError):
+        fps = 0.0
+    return round(gop / fps, 6) if fps > 0 else 1.0
+
+
 def live_cmd(ctx, lst):
     e = ctx.get("encode", {})
     return ["ffmpeg", "-nostdin", "-hide_banner", "-v", "error",
@@ -854,12 +872,14 @@ def make_handler(ctx, job):
             except (BrokenPipeError, ConnectionResetError):
                 pass          # คนดูกดข้ามหรือปิดหน้าไป — ไม่ใช่ความผิดพลาด
 
-        def _live(self, token, start):
+        def _live(self, token, start, at=0.0):
             """ต่อชิ้นด้วย ffmpeg แล้วส่งออกเป็นสายเดียว — ไม่แตะดิสก์
 
             ตอบแบบ chunked เพราะไม่รู้ความยาวรวมล่วงหน้า (ยังต่อไม่เสร็จตอนเริ่ม
-            ส่ง) เบราว์เซอร์จึงเล่นไปโหลดไปได้ แต่จะเลื่อนข้ามไปข้างหน้าไกล ๆ
-            ไม่ได้ — ฝั่งหน้าเว็บแก้ด้วยการสั่งสตรีมใหม่จากชิ้นที่ต้องการแทน
+            ส่ง) เบราว์เซอร์จึงเล่นไปโหลดไปได้ แต่ *เลื่อนหัวอ่านเองไม่ได้เลย*
+            (v.seekable ว่าง สั่ง currentTime แล้วถูกเมิน) — ฝั่งหน้าเว็บจึงย้าย
+            หัวเล่นด้วยการสั่งสตรีมใหม่: `from` เลือกชิ้นที่จะตั้งต้น และ `at`
+            บอกว่าให้ข้ามเข้าไปในชิ้นนั้นกี่วินาที
             """
             files = LIVE_LISTS.get(token)
             if not files:
@@ -872,8 +892,19 @@ def make_handler(ctx, job):
             # เก่ายังอ่านอยู่ แล้วพังทั้งคู่ (เจอจริงตอนทดสอบ: สายใหม่ขึ้น
             # DEMUXER_ERROR_COULD_NOT_OPEN เพราะไฟล์ถูกลบใต้เท้าพอดี)
             lst = ctx.work / f"live_{token}_{secrets.token_hex(4)}.txt"
-            lst.write_text("".join(f"file '{f.as_posix()}'\n" for f in files),
-                           encoding="utf-8")
+            # ข้ามเข้าไปในชิ้นแรกด้วย `inpoint` ของ concat demuxer ไม่ใช่ -ss —
+            # -ss วางหน้า concat แล้วมันเลื่อนได้แค่คีย์เฟรมแรกของไฟล์แรกเท่านั้น
+            # (ลองแล้ว: ขอ 3.003 ได้จริง 1.02) ส่วน inpoint แม่นทุกคีย์เฟรม
+            try:
+                at = max(0.0, float(at))
+            except (TypeError, ValueError):
+                at = 0.0
+            lines = []
+            for i, f in enumerate(files):
+                lines.append(f"file '{f.as_posix()}'")
+                if i == 0 and at > 0.05:
+                    lines.append(f"inpoint {at:.3f}")
+            lst.write_text("".join(f"{l}\n" for l in lines), encoding="utf-8")
             proc = subprocess.Popen(live_cmd(ctx, lst), stdout=subprocess.PIPE,
                                     stderr=subprocess.DEVNULL)
             self.send_response(200)
@@ -1108,7 +1139,11 @@ def make_handler(ctx, job):
                     start = int(q.get("from", 0))
                 except ValueError:
                     start = 0
-                return self._live(token, start)
+                try:
+                    at = float(q.get("at", 0))
+                except ValueError:
+                    at = 0.0
+                return self._live(token, start, at)
 
             if p.startswith("/seg/"):
                 name = p[len("/seg/"):]
@@ -1157,7 +1192,8 @@ def make_handler(ctx, job):
                 LIVE_LISTS[token] = files
                 for old in list(LIVE_LISTS)[:-LIVE_MAX]:
                     LIVE_LISTS.pop(old, None)
-                return self._json({"token": token, "count": len(files)})
+                return self._json({"token": token, "count": len(files),
+                                   "keyint": live_keyint(ctx)})
 
             if p == "/api/undo":
                 prev = ctx.work / "edl.prev.json"

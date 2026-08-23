@@ -188,11 +188,15 @@ export default function Editor() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
-  const streamRef = useRef<{ token: string; key: string; from: number }>({
-    token: "",
-    key: "",
-    from: 0,
-  });
+  // at = สายที่เปิดอยู่ตั้งต้นเข้าไปในชิ้นแรกกี่วินาที (เวลา 0 ของสตรีม = จุดนั้น)
+  // keyint = ระยะห่างคีย์เฟรม ใช้ปัด at ให้ตรงคีย์เฟรมที่ ffmpeg เริ่มได้จริง
+  const streamRef = useRef<{
+    token: string;
+    key: string;
+    from: number;
+    at: number;
+    keyint: number;
+  }>({ token: "", key: "", from: 0, at: 0, keyint: 1.001 });
   const modeRef = useRef<"timeline" | "clip">("timeline");
   const seekTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -495,104 +499,137 @@ export default function Editor() {
   );
 
   // ── เล่นวิดีโอ: สตรีมชิ้นที่ render แล้วเป็นสายเดียว (ผ่าน /api/live) ──
-  const play = useCallback(
-    async (fromTime: number) => {
-      const v = videoRef.current;
-      if (!v) return;
-      if (!rendered.length) {
-        flash("ยังไม่มีชิ้นที่ตัดแล้ว — กด Export เพื่อ render ก่อน");
-        return;
-      }
-      // ช็อตที่เวลานั้นตกอยู่ + เวลาที่เหลือภายในช็อต
+  //
+  // สตรีมของเอนจินเป็น chunked ไม่บอกความยาวรวม เบราว์เซอร์จึงเลื่อนไปข้างหน้า
+  // ไกล ๆ ไม่ได้ (ดู serve.py `_live`) — "ย้ายหัวเล่น" ที่นี่จึงหมายถึงขอสตรีม
+  // ใหม่ตั้งต้นที่ชิ้นนั้น ยกเว้นจุดที่ยังอยู่ในบัฟเฟอร์ของสายเดิม (ขยับได้เลย)
+
+  /** เวลาบนไทม์ไลน์ → ชิ้นที่ต้องตั้งต้นสตรีม + วินาทีที่ต้องข้ามในชิ้นนั้น */
+  const locate = useCallback(
+    (tl: number) => {
       let k = shots.length - 1;
       for (let i = 0; i < shots.length; i++) {
-        if (fromTime < offsets[i] + shots[i].dur) {
+        if (tl < offsets[i] + shots[i].dur) {
           k = i;
           break;
         }
       }
       let rIdx = rendered.findIndex((r) => r.i >= k);
       if (rIdx < 0) rIdx = 0;
-      const delta = rendered[rIdx].i === k ? fromTime - offsets[k] : 0;
+      const delta = rendered[rIdx].i === k ? Math.max(0, tl - offsets[k]) : 0;
+      return { rIdx, delta };
+    },
+    [shots, offsets, rendered],
+  );
 
+  /** ตอนนี้ตัวเล่นอยู่วินาทีไหนของไทม์ไลน์ — null ถ้ายังไม่ได้เล่นโหมดไทม์ไลน์
+   *  (เวลาในสตรีมนับจากชิ้นที่ตั้งต้น ต้องบวกกลับเป็นเวลารวมของหนัง) */
+  const elapsed = useCallback(() => {
+    const v = videoRef.current;
+    if (!v || !v.src || modeRef.current !== "timeline" || !rendered.length) {
+      return null;
+    }
+    // เวลา 0 ของสตรีมคือ "ชิ้นที่ตั้งต้น + at" ไม่ใช่หัวชิ้นเสมอไป
+    let t = v.currentTime + streamRef.current.at;
+    for (let j = streamRef.current.from; j < rendered.length; j++) {
+      if (t < rendered[j].dur || j === rendered.length - 1) {
+        return Math.min(offsets[rendered[j].i] + t, total);
+      }
+      t -= rendered[j].dur;
+    }
+    return null;
+  }, [rendered, offsets, total]);
+
+  /** พาตัวเล่นไปยืนที่เวลานั้นจริง ๆ — autoplay=false ใช้ตอนหยุดอยู่ (โชว์เฟรมนั้น
+   *  ค้างไว้) เพื่อให้กดเล่นแล้วเล่นต่อจากตรงนั้นได้ทันทีโดยไม่ต้องโหลดซ้ำ */
+  const goTo = useCallback(
+    async (tl: number, autoplay: boolean) => {
+      const v = videoRef.current;
+      if (!v) return;
+      if (!rendered.length) {
+        if (autoplay) flash("ยังไม่มีชิ้นที่ตัดแล้ว — กด Export เพื่อ render ก่อน");
+        return;
+      }
+      const { rIdx, delta } = locate(tl);
       try {
         const key = rendered.map((r) => r.seg).join("|");
         if (streamRef.current.key !== key) {
           const got = await api.live(rendered.map((r) => r.seg));
           streamRef.current.token = got.token;
           streamRef.current.key = key;
+          if (got.keyint > 0) streamRef.current.keyint = got.keyint;
         }
+        // ภาพถูก copy ไม่ได้เข้ารหัสใหม่ ffmpeg จึงเริ่มได้เฉพาะที่คีย์เฟรม —
+        // ปัดลงให้ตรงกริดเอง จะได้รู้แน่ว่าสายใหม่เริ่มวินาทีไหน (ไม่งั้นมันถอย
+        // ไปคีย์เฟรมก่อนหน้าเงียบ ๆ แล้วหัวเล่นกับภาพหลุดกันไปตลอดทั้งสาย)
+        const k = streamRef.current.keyint;
+        const at = k > 0 ? Math.max(0, Math.floor(delta / k + 1e-6) * k) : 0;
         modeRef.current = "timeline";
         streamRef.current.from = rIdx;
-        v.src = liveUrl(streamRef.current.token, rIdx);
-        if (delta > 0.05) {
-          v.addEventListener(
-            "loadedmetadata",
-            () => {
-              v.currentTime = delta;
-            },
-            { once: true },
-          );
+        streamRef.current.at = at;
+        v.src = liveUrl(streamRef.current.token, rIdx, at);
+        // เส้นแดงย้ายมายืนตรงเฟรมที่เล่นได้จริง (ห่างจากที่คลิกไม่เกินหนึ่งคีย์เฟรม)
+        setPlayhead(Math.min(offsets[rendered[rIdx].i] + at, total));
+        if (autoplay) {
+          await v.play();
+          setPlaying(true);
         }
-        await v.play();
-        setPlaying(true);
       } catch (e) {
         flash(e instanceof Error ? e.message : "เล่นไม่ได้");
       }
     },
-    [rendered, shots, offsets, flash],
+    [rendered, locate, offsets, total, flash],
   );
+
+  const play = useCallback((t: number) => goTo(t, true), [goTo]);
 
   const toggle = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
+    if (seekTimer.current) clearTimeout(seekTimer.current); // ตัดคิว scrub ที่ค้าง
     if (playing) {
       v.pause();
       setPlaying(false);
-    } else if (v.src && modeRef.current === "timeline") {
-      v.play().then(() => setPlaying(true)).catch(() => play(playhead));
+      return;
+    }
+    // เล่นต่อจากที่ค้างไว้ได้เฉพาะตอนตัวเล่น "ยืนตรงเส้นแดง" อยู่แล้ว — ถ้าเพิ่ง
+    // เลื่อนเส้นตอนหยุด ตัวเล่นยังค้างที่จุดเก่า ต้องตั้งต้นใหม่ที่เส้นแดง
+    const at = elapsed();
+    if (at != null && Math.abs(at - playhead) < 0.35) {
+      v.play()
+        .then(() => setPlaying(true))
+        .catch(() => play(playhead));
     } else {
       play(playhead);
     }
-  }, [playing, playhead, play]);
+  }, [playing, playhead, play, elapsed]);
 
-  // หัวเล่นวิ่งตามวิดีโอ — แปลงเวลาในสตรีม (นับจากชิ้นที่เริ่ม) → เวลาบนไทม์ไลน์
+  // หัวเล่นวิ่งตามวิดีโอ
   useEffect(() => {
     if (!playing) return;
     let raf = 0;
     const tick = () => {
-      const v = videoRef.current;
-      if (v && modeRef.current === "timeline") {
-        let t = v.currentTime;
-        for (let j = streamRef.current.from; j < rendered.length; j++) {
-          if (t < rendered[j].dur || j === rendered.length - 1) {
-            setPlayhead(
-              Math.min(offsets[rendered[j].i] + t, total),
-            );
-            break;
-          }
-          t -= rendered[j].dur;
-        }
-        if (v.ended) {
-          setPlaying(false);
-          return;
-        }
+      const at = elapsed();
+      if (at != null) setPlayhead(at);
+      if (videoRef.current?.ended) {
+        setPlaying(false);
+        return;
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [playing, rendered, offsets, total]);
+  }, [playing, elapsed]);
 
   const seek = useCallback(
     (t: number) => {
       setPlayhead(t);
       if (seekTimer.current) clearTimeout(seekTimer.current);
-      if (playing) {
-        seekTimer.current = setTimeout(() => play(t), 220);
-      }
+      // หน่วงไว้ให้ลากไม้บรรทัดรัว ๆ ได้โดยไม่ต่อสายใหม่ทุกพิกเซล — ตอนหยุดอยู่
+      // ก็พาภาพไปเฟรมนั้นด้วย (ไม่เล่น) จะได้เห็นว่ากำลังจะเล่นต่อจากตรงไหน
+      seekTimer.current = setTimeout(() => goTo(t, playing), 200);
     },
-    [playing, play],
+    [playing, goTo],
   );
 
   // ── แก้ไทม์ไลน์ (ยังไม่เขียนลงดิสก์จนกด "บันทึก EDL") ──
