@@ -167,7 +167,9 @@ export default function MusicPanel({
         )}
       </Section>
 
-      <Section title="เสียงเอฟเฟกต์ (30 เสียงตัวอย่าง · 6 หมวด)">
+      <Section
+        title={`เสียงเอฟเฟกต์ (${SFX_LIST.length} เสียงตัวอย่าง · ${SFX_CATS.length} หมวด)`}
+      >
         {SFX_CATS.map((c) => (
           <div key={c.key} className="flex flex-col gap-1">
             <div className="text-[10.5px] font-medium text-muted">{c.label}</div>
