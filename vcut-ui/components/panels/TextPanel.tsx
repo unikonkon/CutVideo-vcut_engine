@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  CheckSquare,
+  Captions,
   ChevronDown,
   ChevronRight,
   Eye,
@@ -10,7 +10,6 @@ import {
   GripVertical,
   Move,
   Plus,
-  Square,
   Trash2,
   Type,
 } from "lucide-react";
@@ -30,17 +29,7 @@ import {
   TInput,
   Toggle,
 } from "@/components/ui";
-import type { CapStore, FxStore } from "./types";
-
-/** บรรทัดบทพูดที่อยู่ในหนังจริง — page คิดมาให้แล้ว (id ตรงกับ cue ของซับ) */
-export interface SpeechLine {
-  id: string;
-  name: string;
-  at: number;
-  dur: number;
-  text: string;
-  tl: number;
-}
+import type { CapStore, FxStore, SpeechLine } from "./types";
 
 // จุดจัดตำแหน่ง 3×3 ของข้อความ — ตั้ง align (จุดยึดแบบ ass) คู่กับ x/y เสมอ
 // ข้อความจึงกอดมุมได้พอดีโดยไม่ต้องรู้ว่ากล่องกว้างเท่าไร (ต่างจากภาพซ้อนที่รู้ขนาด)
@@ -62,10 +51,6 @@ const SPOTS: { align: number; x: number; y: number; label: string }[][] = [
   ],
 ];
 
-/** ข้อความที่มาจากบทพูดติดรหัสไว้ที่ช่อง id — ติ๊กออกแล้วลบถูกชิ้นเสมอ
- *  แม้ปิดโปรเจกต์ไปแล้วเปิดใหม่ (เอนจินเก็บ id ตามที่ส่งไป ไม่เขียนทับ) */
-const TR_ID = (id: string) => `tr:${id}`;
-
 const ALIGNS = [
   { v: "2", label: "ล่าง-กลาง" },
   { v: "5", label: "กลางจอ" },
@@ -80,6 +65,10 @@ const ALIGNS = [
  *  เดิมสองอย่างนี้อยู่คนละแท็บ ("ข้อความ" กับ "เอฟเฟกต์") ทั้งที่ผู้ใช้มองว่าเป็น
  *  ตัวหนังสือบนจอเหมือนกัน — และปุ่มสร้างข้อความขั้น 5 มีอยู่ทั้งสองแท็บโดยที่
  *  แท็บแรกแก้ของที่สร้างไม่ได้เลย รวมแล้วจบในที่เดียว ปุ่มบันทึกเดียวคุมสองไฟล์
+ *
+ *  ส่วน "เลือกบรรทัดจากบทพูดใส่ลงหนัง" ย้ายไปอยู่แท็บ "บทพูดที่ถอดไว้" แล้ว —
+ *  ที่นั่นคือที่ที่คนไปหาคำพูด ที่นี่คือที่ที่คนมาแต่งตัวหนังสือ  บรรทัดที่ติ๊กไป
+ *  จะโผล่ในรายการข้างล่างนี้เหมือนข้อความที่พิมพ์เอง (ต่างกันแค่ id ขึ้นต้น `tr:`)
  */
 export default function TextPanel({
   fxs,
@@ -89,19 +78,22 @@ export default function TextPanel({
   focusIdx,
   stageEdit,
   onStageEdit,
+  onGotoSpeech,
 }: {
   fxs: FxStore;
   caps: CapStore;
+  /** ใช้จุดเดียว: กู้ข้อความของ cue ที่ถูกซ่อน ซึ่งเอนจินไม่ส่งกลับมาแล้ว
+   *  (การเลือกบรรทัดใส่ลงหนังย้ายไปอยู่แท็บ "บทพูดที่ถอดไว้") */
   speech: SpeechLine[];
   onAddAtPlayhead: (text?: string) => void;
   focusIdx: number | null;
   stageEdit: boolean;
   onStageEdit: (idx: number) => void;
+  onGotoSpeech: () => void;
 }) {
   const [open, setOpen] = useState<number | null>(null);
   const [filter, setFilter] = useState("");
   const [draftText, setDraftText] = useState("");
-  const [trFilter, setTrFilter] = useState("");
 
   // คลิกบล็อกบนไทม์ไลน์ (หรือบนจอตัวอย่าง) → เปิดชิ้นนั้นในแผงทันที
   useEffect(() => {
@@ -139,60 +131,10 @@ export default function TextPanel({
   const patch = (i: number, p: Partial<FxTextItem>) =>
     fxs.patch({ texts: draft.texts.map((t, k) => (k === i ? { ...t, ...p } : t)) });
 
-  // ชิ้นใหม่ที่ลอกหน้าตาจากสไตล์กลางของขั้น 5 — ท่าเดียวกับ fx.new_text ฝั่งเอนจิน
-  // (ลอกตอนเกิด ไม่ใช่อ้างอิงสไตล์กลางตอน render ไม่งั้นแก้สไตล์ทีหลังแล้วของ
-  //  ที่จัดไว้เรียบร้อยเปลี่ยนหน้าตายกเรื่องโดยไม่มีใครสั่ง)
-  const STYLE_KEYS = [
-    "font", "size", "color", "outline", "border", "shadow",
-    "bold", "italic", "spacing",
-  ] as const;
-  const subLike = (ln: SpeechLine): FxTextItem => {
-    const base = data.defaults.text_item as Omit<
-      FxTextItem,
-      "at" | "dur" | "id" | "name" | "lines"
-    >;
-    const gstyle = (data.fx.style ?? {}) as Record<string, unknown>;
-    const copied = Object.fromEntries(
-      STYLE_KEYS.filter((k) => k in gstyle).map((k) => [k, gstyle[k]]),
-    );
-    return {
-      ...base,
-      ...copied,
-      text: ln.text,
-      name: ln.name,
-      at: ln.at,
-      dur: Math.max(0.4, ln.dur),
-      // วางอย่างซับ: ยึดขอบล่างกลางจอ (align 2) แล้วลากจัดต่อได้ตามใจ
-      align: 2,
-      x: 0.5,
-      y: 0.94,
-      anim: "none",
-      id: TR_ID(ln.id),
-      lines: [],
-    };
-  };
+  // ข้อความที่มาจากบทพูดติดรหัส `tr:<คลิป>#<บรรทัด>` ไว้ที่ช่อง id — ติ๊กใส่/เอาออก
+  // ทำที่แท็บ "บทพูดที่ถอดไว้" ที่นี่แค่นับให้เห็นว่ามีกี่ชิ้นและชี้ทางไป
+  const fromSpeech = draft.texts.filter((t) => t.id.startsWith("tr:")).length;
 
-  // ข้อความชิ้นไหนมาจากบรรทัดบทพูดบ้าง — ใช้ตัดสินสถานะติ๊กของทุกแถว
-  const fromSpeech = new Map<string, number>();
-  draft.texts.forEach((t, i) => {
-    if (t.id.startsWith("tr:")) fromSpeech.set(t.id.slice(3), i);
-  });
-
-  const putLines = (lines: SpeechLine[]) => {
-    const add = lines.filter((l) => !fromSpeech.has(l.id)).map(subLike);
-    if (add.length) fxs.patch({ texts: [...draft.texts, ...add] });
-  };
-  const dropLines = (ids: string[]) => {
-    const kill = new Set(ids.map(TR_ID));
-    fxs.patch({ texts: draft.texts.filter((t) => !kill.has(t.id)) });
-  };
-  const toggleLine = (ln: SpeechLine) =>
-    fromSpeech.has(ln.id) ? dropLines([ln.id]) : putLines([ln]);
-
-  const shownSpeech = speech.filter(
-    (l) => !trFilter || l.text.includes(trFilter) || l.name.includes(trFilter),
-  );
-  const putCount = speech.filter((l) => fromSpeech.has(l.id)).length;
   // cue ที่สั่งซ่อนไว้ "หายจากรายการที่เอนจินส่งมา" (caption.cues กรองทิ้งตั้งแต่ต้นทาง)
   // ถ้าไม่ปั้นแถวคืนเอง จะกดซ่อนได้ครั้งเดียวแล้วเรียกกลับไม่ได้อีกเลย — ข้อความ
   // ของบรรทัดนั้นหาได้จากบทพูด เพราะ id ใช้สูตรเดียวกัน (`<คลิป>#<ลำดับ>`)
@@ -200,8 +142,6 @@ export default function TextPanel({
   const hiddenRows = cd.drop
     .filter((id) => !cueIds.has(id))
     .map((id) => ({ id, text: speech.find((l) => l.id === id)?.text ?? "" }));
-  const autoSub = Boolean(draft.auto_sub?.enabled);
-
   const st = (k: string) => cd.style[k];
   const setSt = (k: string, v: unknown) =>
     caps.patch({ style: { ...cd.style, [k]: v } });
@@ -407,89 +347,19 @@ export default function TextPanel({
         </p>
       </Section>
 
-      <Section
-        title={`จากบทพูด — เลือกใส่ลงหนัง (${putCount}/${speech.length})`}
-        right={
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => putLines(shownSpeech)}
-              disabled={!shownSpeech.length}
-              className="rounded-md border border-line bg-panel-2 px-2 py-1 text-[11px] text-ink hover:bg-panel-3 disabled:opacity-40"
-              title="ใส่ทุกบรรทัดที่เห็นอยู่ลงหนัง"
-            >
-              เลือกทั้งหมด
-            </button>
-            <button
-              onClick={() => dropLines(speech.map((l) => l.id))}
-              disabled={!putCount}
-              className="rounded-md px-2 py-1 text-[11px] text-muted hover:text-danger disabled:opacity-40"
-              title="เอาบรรทัดที่ใส่ไว้ออกจากหนังทั้งหมด (ข้อความที่พิมพ์เองไม่ถูกแตะ)"
-            >
-              ล้างที่ใส่ไว้
-            </button>
-          </div>
-        }
+      <button
+        onClick={onGotoSpeech}
+        className="flex w-full items-center gap-2 rounded-lg border border-line bg-panel-2 px-2.5 py-2 text-left hover:bg-panel-3"
+        title="ไปเลือกบรรทัดจากบทพูดใส่ลงหนัง"
       >
-        {autoSub && (
-          <div className="rounded-lg border border-warn/30 bg-warn/10 px-2.5 py-2 text-[11px] leading-4 text-warn">
-            สวิตช์ &ldquo;ซับอัตโนมัติทั้งกอง&rdquo; ด้านล่างเปิดอยู่ —
-            บรรทัดที่ติ๊กใส่จะซ้อนกับซับอีกชั้นตอน Export แบบมีเอฟเฟกต์
-            เลือกอย่างใดอย่างหนึ่ง
-          </div>
-        )}
-        {speech.length === 0 ? (
-          <Empty>
-            ยังไม่มีบทพูด — สั่งถอดเสียง (ขั้น 2) ก่อน แล้วบรรทัดจะมาโผล่ที่นี่
-          </Empty>
-        ) : (
-          <>
-            {speech.length > 8 && (
-              <TInput value={trFilter} onChange={setTrFilter} placeholder="ค้นหาบทพูด/คลิป…" />
-            )}
-            <div className="flex max-h-72 flex-col gap-1 overflow-y-auto pr-1">
-              {shownSpeech.map((l) => {
-                const on = fromSpeech.has(l.id);
-                return (
-                  <button
-                    key={l.id}
-                    onClick={() => toggleLine(l)}
-                    className={`flex items-start gap-1.5 rounded-lg border px-2 py-1.5 text-left ${
-                      on ? "border-accent/60 bg-accent/10" : "border-line bg-panel-2"
-                    }`}
-                    title={on ? "เอาออกจากหนัง" : "ใส่ลงหนังตรงเวลาที่พูดจริง"}
-                  >
-                    {on ? (
-                      <CheckSquare size={13} className="mt-0.5 shrink-0 text-accent" />
-                    ) : (
-                      <Square size={13} className="mt-0.5 shrink-0 text-faint" />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <div className="font-mono text-[10px] text-faint">
-                        {dur(l.tl)} · {l.name} @{l.at.toFixed(1)} · {l.dur.toFixed(1)}s
-                      </div>
-                      <div className="truncate text-[12px] text-ink">{l.text}</div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </>
-        )}
-        <div className="flex items-center justify-between rounded-lg border border-line bg-panel-2 px-2.5 py-2">
-          <div className="min-w-0 pr-2">
-            <div className="text-[11.5px] text-ink">ซับอัตโนมัติทั้งกอง (ขั้น 5)</div>
-            <div className="text-[10px] leading-4 text-faint">
-              เผาบทพูดทุกบรรทัดเป็นซับตอน Export แบบมีเอฟเฟกต์ — ทางลัดแทนการติ๊กทีละบรรทัด
-              แต่จัดตำแหน่งรายบรรทัดไม่ได้
-            </div>
-          </div>
-          <Toggle
-            value={autoSub}
-            onChange={(v) => fxs.patch({ auto_sub: { enabled: v } })}
-            label=""
-          />
-        </div>
-      </Section>
+        <Captions size={13} className="shrink-0 text-faint" />
+        <span className="min-w-0 flex-1 text-[11.5px] leading-4 text-muted">
+          {fromSpeech > 0
+            ? `บรรทัดจากบทพูดที่ใส่ไว้ ${fromSpeech} บรรทัด — เลือกเพิ่ม/เอาออกที่แท็บบทพูด`
+            : "อยากได้ตัวหนังสือจากคำพูด — เลือกทีละบรรทัดได้ที่แท็บบทพูด"}
+        </span>
+        <ChevronRight size={13} className="shrink-0 text-faint" />
+      </button>
 
       <Section title="สไตล์ซับ (ใช้กับซับจากบทพูดทุกบรรทัด)">
         <div className="grid grid-cols-2 gap-2">

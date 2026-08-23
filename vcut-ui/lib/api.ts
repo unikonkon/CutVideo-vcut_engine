@@ -144,8 +144,6 @@ export const liveUrl = (token: string, from: number) =>
   `${engine}/live/${token}?from=${from}`;
 export const assetUrl = (name: string) =>
   `${engine}/asset/${encodeURIComponent(name)}`;
-export const textFileUrl = (name: string, ext: string) =>
-  `${engine}/text/${encodeURIComponent(name)}.${ext}`;
 
 // ── ขั้น 4 · ข้อความ/ซับ ──
 

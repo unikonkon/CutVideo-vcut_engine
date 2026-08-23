@@ -1154,7 +1154,6 @@ export default function Editor() {
       else if (p.type === "sticker") addStickerAt(tl, p.file);
       else if (p.type === "sticker-sample") addStickerSampleAt(tl, p.file);
       else if (p.type === "text-new") addTextAt(tl, p.text);
-      else if (p.type === "transcript") addTextAt(tl, p.text);
     },
     [addMusicAt, addSfxAt, addStickerAt, addStickerSampleAt, addTextAt],
   );
@@ -1384,6 +1383,7 @@ export default function Editor() {
               setFocus({ kind: "text", idx: i });
               setPosEdit(true);
             }}
+            onGotoSpeech={() => setTab("cc")}
           />
         )}
         {tab === "music" && (
@@ -1414,10 +1414,7 @@ export default function Editor() {
           />
         )}
         {tab === "cc" && (
-          <TranscriptPanel
-            reloadKey={reloadKey}
-            onAddText={(t) => addTextAt(playhead, t)}
-          />
+          <TranscriptPanel speech={speechLines} fxs={fxs} />
         )}
         {tab === "review" && (
           <ReviewPanel

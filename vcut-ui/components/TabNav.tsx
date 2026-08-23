@@ -27,10 +27,10 @@ const ITEMS: {
   title: string;
 }[] = [
   { id: "assets", icon: FolderOpen, label: "คลิป", title: "คลังคลิป" },
-  { id: "text", icon: Type, label: "ข้อความ", title: "ข้อความบนหนัง + ซับจากบทพูด" },
+  { id: "text", icon: Type, label: "ข้อความ", title: "ข้อความบนหนัง + สไตล์ซับ" },
   { id: "music", icon: Music, label: "เพลง", title: "เพลงประกอบ" },
   { id: "stickers", icon: Smile, label: "สติกเกอร์", title: "สติกเกอร์ / ภาพซ้อน / แผนที่เส้นทาง" },
-  { id: "cc", icon: Captions, label: "บทพูด", title: "บทพูดที่ถอดไว้" },
+  { id: "cc", icon: Captions, label: "บทพูด", title: "บทพูดที่ถอดไว้ — เลือกบรรทัดใส่ลงหนัง" },
   { id: "review", icon: Bot, label: "AI", title: "AI ดูหนัง" },
   { id: "setup", icon: Settings, label: "ตั้งค่า", title: "ตั้งค่าเอนจิน" },
 ];
