@@ -280,12 +280,31 @@ MEDIA_SCHEMA = """{
 }"""
 
 
-def prompt_music(ctx, edl, tracks, context, out_name):
-    body = f"""
-งานของคุณ: เลือกเพลงจากคลังมาวางบนหนัง
+def prompt_music(ctx, edl, tracks, samples, context, out_name):
+    """`tracks` = ไฟล์ที่อยู่ในคลังของโปรเจกต์แล้ว · `samples` = ลูปเพลงคลอตัวอย่าง
+    ที่อยู่ฝั่งหน้าเว็บ (ยังไม่ได้เข้าคลัง — หน้าเว็บอัปโหลดให้ตอนกดรับข้อเสนอ)
 
-เพลงในคลัง (เลือกได้เฉพาะชื่อเหล่านี้ ห้ามคิดชื่อไฟล์ขึ้นเอง)
-{chr(10).join('  ' + t for t in tracks)}
+    สองกลุ่มนี้แยกตารางกันเพราะ AI ต้องรู้ว่าอะไรเป็นอะไร: ไฟล์ในคลังมีแต่ชื่อ
+    (ซึ่งมักเป็นชื่อคลิป YouTube ที่อ่านอารมณ์เพลงไม่ออก) ส่วนลูปตัวอย่างมีป้าย
+    กับหมวดบอกอารมณ์ครบ — ยัดรวมกันเป็นรายการเดียวแล้ว AI จะเลือกจากชื่อไฟล์ล้วน
+    ซึ่งเดาไม่ได้ว่าเพลงไหนเข้ากับช่วงไหนของหนัง
+    """
+    lib = ("\n".join("  " + t for t in tracks)
+           if tracks else "  (ยังไม่มีไฟล์เพลงในคลัง)")
+    loops = (_catalog_table(samples, ["file", "label", "cat"])
+             if samples else "(ไม่มี)")
+    body = f"""
+งานของคุณ: เลือกเพลงมาวางคลอบนหนัง
+
+เพลงในคลังของโปรเจกต์ (ตอบด้วยชื่อไฟล์ตรง ๆ)
+{lib}
+
+ลูปเพลงคลอสังเคราะห์ที่เลือกได้ด้วย (ตอบด้วยคอลัมน์ file · ทุกตัววนซ้ำได้ไม่มีรอยต่อ
+จึงใส่ dur ยาวเท่าไรก็ได้ · หมวด travel=เดินทาง chill=ชิล warm=อบอุ่น upbeat=สนุก
+tense=ลุ้นระทึก choir=เสียงร้องคอรัสไม่มีเนื้อ)
+{loops}
+
+เลือกได้เฉพาะชื่อจากสองตารางข้างบน ห้ามคิดชื่อไฟล์ขึ้นเอง
 
 กติกา
 - "tl" = วินาทีบนไทม์ไลน์ของหนัง (0 = ต้นเรื่อง) ดูจากตารางข้างล่าง
@@ -566,9 +585,13 @@ def run_task(ctx, task, edl, rman, context, catalog, ai_dir, max_ops):
     elif task == "music":
         from . import music as musicmod
         tracks = musicmod.summary(ctx).get("tracks") or []
-        if not tracks:
+        # ลูปตัวอย่างอยู่ใน public/ ของหน้าเว็บ เอนจินมองไม่เห็น — มาทางแคตตาล็อก
+        # เหมือน sfx/sticker (ดู _catalog) สั่งจากเทอร์มินัลก็ยังเลือกจากคลังได้
+        samples = _catalog(catalog, "bgm")
+        if not tracks and not samples:
             return [], {}, "คลังยังไม่มีไฟล์เพลง — ดึงจาก YouTube หรืออัปโหลดก่อน"
-        prompt = prompt_music(ctx, edl, tracks, context, out_name)
+        prompt = prompt_music(ctx, edl, tracks, list(samples.values()),
+                              context, out_name)
     elif task in WEB_TASKS:
         items = _catalog(catalog, task)
         if not items:
@@ -591,7 +614,7 @@ def run_task(ctx, task, edl, rman, context, catalog, ai_dir, max_ops):
     elif task == "trim":
         ops, warns = v_trim(data, cands)
     elif task == "music":
-        ops, warns = v_media(data, "music", set(tracks), total,
+        ops, warns = v_media(data, "music", set(tracks) | set(samples), total,
                              dur_range=(0.0, max(total, 1.0)))
     elif task == "sfx":
         # ความยาวของเสียงมาจากไฟล์จริง ไม่ใช่จากที่ AI เดา — ยกเว้นเสียงบรรยากาศ

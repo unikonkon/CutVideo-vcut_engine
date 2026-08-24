@@ -41,6 +41,7 @@ import {
   type DropPayload,
   type LayerKind,
 } from "@/lib/layers";
+import { BGM_LIST, bgmLabel, bgmUrl } from "@/lib/bgm";
 import { SFX_LIST, sfxUrl } from "@/lib/sfx";
 import { STICKER_LIST, stickerUrl } from "@/lib/stickers";
 import type { CapDraft } from "@/components/panels/types";
@@ -447,6 +448,9 @@ export default function Editor() {
             loop: x.loop ? 1 : 0,
           })),
           sticker: STICKER_LIST.map((x) => ({
+            file: x.file, label: x.label, cat: x.cat,
+          })),
+          bgm: BGM_LIST.map((x) => ({
             file: x.file, label: x.label, cat: x.cat,
           })),
         };
@@ -871,9 +875,23 @@ export default function Editor() {
                 id: "",
               });
             } else {
+              // AI เลือกลูปตัวอย่างได้ด้วย (ดู catalog.bgm ข้างบน) ซึ่งยังไม่อยู่ใน
+              // คลังของโปรเจกต์จนกว่าจะมีคนใช้ — ขึ้นคลังตรงนี้ ไม่งั้นได้แทร็กที่
+              // ชี้ไฟล์ที่ไม่มีอยู่ แล้วเงียบไปตอน export โดยไม่มีอะไรฟ้อง
+              let file = o.file ?? "";
+              if (
+                BGM_LIST.some((b) => b.file === file) &&
+                !data.music.tracks.includes(file)
+              ) {
+                const blob = await (await fetch(bgmUrl(file))).blob();
+                const b64 = await fileToBase64(new File([blob], file));
+                const r = await api2.saveAsset(file, b64, "audio");
+                data = r.fx;
+                file = r.file || file;
+              }
               music.push({
                 ...data.music.defaults,
-                file: o.file ?? "",
+                file,
                 at: Math.max(0, Math.round(tl * 100) / 100),
                 ...(o.dur ? { dur: o.dur } : {}),
                 id: "",
@@ -1292,9 +1310,24 @@ export default function Editor() {
     [fxDraft, fxData, layers, total, patchFx, flash],
   );
 
-  // เสียงเอฟเฟกต์ตัวอย่าง — ไฟล์อยู่ใน public/sfx ของ UI; ครั้งแรกที่ใช้
-  // อัปโหลดเข้าโฟลเดอร์ assets ของโปรเจกต์ก่อน (เอนจินอ่านจากที่นั่นเท่านั้น)
-  // แล้วค่อยวางเป็นแทร็กเพลงแบบ "เสียงสั้น": ยาวเท่าไฟล์ ไม่วน ไม่หลบเสียงพูด
+  // ไฟล์ตัวอย่างของหน้าเว็บ (public/sfx · public/bgm) เข้าคลังของโปรเจกต์
+  // ครั้งแรกที่ใช้ — เอนจินอ่านจากโฟลเดอร์ assets เท่านั้น ไม่รู้จัก public/ เลย
+  // คืนชื่อไฟล์จริงในคลัง (เอนจินเปลี่ยนชื่อได้ตอนชนไฟล์เดิม — แทร็กต้องชี้ชื่อ
+  // ที่เอนจินตอบกลับมา ไม่งั้นได้แทร็กที่ไม่มีไฟล์แล้วเงียบไปตอน export)
+  const ensureAsset = useCallback(
+    async (file: string, url: string) => {
+      if (fxData?.music.tracks.includes(file)) return file;
+      const blob = await (await fetch(url)).blob();
+      const b64 = await fileToBase64(new File([blob], file));
+      const r = await api2.saveAsset(file, b64, "audio");
+      setFxData(r.fx);
+      return r.file || file;
+    },
+    [fxData],
+  );
+
+  // เสียงเอฟเฟกต์ตัวอย่าง — วางเป็นแทร็กเพลงแบบ "เสียงสั้น": ยาวเท่าไฟล์ ไม่วน
+  // ไม่หลบเสียงพูด (เสียงสั้นที่หลบเองจะหายไปทั้งเสียงตอนวางทับคนพูด)
   const addSfxAt = useCallback(
     async (tl: number, file: string, dur: number, loop = false) => {
       if (!fxDraft || !fxData) return;
@@ -1303,14 +1336,7 @@ export default function Editor() {
       }
       let actual = file;
       try {
-        if (!fxData.music.tracks.includes(file)) {
-          const blob = await (await fetch(sfxUrl(file))).blob();
-          const b64 = await fileToBase64(new File([blob], file));
-          const r = await api2.saveAsset(file, b64, "audio");
-          setFxData(r.fx);
-          // เอนจินอาจเปลี่ยนชื่อตอนชนไฟล์เดิม — แทร็กต้องชี้ชื่อจริง ไม่งั้นเงียบ
-          actual = r.file || file;
-        }
+        actual = await ensureAsset(file, sfxUrl(file));
       } catch (e) {
         return flash(e instanceof Error ? e.message : "เพิ่มไฟล์เสียงเข้าคลังไม่สำเร็จ");
       }
@@ -1334,18 +1360,55 @@ export default function Editor() {
       setFocus({ kind: "music", idx: fxDraft.music.length });
       flash(`วางเสียง ${file} ที่ ${tl.toFixed(1)} วิ — กดบันทึก FX เมื่อจัดเสร็จ`);
     },
-    [fxDraft, fxData, layers, patchFx, flash],
+    [fxDraft, fxData, layers, patchFx, flash, ensureAsset],
+  );
+
+  // เพลงคลอตัวอย่าง — ขึ้นคลังเหมือนเสียงเอฟเฟกต์ แต่วางด้วยค่าตั้งต้นของ *เพลง*
+  // (ยาวจนจบเรื่อง · วนซ้ำ · หลบเสียงพูด) ซึ่งก็คือค่าตั้งต้นของเอนจินอยู่แล้ว
+  // จึงไม่ต้องทับอะไรเลยนอกจากชื่อไฟล์ — ต่างจาก addSfxAt ที่ต้องทับห้าช่อง
+  const addBgmAt = useCallback(
+    async (tl: number, file: string) => {
+      if (!fxDraft || !fxData) return;
+      const d = fxData.music.defaults.dur;
+      const effDur = d > 0 ? d : Math.max(total - tl, 1);
+      if (overlapCount(layers.music, tl, effDur) >= MAX_AUDIO_STACK) {
+        return flash(`ช่วงนี้มีเสียงซ้อนครบ ${MAX_AUDIO_STACK} ชั้นแล้ว`);
+      }
+      let actual = file;
+      try {
+        actual = await ensureAsset(file, bgmUrl(file));
+      } catch (e) {
+        return flash(e instanceof Error ? e.message : "เพิ่มเพลงเข้าคลังไม่สำเร็จ");
+      }
+      patchFx({
+        music: [
+          ...fxDraft.music,
+          {
+            ...fxData.music.defaults,
+            file: actual,
+            at: Math.max(0, Math.round(tl * 100) / 100),
+            id: "",
+          },
+        ],
+      });
+      setFocus({ kind: "music", idx: fxDraft.music.length });
+      flash(
+        `วางเพลง ${bgmLabel(file) ?? file} ที่ ${tl.toFixed(1)} วิ — วนซ้ำจนจบเรื่อง`,
+      );
+    },
+    [fxDraft, fxData, layers, total, patchFx, flash, ensureAsset],
   );
 
   const dropOnTimeline = useCallback(
     (p: DropPayload, tl: number) => {
       if (p.type === "music-file") addMusicAt(tl, p.file);
       else if (p.type === "sfx") addSfxAt(tl, p.file, p.dur, p.loop);
+      else if (p.type === "bgm") addBgmAt(tl, p.file);
       else if (p.type === "sticker") addStickerAt(tl, p.file);
       else if (p.type === "sticker-sample") addStickerSampleAt(tl, p.file);
       else if (p.type === "text-new") addTextAt(tl, p.text);
     },
-    [addMusicAt, addSfxAt, addStickerAt, addStickerSampleAt, addTextAt],
+    [addMusicAt, addSfxAt, addBgmAt, addStickerAt, addStickerSampleAt, addTextAt],
   );
 
   const addClip = useCallback(
@@ -1582,6 +1645,7 @@ export default function Editor() {
             onMusicFetch={musicFetch}
             onAddAtPlayhead={(f) => addMusicAt(playhead, f)}
             onAddSfxAtPlayhead={(f, d, lp) => addSfxAt(playhead, f, d, lp)}
+            onAddBgmAtPlayhead={(f) => addBgmAt(playhead, f)}
             onToggleMixer={() => setMixerOpen((o) => !o)}
             focusIdx={focus?.kind === "music" ? focus.idx : null}
             flash={flash}

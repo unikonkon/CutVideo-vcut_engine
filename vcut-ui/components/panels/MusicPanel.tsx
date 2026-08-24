@@ -5,6 +5,8 @@ import {
   Download,
   GripVertical,
   Music,
+  Music2,
+  Pause,
   Play,
   SlidersVertical,
   Trash2,
@@ -12,6 +14,7 @@ import {
   Zap,
 } from "lucide-react";
 import { api2, assetUrl, fileToBase64, type MusicTrack } from "@/lib/api";
+import { BGM_CATS, BGM_LIST, bgmUrl } from "@/lib/bgm";
 import { DND_MIME } from "@/lib/layers";
 import { SFX_CATS, SFX_LIST, sfxUrl } from "@/lib/sfx";
 import {
@@ -33,6 +36,7 @@ export default function MusicPanel({
   onMusicFetch,
   onAddAtPlayhead,
   onAddSfxAtPlayhead,
+  onAddBgmAtPlayhead,
   onToggleMixer,
   focusIdx,
   flash,
@@ -41,21 +45,32 @@ export default function MusicPanel({
   onMusicFetch: (url: string) => void;
   onAddAtPlayhead: (file: string) => void;
   onAddSfxAtPlayhead: (file: string, dur: number, loop: boolean) => void;
+  onAddBgmAtPlayhead: (file: string) => void;
   onToggleMixer: () => void;
   focusIdx: number | null;
   flash: (m: string) => void;
 }) {
   const [yt, setYt] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
-  // ตัวเล่นลองฟังเสียงเอฟเฟกต์ — ใช้ตัวเดียว กดเสียงใหม่แล้วตัวเก่าหยุดเอง
-  const sfxPlayer = useRef<HTMLAudioElement | null>(null);
-  const previewSfx = (file: string) => {
-    if (!sfxPlayer.current) sfxPlayer.current = new Audio();
-    const a = sfxPlayer.current;
+  // ตัวเล่นลองฟัง — ตัวเดียวสำหรับทั้งเสียงเอฟเฟกต์และเพลงคลอ กดอันใหม่แล้ว
+  // อันเก่าหยุดเอง (เพลงคลอยาว 15–30 วินาที ปล่อยให้ซ้อนกันได้จะฟังไม่ออกสักอัน)
+  const player = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState("");
+  const preview = (file: string, url: string) => {
+    if (!player.current) {
+      player.current = new Audio();
+      player.current.addEventListener("ended", () => setPlaying(""));
+    }
+    const a = player.current;
     a.pause();
-    a.src = sfxUrl(file);
+    if (playing === file) return setPlaying("");     // กดซ้ำที่ตัวเดิม = หยุด
+    a.src = url;
     a.currentTime = 0;
-    a.play().catch(() => flash("เล่นตัวอย่างเสียงไม่ได้"));
+    setPlaying(file);
+    a.play().catch(() => {
+      setPlaying("");
+      flash("เล่นตัวอย่างเสียงไม่ได้");
+    });
   };
 
   if (!fxs.data || !fxs.draft) {
@@ -87,7 +102,8 @@ export default function MusicPanel({
   const unused = data.music.tracks.filter(
     (t) =>
       !items.some((m) => m.file === t) &&
-      !SFX_LIST.some((s) => s.file === t),
+      !SFX_LIST.some((s) => s.file === t) &&
+      !BGM_LIST.some((b) => b.file === t),
   );
 
   return (
@@ -168,6 +184,65 @@ export default function MusicPanel({
       </Section>
 
       <Section
+        title={`เพลงคลอสังเคราะห์ (${BGM_LIST.length} ลูป · ${BGM_CATS.length} หมวด)`}
+      >
+        {BGM_CATS.map((c) => (
+          <div key={c.key} className="flex flex-col gap-1">
+            <div className="flex items-baseline gap-1.5">
+              <span className="shrink-0 text-[10.5px] font-medium text-muted">
+                {c.label}
+              </span>
+              <span className="min-w-0 truncate text-[9.5px] text-faint">{c.hint}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {BGM_LIST.filter((b) => b.cat === c.key).map((b) => (
+                <div
+                  key={b.file}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData(
+                      DND_MIME,
+                      JSON.stringify({ type: "bgm", file: b.file }),
+                    );
+                    e.dataTransfer.effectAllowed = "copy";
+                  }}
+                  className="flex cursor-grab items-center gap-1 rounded-lg border border-dashed border-line-2 bg-panel-2 px-1.5 py-1 active:cursor-grabbing"
+                  title="ลากลงเลเยอร์เพลงบนไทม์ไลน์ หรือกด ＋ เพื่อวางที่หัวเล่น"
+                >
+                  <button
+                    onClick={() => preview(b.file, bgmUrl(b.file))}
+                    className="shrink-0 rounded p-1 text-muted hover:text-ink"
+                    title="ลองฟัง (กดซ้ำเพื่อหยุด)"
+                  >
+                    {playing === b.file ? <Pause size={11} /> : <Play size={11} />}
+                  </button>
+                  <Music2 size={10} className="shrink-0 text-accent" />
+                  <span className="min-w-0 flex-1 truncate text-[11px] text-ink">
+                    {b.label}
+                    <span className="ml-1 text-[9.5px] text-faint">
+                      {b.dur.toFixed(0)}s
+                    </span>
+                  </span>
+                  <button
+                    onClick={() => onAddBgmAtPlayhead(b.file)}
+                    className="shrink-0 rounded bg-panel-3 px-1.5 py-0.5 text-[10.5px] text-muted hover:text-ink"
+                    title="วางเพลงนี้ตรงหัวเล่น (วนยาวจนจบเรื่อง)"
+                  >
+                    ＋
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        <div className="text-[10.5px] leading-4 text-muted">
+          สังเคราะห์ด้วยโค้ดล้วน ไม่มีลิขสิทธิ์ ใช้ในคลิปเชิงพาณิชย์ได้ · ทุกลูปต่อหัว-ท้ายได้
+          ไม่มีรอยต่อ วางแล้ววนยาวจนจบเรื่องและหลบเสียงพูดให้เอง — หมวดคอรัสเป็นเสียงร้อง
+          สังเคราะห์ที่ไม่มีเนื้อร้อง
+        </div>
+      </Section>
+
+      <Section
         title={`เสียงเอฟเฟกต์ (${SFX_LIST.length} เสียงตัวอย่าง · ${SFX_CATS.length} หมวด)`}
       >
         {SFX_CATS.map((c) => (
@@ -194,11 +269,11 @@ export default function MusicPanel({
                   title="ลากลงเลเยอร์เพลงบนไทม์ไลน์ หรือกด ＋ เพื่อวางที่หัวเล่น"
                 >
                   <button
-                    onClick={() => previewSfx(s.file)}
+                    onClick={() => preview(s.file, sfxUrl(s.file))}
                     className="shrink-0 rounded p-1 text-muted hover:text-ink"
                     title="ลองฟัง"
                   >
-                    <Play size={11} />
+                    {playing === s.file ? <Pause size={11} /> : <Play size={11} />}
                   </button>
                   <Zap size={10} className="shrink-0 text-warn" />
                   <span className="min-w-0 flex-1 truncate text-[11px] text-ink">

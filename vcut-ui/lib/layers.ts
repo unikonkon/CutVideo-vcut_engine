@@ -179,6 +179,10 @@ export const DND_MIME = "application/x-vcut";
 export type DropPayload =
   | { type: "music-file"; file: string }
   | { type: "sfx"; file: string; dur: number; loop?: boolean }
+  // เพลงคลอตัวอย่าง — คนละชนิดกับ "music-file" เพราะไฟล์ยังไม่อยู่ในคลังของ
+  // โปรเจกต์ ต้องอัปโหลดจาก public/bgm ก่อน (เหมือน sfx) แต่ค่าตั้งต้นตอนวาง
+  // เป็นของเพลงคลอ ไม่ใช่ของเสียงสั้น — ดู addBgmAt
+  | { type: "bgm"; file: string }
   | { type: "sticker"; file: string }
   | { type: "sticker-sample"; file: string }
   | { type: "text-new"; text?: string };

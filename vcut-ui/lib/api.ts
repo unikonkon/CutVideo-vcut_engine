@@ -402,6 +402,7 @@ export interface ReviewData {
 export interface ReviewCatalog {
   sfx?: { file: string; label: string; cat: string; dur: number; loop: number }[];
   sticker?: { file: string; label: string; cat: string }[];
+  bgm?: { file: string; label: string; cat: string }[];
 }
 
 export interface SetupField {

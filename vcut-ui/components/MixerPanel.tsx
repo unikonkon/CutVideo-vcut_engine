@@ -6,6 +6,7 @@
 
 import { SlidersVertical, X } from "lucide-react";
 import type { MusicTrack } from "@/lib/api";
+import { bgmLabel } from "@/lib/bgm";
 import { SFX_LIST } from "@/lib/sfx";
 import { Fader } from "@/components/ui";
 
@@ -22,8 +23,11 @@ export default function MixerPanel({
   onSelect: (idx: number) => void;
   onClose: () => void;
 }) {
+  // ชื่อไฟล์ของเสียงตัวอย่างอ่านไม่ออกในแถบแคบ ๆ (bgm-travel-open) — ป้ายไทย
+  // ของแคตตาล็อกอ่านออกกว่า ส่วนไฟล์ที่คนเอาเข้าเองใช้ชื่อไฟล์ตามเดิม
   const labelOf = (m: MusicTrack) =>
     SFX_LIST.find((s) => s.file === m.file)?.label ??
+    bgmLabel(m.file) ??
     m.file.replace(/\.[^.]+$/, "");
 
   return (
