@@ -35,7 +35,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import gen_sfx as S                                  # noqa: E402  (ต้องต่อ path ก่อน)
-from gen_sfx import bp, drive, hp, lp, n_of, noise, osc, peaking, reverb, tt  # noqa: E402
+from gen_sfx import (bp, drive, env, hp, lp, n_of, noise, osc, peaking,  # noqa: E402
+                     place, reverb, seamless, tt)
 
 SR = S.SR
 OUT = Path(__file__).resolve().parent.parent / "public" / "bgm"
@@ -315,6 +316,92 @@ def vinyl(dur):
         i = int(S.rng.random() * (len(x) - 400))
         x[i:i + 300] += bp(noise(300 / SR), 1500, 7000) * 0.9
     return x
+
+
+# ─────────────────── พื้นเสียงธรรมชาติ (ชุดเดินป่า/ขึ้นเขา) ───────────────────
+#
+# บางเพลงในชุดเดินป่ามีเสียงกลางแจ้งคลออยู่ใต้ดนตรี — ลม นก แมลงกลางคืน สายฝน
+# (ลำธารกับกองไฟยืมจาก gen_sfx ตรง ๆ ไม่ปั้นซ้ำ) · ใส่เบา ๆ ระดับ 3–6% เท่านั้น
+# เพราะมันเป็น *กลิ่น* ของฉาก ไม่ใช่เสียงบรรยากาศจริงของคลิป ซึ่งเสียงในวิดีโอ
+# มีอยู่แล้วและดังกว่าเสมอ
+#
+# **ยาวเท่าลูปพอดีและวนได้ด้วยตัวเอง** ไม่ปล่อยให้ finish() พับหางให้เหมือน
+# เครื่องดนตรี: พื้นเสียงพวกนี้ดังตลอดลูปไม่มีเว้น ถ้าปล่อยหางเลยเส้นลูปแล้วพับ
+# กลับ ช่วงต้นลูปจะมีพื้นเสียงซ้อนกันสองชั้นทุกรอบ = ดังขึ้น ~3 dB เป็นห้วง ๆ
+# ซึ่งกับเสียงที่ราบเรียบแบบนี้หูจับได้ทันที (โน้ตเครื่องดนตรีไม่มีปัญหานี้เพราะ
+# หางมันเบาลงจนแทบเป็นศูนย์อยู่แล้วตอนถึงเส้น)
+
+def wind(dur, gust=2, low=180, high=2600):
+    """ลม — พื้นเสียงกว้างที่แรงขึ้น-เบาลงเป็นรอบ ครบรอบพอดีตรงเส้นลูป"""
+    x = bp(noise(dur + 0.6, "pink"), low, high)
+    x += lp(noise(dur + 0.6, "brown"), 240) * 0.8
+    x *= S._slowmod(len(x), gust, 0.55, dur)
+    return seamless(x, 0.6)
+
+
+def birds(dur, count=14, lo=2200, hi=4800):
+    """นกไกล ๆ — จิ๊บสั้น ๆ กระจายทั่วลูป
+
+    หนึ่งจิ๊บคือความถี่ที่ *กวาด* ขึ้นลงในเสี้ยววินาที ไม่ใช่โน้ตค้าง — นกที่ทำจาก
+    โน้ตค้างจะฟังเป็นนกหวีดของเล่นทันที · ใส่ห้องสะท้อนให้ทุกตัวเพื่อดันไปอยู่ไกล
+    ไม่ใช่เกาะอยู่ที่ไมค์ (นกที่ใกล้เกินไปแย่งความสนใจกับเสียงพูด)
+    """
+    x = np.zeros(n_of(dur + 0.6))
+    for i in range(count):
+        at = S.spread(i, count, dur)
+        seg = float(S.rng.uniform(0.05, 0.13))
+        f0 = float(S.rng.uniform(lo, hi))
+        turns = int(S.rng.integers(1, 4))
+        sweep = f0 * (1 + 0.30 * np.sin(np.linspace(0, np.pi * turns, n_of(seg))))
+        x = place(x, osc(sweep, seg) * env(seg, 0.006, None, 2.2)
+                  * float(S.rng.uniform(0.10, 0.26)), at)
+    return seamless(reverb(x, 0.9, 0.35), 0.6)
+
+
+def crickets(dur, count=20):
+    """แมลงกลางคืน — คลิกย่านสูงเป็นชุด ๆ บนพื้นเสียงบาง ๆ
+
+    จิ้งหรีดตัวหนึ่งสีเป็นชุด 3–5 ครั้งแล้วหยุด ไม่ใช่คลิกเดี่ยว ๆ ห่างเท่ากัน —
+    ความเป็นชุดนี่แหละที่ทำให้หูอ่านว่าเป็นแมลง ไม่ใช่เสียงรบกวนทางไฟฟ้า
+    """
+    x = np.zeros(n_of(dur + 0.6))
+    for i in range(count):
+        at = S.spread(i, count, dur)
+        f = float(S.rng.uniform(4200, 5600))
+        seg = 0.012
+        chirp = osc(f, seg) * env(seg, 0.001, None, 6)
+        for k in range(int(S.rng.integers(3, 6))):
+            x = place(x, chirp * float(S.rng.uniform(0.06, 0.14)), at + k * 0.035)
+    x += bp(noise(dur + 0.6, "pink"), 3000, 9000) * 0.02
+    return seamless(x, 0.6)
+
+
+def rain(dur, drops=70, lo=600, hi=8000):
+    """สายฝน — มวลน้ำต่อเนื่องบวกเม็ดที่กระทบเป็นจุด ๆ
+
+    drops คือจำนวนเม็ดที่ได้ยินแยกเป็นเม็ด: ฝนบนใบไม้กลางทางเม็ดน้อย ฝนบนผ้า
+    เต็นท์เม็ดถี่และคมกว่าเพราะผ้าตึงอยู่เหนือหัวคนฟังพอดี
+    """
+    x = bp(noise(dur + 0.6, "pink"), lo, hi)
+    x *= S._slowmod(len(x), 2, 0.25, dur)
+    for i in range(drops):
+        at = S.spread(i, drops, dur)
+        seg = 0.02
+        x = place(x, bp(noise(seg), 900, 4500) * env(seg, 0.001, None, 7)
+                  * float(S.rng.uniform(0.10, 0.30)), at)
+    return seamless(x, 0.6)
+
+
+def lay_amb(song, x, gain, pan=0.55):
+    """วางพื้นเสียงให้กว้างเต็มจอ — ข้างขวาใช้ก้อนเดียวกันกลับด้าน
+
+    กลับด้านแทนการสุ่มใหม่อีกก้อน: สองข้างไม่เหมือนกัน (หูจึงอ่านว่ากว้าง) แต่
+    ระดับเสียงและสีเสียงเท่ากันเป๊ะ และก้อนที่วนได้ไม่มีรอยต่อกลับด้านแล้วยังวน
+    ได้เหมือนเดิม — สุ่มใหม่จะได้สองข้างที่ดังไม่เท่ากันนิด ๆ แล้วภาพสเตอริโอเอียง
+    """
+    x = np.asarray(x)
+    song.add(x, 0.0, gain, -pan)
+    song.add(x[::-1], 0.0, gain, pan)
 
 
 # ─────────────────────────── ตัวเรียบเรียง ───────────────────────────
@@ -864,6 +951,495 @@ def choir_epic():
     return s.finish()
 
 
+# ══════════════════ ชุดเดินป่า / ขึ้นเขา (vlog การเดินทาง) ══════════════════
+#
+# ห้าหมวดนี้เรียงตาม *ช่วงของเรื่อง* ไม่ใช่ตามอารมณ์เพลง — คนตัด vlog เดินป่า
+# เลือกเพลงจาก "ตอนนี้อยู่ช่วงไหนของทริป" ก่อนเสมอ (ออกเดินทาง → เดินป่า →
+# ถึงยอด → แคมป์ → ขากลับ) แล้วค่อยเลือกว่าจะเอาแบบมีพลังหรือแบบเงียบ ๆ
+# หกหมวดเดิมเรียงตามอารมณ์ ยังใช้ได้เหมือนเดิมกับหนังทุกแบบ
+#
+# ทุกหมวดมีอย่างน้อยหนึ่งเพลงที่ **ไม่มีกลอง** ไว้รองบทพูดยาว ๆ — เพลงมีกลอง
+# วางใต้คนพูดแล้วแย่งจังหวะกับคำเสมอ ต่อให้หรี่ลงไป 18 dB ก็ยังแย่ง
+
+# ── ออกเดินทาง ──
+
+def depart_checklist():
+    """เก็บของเข้าเป้ — อูคูเลเล่กับเชคเกอร์ ใช้กับช็อตเตรียมของ/จัดเป้"""
+    s = Song(108, 8)
+    p = [(62, "maj"), (69, "min7"), (67, "maj"), (64, "min7")]
+    lay_arp(s, p, [0, 1, 2, 1, 3, 2, 1, 2], note_len=0.5, gain=0.30,
+            oct_=12, pan=-0.28, damp=0.9945, bright=1.2)
+    lay_bass(s, p, pattern=((0, 0.75), (1.5, 0.5), (2, 0.75), (3, 0.75)), gain=0.46)
+    lay_beat(s, kicks=(0, 2), snares=(1, 3), snare_fn=clap, snare_gain=0.26,
+             hats=tuple(np.arange(0.5, 4, 1.0)), hat_gain=0.13)
+    for b in s.each_bar():
+        for beat in (0.75, 1.75, 2.75, 3.75):
+            s.add(shaker(0.1), s.t(b, beat), 0.15, 0.36)
+        if b % 2 == 1:
+            s.add(rim(), s.t(b, 3.5), 0.14, -0.3)
+    return s.finish()
+
+
+def depart_firstlight():
+    """ออกก่อนฟ้าสาง — เบา ช้า มีลมกับนกไกล ๆ ใช้เปิดเรื่องตอนฟ้ายังไม่สว่าง"""
+    s = Song(84, 8)
+    p = [(60, "add9"), (65, "maj9"), (62, "min7"), (67, "sus2")]
+    lay_amb(s, wind(s.loop_dur, gust=2), 0.05)
+    lay_amb(s, birds(s.loop_dur, 9), 0.05, 0.7)
+    lay_pad(s, p, gain=0.26, cutoff=1700, detune=8.0)
+    lay_arp(s, p, [0, 2, 1, 3, 2, 1], note_len=4 / 6, gain=0.22, fn=keys,
+            oct_=12, pan=-0.24, bright=1.6, decay=1.2)
+    lay_bass(s, p, pattern=((0, 3.0),), gain=0.38, growl=1.1)
+    for b in s.each_bar():
+        s.add(kick(), s.t(b, 0), 0.30)
+        s.add(shaker(0.18), s.t(b, 2), 0.14, 0.4)
+    return s.finish()
+
+
+def depart_roadout():
+    """ออกนอกเมือง — จังหวะเดินหน้าไม่หยุด ใช้กับช็อตในรถ/ถนนยาว"""
+    s = Song(116, 8)
+    p = [(64, "min7"), (60, "maj9"), (67, "sus4"), (62, "min7")]
+    lay_pad(s, p, gain=0.20, cutoff=2900)
+    lay_arp(s, p, [0, None, 2, 1, None, 3, 2, None], note_len=0.5, gain=0.24,
+            oct_=12, pan=0.30, damp=0.9965, bright=1.3)
+    lay_bass(s, p, pattern=tuple((k * 0.5, 0.45) for k in range(8)), gain=0.50,
+             growl=2.2)
+    lay_beat(s, kicks=(0, 1.5, 2.75), snares=(1, 3), snare_gain=0.40,
+             hats=tuple(np.arange(0, 4, 0.5)), hat_gain=0.17, open_hats=(3.5,))
+    return s.finish()
+
+
+def depart_trailhead():
+    """ถึงปากทาง — กีตาร์โปร่งกับเสียงนก ใช้ตอนลงจากรถเข้าป่า"""
+    s = Song(100, 8)
+    p = [(67, "maj"), (64, "min7"), (69, "min7"), (65, "maj9")]
+    lay_amb(s, birds(s.loop_dur, 14), 0.06, 0.6)
+    lay_pad(s, p, gain=0.16, cutoff=2100, kind=strings)
+    lay_arp(s, p, [0, 1, 2, 3, 1, 2, 3, 1], note_len=0.5, gain=0.30,
+            oct_=12, pan=-0.3, damp=0.9968, bright=0.8)
+    lay_bass(s, p, pattern=((0, 1.5), (1.5, 1.0), (3, 1.0)), gain=0.44)
+    lay_beat(s, kicks=(0, 2.5), snares=(2,), snare_fn=clap, snare_gain=0.22,
+             hats=(0.5, 1.5, 2.5, 3.5), hat_gain=0.12)
+    return s.finish()
+
+
+def depart_backpack():
+    """สะพายเป้ขึ้นบ่า — สดใส ตัดเร็ว ใช้กับมอนทาจก่อนออกเดิน"""
+    s = Song(124, 8)
+    p = [(69, "min"), (65, "maj"), (60, "maj"), (67, "maj")]
+    lay_pad(s, p, gain=0.16, cutoff=3200, detune=10.0)
+    lay_arp(s, p, [0, 2, 1, 2, 3, 2, 1, 2], note_len=0.5, gain=0.26, fn=keys,
+            oct_=24, pan=0.26, bright=2.2, decay=3.2)
+    lay_bass(s, p, pattern=tuple((k * 0.5, 0.45) for k in range(8)), gain=0.48,
+             growl=2.4)
+    lay_beat(s, kicks=(0, 1, 2, 3), snares=(1, 3), snare_fn=clap, snare_gain=0.36,
+             hats=tuple(np.arange(0.5, 4, 1.0)), hat_gain=0.18, open_hats=(3.5,))
+    for b in s.each_bar():
+        if b % 4 == 3:
+            s.add(snare(0.3, 210, 1.0), s.t(b, 3.5), 0.26, -0.2)
+    return s.finish()
+
+
+def depart_mapout():
+    """กางแผนที่ — พิณเบา ๆ ไม่มีกลอง ใช้รองเสียงพูดตอนเล่าแผนเดินทาง"""
+    s = Song(92, 8)
+    p = [(60, "maj9"), (57, "min7"), (65, "maj7"), (62, "min7")]
+    lay_pad(s, p, gain=0.24, cutoff=1600, detune=7.0)
+    lay_arp(s, p, [0, 2, 1, 3, 2, 0], note_len=4 / 6, gain=0.28, fn=pluck,
+            oct_=24, pan=0.18, damp=0.9955, bright=0.9)
+    lay_bass(s, p, pattern=((0, 4.0),), gain=0.32, growl=1.0)
+    for b in s.each_bar():
+        s.add(tick(0.05, 2800), s.t(b, 3), 0.06, -0.4)
+    return s.finish()
+
+
+# ── เดินป่า / ลุยทาง ──
+
+def trek_steady():
+    """ก้าวสม่ำเสมอ — กลองย้ำทุกจังหวะเหมือนฝีเท้า ใช้กับช็อตเดินยาว ๆ"""
+    s = Song(104, 8)
+    p = [(62, "min7"), (67, "sus2"), (65, "maj9"), (60, "add9")]
+    lay_pad(s, p, gain=0.20, cutoff=2200)
+    lay_arp(s, p, [0, 1, 2, 1, 3, 1, 2, 1], note_len=0.5, gain=0.24,
+            oct_=12, pan=-0.26, damp=0.996, bright=0.7)
+    lay_bass(s, p, pattern=((0, 1.0), (1, 1.0), (2, 1.0), (3, 1.0)), gain=0.48)
+    lay_beat(s, kicks=(0, 1, 2, 3), snares=(2,), snare_gain=0.24,
+             hats=tuple(np.arange(0.5, 4, 0.5)), hat_gain=0.12)
+    for b in s.each_bar():
+        for beat in (0.5, 2.5):
+            s.add(shaker(0.1), s.t(b, beat), 0.14, 0.3)
+    return s.finish()
+
+
+def trek_deepwood():
+    """ป่าดิบชื้น — คีย์ต่ำกับแมลงกลางวัน ใช้กับทางเดินในร่มไม้"""
+    s = Song(88, 8)
+    p = [(57, "min9"), (62, "min7"), (60, "maj7"), (55, "maj9")]
+    lay_amb(s, crickets(s.loop_dur, 18), 0.035, 0.65)
+    lay_pad(s, p, gain=0.22, cutoff=1300, detune=9.0, voices=4)
+    lay_arp(s, p, [0, None, 2, None, 1, None, 3, None], note_len=0.5, gain=0.24,
+            fn=pluck, oct_=12, pan=0.24, damp=0.997, bright=0.5)
+    lay_bass(s, p, pattern=((0, 2.0), (2.5, 1.0)), gain=0.42, growl=1.3)
+    for b in s.each_bar():
+        s.add(kick(), s.t(b, 0), 0.40)
+        if b % 2 == 1:
+            s.add(rim(), s.t(b, 2.5), 0.16, -0.35)
+    return s.finish()
+
+
+def trek_stream():
+    """ข้ามลำธาร — เปียโนไฟฟ้าใส ๆ กับเสียงน้ำไหล ใช้กับช็อตน้ำ"""
+    s = Song(96, 8)
+    p = [(65, "maj7"), (69, "min7"), (60, "maj9"), (67, "sus4")]
+    lay_amb(s, S.stream(s.loop_dur), 0.045)
+    lay_pad(s, p, gain=0.18, cutoff=2000)
+    lay_arp(s, p, [0, 2, 1, 3, 2, 1, 3, 2], note_len=0.5, gain=0.24, fn=keys,
+            oct_=12, pan=-0.22, bright=1.9, decay=1.4)
+    lay_bass(s, p, pattern=((0, 1.5), (2, 1.0), (3, 1.0)), gain=0.42)
+    lay_beat(s, kicks=(0, 2.5), snares=(2,), snare_gain=0.26,
+             hats=(0.5, 1.5, 2.5, 3.5), hat_gain=0.12)
+    return s.finish()
+
+
+def trek_uphill():
+    """ทางชัน — ดันไปข้างหน้าไม่ผ่อน มีไรเซอร์ทุกสี่ห้อง ใช้กับช็อตปีน/ขึ้นบันได"""
+    s = Song(112, 8)
+    p = [(57, "min"), (60, "maj"), (62, "min"), (55, "maj")]
+    lay_pad(s, p, gain=0.18, cutoff=3000, detune=12.0)
+    lay_arp(s, p, [0, 1, 2, 3, 2, 1, 2, 3] * 2, note_len=0.25, gain=0.18,
+            fn=keys, oct_=24, pan=-0.3, bright=2.3, decay=5.0)
+    lay_bass(s, p, pattern=tuple((k * 0.5, 0.45) for k in range(8)), gain=0.52,
+             growl=2.8)
+    lay_beat(s, kicks=(0, 1, 2, 3), snares=(1, 3), snare_gain=0.42,
+             hats=tuple(np.arange(0.5, 4, 0.5)), hat_gain=0.18, open_hats=(3.5,))
+    for b in s.each_bar():
+        if b % 4 == 3:
+            d = s.beat_dur(4)
+            s.add_wide(hp(noise(d), 900) * (tt(d) / d) ** 2.4, s.t(b), 0.11)
+    return s.finish()
+
+
+def trek_rainpass():
+    """ฝนกลางทาง — หม่น เบา มีฝนบนใบไม้คลอ ใช้ตอนฝนตกระหว่างเดิน"""
+    s = Song(80, 8, swing=0.2)
+    p = [(62, "min9"), (57, "min7"), (65, "maj7"), (60, "maj7")]
+    lay_amb(s, rain(s.loop_dur, 60), 0.05)
+    lay_pad(s, p, gain=0.20, cutoff=1200)
+    lay_arp(s, p, [0, None, 2, None, 1, None, 3, None], note_len=0.5, gain=0.20,
+            fn=keys, oct_=12, pan=-0.2, bright=1.3, decay=1.8)
+    lay_bass(s, p, pattern=((0, 2.0), (2.5, 1.0)), gain=0.42, growl=1.2)
+    lay_beat(s, kicks=(0, 2.5), snares=(2,), hats=(1.5, 3.5),
+             snare_gain=0.22, hat_gain=0.09)
+    return s.finish()
+
+
+def trek_mist():
+    """หมอกลงทาง — ไม่มีกลอง แพดกว้างกับลม ใช้รองบทพูดตอนทางเงียบ"""
+    s = Song(76, 8)
+    p = [(60, "sus2"), (65, "maj9"), (57, "min9"), (62, "min7")]
+    lay_amb(s, wind(s.loop_dur, gust=2, high=3200), 0.06)
+    lay_pad(s, p, gain=0.30, cutoff=1500, detune=12.0, voices=4)
+    lay_bass(s, p, pattern=((0, 4.0),), gain=0.30, growl=1.0)
+    for b, root, qual in prog(s, p):
+        if b % 2 == 0:
+            s.add_wide(choir(chord(root, qual, lo=64, hi=79), s.beat_dur(8) * 0.9,
+                             "u", voices=3), s.t(b), 0.14)
+    return s.finish()
+
+
+# ── ขึ้นถึงยอด ──
+
+def summit_arrive():
+    """ถึงยอดแล้ว — เครื่องสายกับคอรัสเปิดกว้าง ใช้ตอนภาพวิวเปิดออก"""
+    s = Song(84, 8)
+    p = [(65, "maj"), (60, "maj"), (69, "min7"), (67, "sus4")]
+    lay_pad(s, p, gain=0.24, cutoff=2200, kind=strings)
+    lay_arp(s, p, [0, 2, 1, 3, 2, 1], note_len=4 / 6, gain=0.22, fn=keys,
+            oct_=12, pan=-0.2, bright=2.0)
+    lay_bass(s, p, pattern=((0, 2.0), (2, 2.0)), gain=0.44, growl=1.2)
+    for b, root, qual in prog(s, p):
+        s.add_wide(choir(chord(root, qual, lo=62, hi=81), s.beat_dur(4) * 1.1,
+                         "a", voices=4), s.t(b), 0.22)
+        s.add(kick(0.7, 125, 44), s.t(b, 0), 0.55)
+        if b % 2 == 1:
+            s.add(snare(0.7, 180, 1.0), s.t(b, 2), 0.26, 0.1)
+    return s.finish()
+
+
+def summit_seaofmist():
+    """ทะเลหมอก — ไม่มีกลอง คอรัสกับลมบนที่สูง ใช้กับช็อตหมอกยาว ๆ"""
+    s = Song(72, 8)
+    p = [(62, "maj9"), (57, "min9"), (65, "maj7"), (60, "add9")]
+    lay_amb(s, wind(s.loop_dur, gust=1, high=2200), 0.055)
+    lay_pad(s, p, gain=0.26, cutoff=1600, kind=strings)
+    for b, root, qual in prog(s, p):
+        s.add_wide(choir(chord(root, qual, lo=60, hi=79), s.beat_dur(4) * 1.15,
+                         "o", voices=4), s.t(b), 0.26)
+        s.add(sub(root - 24, s.beat_dur(4)), s.t(b), 0.22)
+    return s.finish()
+
+
+def summit_firstsun():
+    """แสงแรกบนยอด — ค่อย ๆ สว่างขึ้น เครื่องสายเข้าครึ่งหลัง ใช้กับพระอาทิตย์ขึ้น"""
+    s = Song(88, 8)
+    p = [(60, "add9"), (67, "sus2"), (65, "maj9"), (62, "min7")]
+    lay_pad(s, p, gain=0.24, cutoff=2100, detune=9.0)
+    lay_arp(s, p, [0, 1, 2, 3, 2, 1], note_len=4 / 6, gain=0.26, fn=keys,
+            oct_=12, pan=-0.22, bright=2.1, decay=1.1)
+    lay_bass(s, p, pattern=((0, 2.0), (2, 1.5)), gain=0.42, growl=1.2)
+    for b, root, qual in prog(s, p):
+        if b >= 4:
+            s.add_wide(strings(chord(root, qual, lo=64, hi=79),
+                               s.beat_dur(4) * 1.05), s.t(b), 0.20)
+    lay_beat(s, kicks=(0, 2.5), snares=(2,), hats=(0.5, 1.5, 2.5, 3.5),
+             snare_gain=0.28, hat_gain=0.13)
+    return s.finish()
+
+
+def summit_vast():
+    """กว้างสุดสายตา — โดรนต่ำกับกลองใหญ่ห่าง ๆ ใช้กับช็อตโดรนถอยออก"""
+    s = Song(76, 8)
+    p = [(55, "maj9"), (60, "sus2"), (57, "min7"), (62, "maj")]
+    lay_pad(s, p, gain=0.28, cutoff=1400, detune=14.0, voices=4)
+    for b, root, qual in prog(s, p):
+        s.add(sub(root - 24, s.beat_dur(4) * 1.1), s.t(b), 0.32)
+        s.add_wide(strings(chord(root, qual, lo=57, hi=74), s.beat_dur(4) * 1.05,
+                           cutoff=1700), s.t(b), 0.20)
+        s.add(kick(0.9, 120, 40), s.t(b, 0), 0.60)
+        if b % 4 == 2:
+            s.add(kick(0.9, 120, 40), s.t(b, 2), 0.42)
+    return s.finish()
+
+
+def summit_triumph():
+    """พิชิต — กลองใหญ่กับคอรัสเต็มวง ใช้กับจังหวะที่ถึงเป้าหมาย"""
+    s = Song(96, 8)
+    p = [(57, "min"), (65, "maj"), (62, "min"), (60, "maj")]
+    lay_pad(s, p, gain=0.20, cutoff=2600, kind=strings)
+    lay_bass(s, p, pattern=((0, 1.0), (1, 1.0), (2, 1.0), (3, 1.0)), gain=0.50,
+             growl=2.0)
+    lay_beat(s, kicks=(), snares=(), hats=tuple(np.arange(0.5, 4, 0.5)),
+             hat_gain=0.14)
+    for b, root, qual in prog(s, p):
+        if b >= 2:
+            s.add_wide(choir(chord(root, qual, lo=62, hi=81), s.beat_dur(4) * 1.05,
+                             "a", voices=5), s.t(b), 0.22)
+        s.add(kick(0.8, 130, 42), s.t(b, 0), 0.75)
+        s.add(kick(0.8, 130, 42), s.t(b, 2.5), 0.50)
+        if b % 2 == 1:
+            s.add(snare(0.8, 170, 1.1), s.t(b, 3), 0.32, 0.1)
+    return s.finish()
+
+
+def summit_quiet():
+    """เงียบบนที่สูง — เบาที่สุดในหมวด ใช้รองบทพูดตอนยืนมองวิว"""
+    s = Song(64, 8)
+    p = [(60, "maj9"), (55, "sus2"), (57, "min7"), (62, "min9")]
+    lay_amb(s, wind(s.loop_dur, gust=1, low=140, high=1800), 0.05)
+    lay_pad(s, p, gain=0.22, cutoff=1200, detune=8.0)
+    for b, root, qual in prog(s, p):
+        cs = chord(root, qual, lo=64, hi=79)
+        for k, m in enumerate(cs[:3]):
+            s.add(keys(m, s.beat_dur(2.5), bright=1.1, decay=2.0),
+                  s.t(b, k * 0.75), 0.16, -0.28 + 0.28 * k)
+        s.add(sub(root - 24, s.beat_dur(4)), s.t(b), 0.26)
+    return s.finish()
+
+
+# ── แคมป์ / กลางคืน ──
+
+def camp_fire():
+    """ล้อมกองไฟ — กีตาร์ดีดช้ากับเสียงฟืนแตก ใช้กับช็อตกลางคืนรอบกองไฟ"""
+    s = Song(74, 8)
+    p = [(65, "maj7"), (62, "min7"), (69, "min7"), (60, "maj9")]
+    lay_amb(s, S.campfire(s.loop_dur), 0.05)
+    lay_pad(s, p, gain=0.16, cutoff=1600, kind=strings)
+    lay_arp(s, p, [0, 1, 2, 3, 2, 1], note_len=4 / 6, gain=0.28, fn=pluck,
+            oct_=12, pan=-0.26, damp=0.9968, bright=0.7)
+    lay_bass(s, p, pattern=((0, 2.0), (2, 2.0)), gain=0.38, growl=1.1)
+    for b in s.each_bar():
+        s.add(kick(), s.t(b, 0), 0.28)
+        if b % 2 == 1:
+            s.add(rim(), s.t(b, 2), 0.16, 0.32)
+    return s.finish()
+
+
+def camp_stars():
+    """ใต้ดาว — ไม่มีกลอง คีย์ห่าง ๆ กับแมลงกลางคืน ใช้กับช็อตท้องฟ้ากลางคืน"""
+    s = Song(68, 8)
+    p = [(57, "min9"), (60, "maj7"), (55, "maj9"), (62, "min7")]
+    lay_amb(s, crickets(s.loop_dur, 22), 0.04, 0.7)
+    lay_pad(s, p, gain=0.24, cutoff=1150, detune=7.0)
+    for b, root, qual in prog(s, p):
+        cs = chord(root, qual, lo=67, hi=83)
+        for k, m in enumerate(cs[:3]):
+            s.add(keys(m, s.beat_dur(3), bright=1.2, decay=1.8),
+                  s.t(b, k * 0.9), 0.16, 0.3 - 0.3 * k)
+        s.add(sub(root - 24, s.beat_dur(4)), s.t(b), 0.28)
+    return s.finish()
+
+
+def camp_cook():
+    """ทำกับข้าวในป่า — โลไฟสวิงเบา ๆ ใช้กับช็อตทำอาหาร/กินข้าว"""
+    s = Song(96, 8, swing=0.3)
+    p = [(62, "min9"), (67, "dom7"), (60, "maj7"), (64, "min7")]
+    lay_pad(s, p, gain=0.14, cutoff=1500)
+    for b, root, qual in prog(s, p):
+        cs = chord(root, qual, lo=60, hi=76)
+        for beat in (0, 1.5, 2.5):
+            for m in cs:
+                s.add(keys(m, s.beat_dur(1.3), bright=1.9, decay=1.7),
+                      s.t(b, beat), 0.15, -0.16)
+    lay_bass(s, p, pattern=((0, 1.5), (1.5, 0.5), (2.5, 1.0)), gain=0.48)
+    lay_beat(s, kicks=(0, 2.5), snares=(2,), hats=(0.5, 1.5, 2.5, 3.5),
+             snare_gain=0.30, hat_gain=0.13)
+    for b in s.each_bar():
+        s.add(shaker(0.1), s.t(b, 3.5), 0.14, 0.35)
+    lay_amb(s, seamless(vinyl(s.loop_dur + 0.6), 0.6), 0.045, 0.3)
+    return s.finish()
+
+
+def camp_tent():
+    """ค่ำในเต็นท์ — ฝนบนผ้าเต็นท์กับคีย์เบา ๆ ใช้ตอนพักในเต็นท์"""
+    s = Song(70, 8, swing=0.22)
+    p = [(60, "maj7"), (57, "min9"), (65, "maj9"), (62, "min7")]
+    lay_amb(s, rain(s.loop_dur, 110, lo=500, hi=6500), 0.055)
+    lay_pad(s, p, gain=0.18, cutoff=1100)
+    lay_arp(s, p, [0, None, 2, None, 1, None, 3, None], note_len=0.5, gain=0.18,
+            fn=keys, oct_=12, pan=-0.22, bright=1.2, decay=1.9)
+    lay_bass(s, p, pattern=((0, 3.0),), gain=0.36, growl=1.0)
+    lay_amb(s, seamless(vinyl(s.loop_dur + 0.6), 0.6), 0.035, 0.35)
+    for b in s.each_bar():
+        s.add(kick(), s.t(b, 0), 0.22)
+    return s.finish()
+
+
+def camp_nightwalk():
+    """เดินดูดาว — พิณห่าง ๆ บนเสียงต่ำ ใช้กับช็อตเดินกลางคืน"""
+    s = Song(82, 8)
+    p = [(55, "min7"), (60, "maj9"), (58, "maj7"), (62, "min9")]
+    lay_amb(s, crickets(s.loop_dur, 14), 0.03, 0.6)
+    lay_pad(s, p, gain=0.20, cutoff=1250, detune=10.0)
+    lay_arp(s, p, [0, None, 2, None, 3, None], note_len=4 / 6, gain=0.24,
+            fn=pluck, oct_=24, pan=0.26, damp=0.9975, bright=0.6)
+    for b, root, qual in prog(s, p):
+        s.add(sub(root - 24, s.beat_dur(4)), s.t(b), 0.30)
+        s.add(kick(), s.t(b, 0), 0.26)
+        if b % 2 == 1:
+            s.add(tick(0.05, 3000), s.t(b, 2), 0.07, -0.4)
+    return s.finish()
+
+
+def camp_dawn():
+    """เช้าในป่า — นกรับอรุณกับคีย์อุ่น ใช้ตอนตื่นเช้าวันใหม่"""
+    s = Song(78, 8)
+    p = [(65, "maj9"), (60, "add9"), (62, "min7"), (67, "sus2")]
+    lay_amb(s, birds(s.loop_dur, 18), 0.06, 0.65)
+    lay_pad(s, p, gain=0.24, cutoff=1900, detune=8.0)
+    lay_arp(s, p, [0, 2, 1, 3, 2, 1], note_len=4 / 6, gain=0.24, fn=keys,
+            oct_=12, pan=-0.24, bright=1.8, decay=1.2)
+    lay_bass(s, p, pattern=((0, 2.0), (2, 2.0)), gain=0.38, growl=1.1)
+    for b, root, qual in prog(s, p):
+        if b >= 4:
+            s.add_wide(strings(chord(root, qual, lo=62, hi=77),
+                               s.beat_dur(4) * 1.05), s.t(b), 0.16)
+        s.add(shaker(0.16), s.t(b, 2), 0.13, 0.4)
+    return s.finish()
+
+
+# ── ขากลับ / ปิดเรื่อง ──
+
+def back_downhill():
+    """ทางลง — เบากว่าขาขึ้น จังหวะสบาย ใช้กับช็อตเดินลงเขา"""
+    s = Song(108, 8)
+    p = [(67, "maj"), (62, "min7"), (69, "min7"), (65, "maj9")]
+    lay_pad(s, p, gain=0.18, cutoff=2500)
+    lay_arp(s, p, [0, 2, 1, 3, 2, 1, 3, 2], note_len=0.5, gain=0.26,
+            oct_=12, pan=0.26, damp=0.9955, bright=1.0)
+    lay_bass(s, p, pattern=((0, 0.75), (1.5, 0.5), (2, 0.75), (3, 1.0)), gain=0.46)
+    lay_beat(s, kicks=(0, 2), snares=(1, 3), snare_fn=clap, snare_gain=0.28,
+             hats=tuple(np.arange(0.5, 4, 0.5)), hat_gain=0.14)
+    return s.finish()
+
+
+def back_lastview():
+    """มองกลับไปครั้งสุดท้าย — เครื่องสายกับเปียโน ใช้กับช็อตอำลาสถานที่"""
+    s = Song(80, 8)
+    p = [(65, "maj"), (69, "min7"), (60, "maj9"), (67, "sus4")]
+    lay_pad(s, p, gain=0.26, cutoff=2000, kind=strings)
+    lay_arp(s, p, [0, 1, 2, 3, 2, 1], note_len=4 / 6, gain=0.24, fn=keys,
+            oct_=12, pan=-0.2, bright=1.9, decay=1.3)
+    lay_bass(s, p, pattern=((0, 2.0), (2, 2.0)), gain=0.40, growl=1.1)
+    for b in s.each_bar():
+        s.add(kick(), s.t(b, 0), 0.32)
+        if b % 2 == 1:
+            s.add(rim(), s.t(b, 2), 0.18, 0.3)
+    return s.finish()
+
+
+def back_ridehome():
+    """นั่งรถกลับ — โลไฟสวิงกับพื้นเสียงแผ่นเสียง ใช้กับช็อตในรถขากลับ"""
+    s = Song(88, 8, swing=0.3)
+    p = [(69, "min7"), (65, "maj7"), (62, "min9"), (67, "dom7")]
+    lay_pad(s, p, gain=0.15, cutoff=1450)
+    for b, root, qual in prog(s, p):
+        cs = chord(root, qual, lo=60, hi=76)
+        for beat in (0, 1.5, 2.5):
+            for m in cs:
+                s.add(keys(m, s.beat_dur(1.4), bright=1.8, decay=1.7),
+                      s.t(b, beat), 0.15, 0.14)
+    lay_bass(s, p, pattern=((0, 1.5), (1.5, 0.5), (2.5, 1.0)), gain=0.48)
+    lay_beat(s, kicks=(0, 2.5), snares=(2,), hats=(0.5, 1.5, 2.5, 3.5),
+             snare_gain=0.30, hat_gain=0.12)
+    lay_amb(s, seamless(vinyl(s.loop_dur + 0.6), 0.6), 0.05, 0.32)
+    return s.finish()
+
+
+def back_thanks():
+    """ขอบคุณที่ดูจนจบ — อบอุ่น ยกขึ้นครึ่งหลัง ใช้กับท่อนสรุปทริป"""
+    s = Song(90, 8)
+    p = [(60, "maj"), (67, "sus4"), (65, "maj9"), (62, "min7")]
+    lay_pad(s, p, gain=0.22, cutoff=2300, kind=strings)
+    lay_arp(s, p, [0, 2, 1, 3, 2, 1, 3, 2], note_len=0.5, gain=0.26, fn=keys,
+            oct_=12, pan=-0.2, bright=2.1)
+    lay_bass(s, p, pattern=((0, 1.0), (1, 1.0), (2, 1.0), (3, 1.0)), gain=0.44)
+    lay_beat(s, kicks=(0, 2.5), snares=(1, 3), snare_fn=clap, snare_gain=0.28,
+             hats=(0.5, 1.5, 2.5, 3.5), hat_gain=0.14)
+    for b, root, qual in prog(s, p):
+        if b >= 4:
+            s.add_wide(choir(chord(root, qual, lo=64, hi=79), s.beat_dur(4) * 1.05,
+                             "a", voices=4), s.t(b), 0.18)
+    return s.finish()
+
+
+def back_endcard():
+    """เอนด์การ์ด — สดใส วนยาวได้ ใช้ท้ายคลิปตอนขึ้นปุ่มติดตาม"""
+    s = Song(104, 8)
+    p = [(60, "maj"), (67, "maj"), (69, "min"), (65, "maj")]
+    lay_pad(s, p, gain=0.16, cutoff=3000)
+    lay_arp(s, p, [0, 1, 2, 1, 3, 2, 1, 2], note_len=0.5, gain=0.28,
+            oct_=24, pan=0.24, damp=0.9945, bright=1.3)
+    lay_bass(s, p, pattern=((0, 0.75), (1, 0.75), (2, 0.75), (3, 0.75)), gain=0.46)
+    lay_beat(s, kicks=(0, 1.5, 2), snares=(1, 3), snare_fn=clap, snare_gain=0.32,
+             hats=tuple(np.arange(0.5, 4, 1.0)), hat_gain=0.16)
+    return s.finish()
+
+
+def back_tired():
+    """เหนื่อยแต่คุ้ม — ช้า อุ่น มีฮัมคลอ ใช้ปิดเรื่องแบบเงียบ ๆ"""
+    s = Song(72, 8)
+    p = [(57, "min7"), (65, "maj7"), (60, "maj9"), (55, "sus2")]
+    lay_pad(s, p, gain=0.24, cutoff=1500, detune=9.0)
+    lay_arp(s, p, [0, 2, 1, 3], note_len=1.0, gain=0.20, fn=pluck, oct_=12,
+            pan=0.24, damp=0.998, bright=0.4)
+    lay_bass(s, p, pattern=((0, 4.0),), gain=0.34, growl=1.0)
+    for b, root, qual in prog(s, p):
+        s.add_wide(choir(chord(root, qual, lo=57, hi=74), s.beat_dur(4) * 1.15,
+                         "m", voices=3, spread=16.0, breath=0.02), s.t(b), 0.20)
+    return s.finish()
+
+
 # ─────────────────────────── ทะเบียน ───────────────────────────
 #
 # ชื่อ → (ฟังก์ชัน, หมวด, ป้ายไทย) — ตารางนี้เป็นต้นทางของ lib/bgm.ts ด้วย
@@ -892,6 +1468,37 @@ BGM = {
     "choir-ooh":    (choir_ooh,    "choir",  "คอรัส อู"),
     "choir-hum":    (choir_hum,    "choir",  "ฮัมเบา ๆ"),
     "choir-epic":   (choir_epic,   "choir",  "คอรัสยิ่งใหญ่"),
+    # ── ชุดเดินป่า/ขึ้นเขา: เรียงตามช่วงของเรื่อง ไม่ใช่ตามอารมณ์ ──
+    "depart-checklist":  (depart_checklist,  "depart",  "เก็บของเข้าเป้"),
+    "depart-firstlight": (depart_firstlight, "depart",  "ออกก่อนฟ้าสาง"),
+    "depart-roadout":    (depart_roadout,    "depart",  "ออกนอกเมือง"),
+    "depart-trailhead":  (depart_trailhead,  "depart",  "ถึงปากทาง"),
+    "depart-backpack":   (depart_backpack,   "depart",  "สะพายเป้ขึ้นบ่า"),
+    "depart-mapout":     (depart_mapout,     "depart",  "กางแผนที่"),
+    "trek-steady":   (trek_steady,   "trek",    "ก้าวสม่ำเสมอ"),
+    "trek-deepwood": (trek_deepwood, "trek",    "ป่าดิบชื้น"),
+    "trek-stream":   (trek_stream,   "trek",    "ข้ามลำธาร"),
+    "trek-uphill":   (trek_uphill,   "trek",    "ทางชัน"),
+    "trek-rainpass": (trek_rainpass, "trek",    "ฝนกลางทาง"),
+    "trek-mist":     (trek_mist,     "trek",    "หมอกลงทาง"),
+    "summit-arrive":    (summit_arrive,    "summit",  "ถึงยอดแล้ว"),
+    "summit-seaofmist": (summit_seaofmist, "summit",  "ทะเลหมอก"),
+    "summit-firstsun":  (summit_firstsun,  "summit",  "แสงแรกบนยอด"),
+    "summit-vast":      (summit_vast,      "summit",  "กว้างสุดสายตา"),
+    "summit-triumph":   (summit_triumph,   "summit",  "พิชิต"),
+    "summit-quiet":     (summit_quiet,     "summit",  "เงียบบนที่สูง"),
+    "camp-fire":      (camp_fire,      "camp",    "ล้อมกองไฟ"),
+    "camp-stars":     (camp_stars,     "camp",    "ใต้ดาว"),
+    "camp-cook":      (camp_cook,      "camp",    "ทำกับข้าวในป่า"),
+    "camp-tent":      (camp_tent,      "camp",    "ค่ำในเต็นท์"),
+    "camp-nightwalk": (camp_nightwalk, "camp",    "เดินดูดาว"),
+    "camp-dawn":      (camp_dawn,      "camp",    "เช้าในป่า"),
+    "back-downhill": (back_downhill, "back",    "ทางลง"),
+    "back-lastview": (back_lastview, "back",    "มองกลับไปครั้งสุดท้าย"),
+    "back-ridehome": (back_ridehome, "back",    "นั่งรถกลับ"),
+    "back-thanks":   (back_thanks,   "back",    "ขอบคุณที่ดูจนจบ"),
+    "back-endcard":  (back_endcard,  "back",    "เอนด์การ์ด"),
+    "back-tired":    (back_tired,    "back",    "เหนื่อยแต่คุ้ม"),
 }
 
 
