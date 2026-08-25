@@ -61,6 +61,32 @@ import TranscriptPanel from "@/components/panels/TranscriptPanel";
 import ReviewPanel from "@/components/panels/ReviewPanel";
 import SetupPanel from "@/components/panels/SetupPanel";
 
+/** ข้อความไทยประจำรหัสผิดพลาดของ <video> (MediaError.code) */
+const MEDIA_ERR: Record<number, string> = {
+  1: "หยุดโหลดวิดีโอกลางคัน",
+  2: "สายขาดระหว่างโหลดวิดีโอ — เอนจินยังทำงานอยู่หรือเปล่า",
+  3: "ไฟล์วิดีโอเสียหรือถอดรหัสไม่ได้",
+  4: "เบราว์เซอร์นี้เล่นแหล่งวิดีโอนี้ไม่ได้",
+};
+const ERR_SRC_NOT_SUPPORTED = 4;
+
+/** เบราว์เซอร์ตระกูล WebKit — Safari ทุกตัว และ *ทุก* เบราว์เซอร์บน iOS/iPadOS
+ *
+ *  WebKit บังคับว่า <video src> ที่เป็น video/mp4 ต้องเลื่อนหัวอ่านด้วย byte-range
+ *  ได้ แต่ /live/ ของเอนจินตอบ `200 + Transfer-Encoding: chunked` ไม่มี
+ *  Content-Length ไม่มี Accept-Ranges และเมิน Range ที่ส่งไป (ดู serve.py `_live`)
+ *  มันจึงไม่ยอมเริ่มเล่นเลย แล้วขึ้น "The operation is not supported." บนจอดำ
+ *  — ตัวสตรีมไม่ได้เสีย (h264/avc1 + aac ปกติ) ปัญหาอยู่ที่วิธีตอบ HTTP ล้วน ๆ
+ *
+ *  เช็กไว้เพื่อ *เริ่ม* ที่โหมดทีละชิ้นไปเลย ผู้ใช้จะได้ไม่ต้องเห็นจอดำก่อนหนึ่งครั้ง
+ *  ส่วนตาข่ายรองจริงคือตัวจับ error ด้านล่าง ซึ่งทำงานกับทุกเบราว์เซอร์ที่เล่นไม่ได้
+ *  ไม่ว่าจะเดาถูกหรือไม่ */
+function isWebKit(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  return /Safari/.test(ua) && !/Chrome|Chromium|Edg|OPR/.test(ua);
+}
+
 export default function Editor() {
   const [proj, setProj] = useState<ProjectState | null>(null);
   const [clips, setClips] = useState<ClipInfo[]>([]);
@@ -199,6 +225,15 @@ export default function Editor() {
     keyint: number;
   }>({ token: "", key: "", from: 0, at: 0, keyint: 1.001 });
   const modeRef = useRef<"timeline" | "clip">("timeline");
+  // วิธีเล่นไทม์ไลน์ — คนละแกนกับ modeRef ข้างบน
+  //   live     สายเดียวจาก /live/ (ffmpeg ต่อให้สด · ลื่นไม่มีรอยต่อ · Chromium เท่านั้น)
+  //   segments เล่น /seg/<ชิ้น> ทีละชิ้นแล้วต่อเอง (ทุกเบราว์เซอร์ · เลื่อนในชิ้นได้จริง)
+  const playModeRef = useRef<"live" | "segments">("live");
+  const segRef = useRef(0);          // อยู่ชิ้นที่เท่าไรของ rendered (โหมด segments)
+  const segLoad = useRef(0);         // รอบโหลดล่าสุด — กันคำสั่งเก่าที่ยังค้างมาสั่งทับ
+  const prefetchRef = useRef<HTMLVideoElement | null>(null);
+  const playingRef = useRef(false);  // ให้ตัวจับ event อ่านค่าล่าสุดได้ไม่ต้องผูก deps
+  const playheadRef = useRef(0);
   const seekTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -533,6 +568,11 @@ export default function Editor() {
     if (!v || !v.src || modeRef.current !== "timeline" || !rendered.length) {
       return null;
     }
+    // โหมดทีละชิ้น: currentTime คือเวลาในชิ้นนั้นตรง ๆ ไม่ต้องไล่หักความยาว
+    if (playModeRef.current === "segments") {
+      const r = rendered[segRef.current];
+      return r ? Math.min(offsets[r.i] + v.currentTime, total) : null;
+    }
     // เวลา 0 ของสตรีมคือ "ชิ้นที่ตั้งต้น + at" ไม่ใช่หัวชิ้นเสมอไป
     let t = v.currentTime + streamRef.current.at;
     for (let j = streamRef.current.from; j < rendered.length; j++) {
@@ -543,6 +583,76 @@ export default function Editor() {
     }
     return null;
   }, [rendered, offsets, total]);
+
+  /** อุ่นชิ้นถัดไปไว้ในแคชของเบราว์เซอร์ ระหว่างที่ชิ้นปัจจุบันยังเล่นอยู่
+   *
+   *  /seg/ ตอบ Accept-Ranges + Content-Length และ *ไม่* ได้ตั้ง no-store (ต่างจาก
+   *  เส้น JSON ที่ผ่าน _send) เบราว์เซอร์จึงเก็บแคชได้จริง พอถึงรอยต่อจะสลับได้เร็ว
+   *  ไม่ต้องรอ TCP รอบใหม่ — ใช้ <video> ลอย ๆ ไม่ต่อ DOM เพื่อไม่ต้องแตะ Preview */
+  const prefetchNext = useCallback(
+    (rIdx: number) => {
+      const nxt = rendered[rIdx + 1];
+      if (!nxt) return;
+      let el = prefetchRef.current;
+      if (!el) {
+        el = document.createElement("video");
+        el.preload = "auto";
+        el.muted = true;
+        prefetchRef.current = el;
+      }
+      const url = segUrl(nxt.seg);
+      if (!el.src.endsWith(`/seg/${nxt.seg}`)) el.src = url;
+    },
+    [rendered],
+  );
+
+  /** เล่นชิ้นที่ rIdx ของ rendered โดยเริ่มที่วินาที at ในชิ้นนั้น (โหมดทีละชิ้น)
+   *
+   *  ชิ้นเดิมที่โหลดไว้แล้วจะไม่โหลดซ้ำ — แค่ขยับ currentTime ซึ่งทำได้จริงเพราะ
+   *  /seg/ รองรับ Range (ต่างจากสตรีมสดที่ v.seekable ว่างเปล่า) */
+  const playSegment = useCallback(
+    (rIdx: number, at: number, autoplay: boolean) => {
+      const v = videoRef.current;
+      const r = rendered[rIdx];
+      if (!v || !r) return;
+      segRef.current = rIdx;
+      // กันไปยืนที่ปลายชิ้นพอดีแล้ว ended ยิงทันทีจนวิ่งรวดไปท้ายเรื่อง
+      const start = Math.max(0, Math.min(at, Math.max(0, r.dur - 0.05)));
+      // ลากไม้บรรทัดเร็ว ๆ จะสั่งซ้อนกันได้ — คำสั่งที่ตกรอบต้องเงียบไปเฉย ๆ ไม่งั้น
+      // ตัวที่ค้างอยู่จะเด้ง currentTime กลับไปจุดเก่า หรือสั่งเล่นทั้งที่คำสั่งใหม่
+      // บอกให้หยุด (loadedmetadata ของสายใหม่ปลุก listener ของสายเก่าด้วย)
+      const mine = ++segLoad.current;
+      const begin = () => {
+        if (segLoad.current !== mine) return;
+        if (start > 0.01 || v.currentTime > 0.01) {
+          try {
+            v.currentTime = start;
+          } catch {
+            /* ยังไม่พร้อมให้ขยับ — ปล่อยเล่นจากหัวชิ้น ดีกว่าค้าง */
+          }
+        }
+        if (autoplay) {
+          v.play()
+            .then(() => setPlaying(true))
+            .catch(() => setPlaying(false));
+        }
+        prefetchNext(rIdx);
+      };
+      setPlayhead(Math.min(offsets[r.i] + start, total));
+      if (v.src.endsWith(`/seg/${r.seg}`) && v.readyState >= 1) {
+        begin();                       // อยู่ชิ้นนี้อยู่แล้ว — เลื่อนในชิ้นได้เลย
+        return;
+      }
+      const onMeta = () => {
+        v.removeEventListener("loadedmetadata", onMeta);
+        begin();
+      };
+      v.addEventListener("loadedmetadata", onMeta);
+      v.src = segUrl(r.seg);
+      v.load();
+    },
+    [rendered, offsets, total, prefetchNext],
+  );
 
   /** พาตัวเล่นไปยืนที่เวลานั้นจริง ๆ — autoplay=false ใช้ตอนหยุดอยู่ (โชว์เฟรมนั้น
    *  ค้างไว้) เพื่อให้กดเล่นแล้วเล่นต่อจากตรงนั้นได้ทันทีโดยไม่ต้องโหลดซ้ำ */
@@ -555,6 +665,11 @@ export default function Editor() {
         return;
       }
       const { rIdx, delta } = locate(tl);
+      if (playModeRef.current === "segments") {
+        modeRef.current = "timeline";
+        playSegment(rIdx, delta, autoplay);
+        return;
+      }
       try {
         const key = rendered.map((r) => r.seg).join("|");
         if (streamRef.current.key !== key) {
@@ -582,7 +697,7 @@ export default function Editor() {
         flash(e instanceof Error ? e.message : "เล่นไม่ได้");
       }
     },
-    [rendered, locate, offsets, total, flash],
+    [rendered, locate, offsets, total, flash, playSegment],
   );
 
   const play = useCallback((t: number) => goTo(t, true), [goTo]);
@@ -615,7 +730,8 @@ export default function Editor() {
     const tick = () => {
       const at = elapsed();
       if (at != null) setPlayhead(at);
-      if (videoRef.current?.ended) {
+      // โหมดทีละชิ้น: ปลายชิ้นไม่ใช่ปลายเรื่อง — ปล่อยให้ตัวจับ "ended" พาไปชิ้นถัดไป
+      if (videoRef.current?.ended && playModeRef.current !== "segments") {
         setPlaying(false);
         return;
       }
@@ -624,6 +740,81 @@ export default function Editor() {
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [playing, elapsed]);
+
+  // ตัวจับ event อ่านสองค่านี้จาก ref ไม่ใช่ closure — จะได้ไม่ต้องถอด/ใส่ listener
+  // ใหม่ทุกครั้งที่หัวเล่นขยับ (วินาทีละหลายสิบครั้ง)
+  useEffect(() => {
+    playingRef.current = playing;
+  }, [playing]);
+  useEffect(() => {
+    playheadRef.current = playhead;
+  }, [playhead]);
+
+  // WebKit เล่นสตรีมสดไม่ได้ (ดูหมายเหตุที่ isWebKit) — เริ่มที่โหมดทีละชิ้นเลย
+  useEffect(() => {
+    if (isWebKit()) playModeRef.current = "segments";
+    return () => {
+      // ปล่อยสายที่กำลังอุ่นชิ้นถัดไปอยู่ ไม่งั้นมันโหลดต่อทั้งที่ไม่มีใครดูแล้ว
+      const el = prefetchRef.current;
+      if (el) {
+        el.removeAttribute("src");
+        el.load();
+        prefetchRef.current = null;
+      }
+    };
+  }, []);
+
+  // ── ตัวจับ error / ended ของ <video> ──
+  //
+  // ผูกที่นี่ ไม่ใช่ที่ Preview เพราะทั้งสองตัวเป็นเรื่องของ *ตรรกะการเล่น* ซึ่งอยู่
+  // ไฟล์นี้ทั้งหมด — Preview มีหน้าที่วาดอย่างเดียว ไม่ต้องรู้ว่ามีโหมดสำรองอยู่
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+
+    const onError = () => {
+      const code = v.error?.code ?? 0;
+      // สตรีมสดเล่นไม่ได้ = เบราว์เซอร์นี้ไม่รับ chunked ที่ไม่มี Range → ถอยไปทีละชิ้น
+      // แล้วเล่นต่อจากจุดเดิมทันที ผู้ใช้เห็นแค่สะดุดครั้งเดียว ไม่ใช่จอดำค้าง
+      if (
+        modeRef.current === "timeline" &&
+        playModeRef.current === "live" &&
+        code === ERR_SRC_NOT_SUPPORTED &&
+        rendered.length
+      ) {
+        playModeRef.current = "segments";
+        flash("เบราว์เซอร์นี้เล่นสตรีมต่อเนื่องไม่ได้ — สลับไปโหมดเล่นทีละชิ้นให้แล้ว");
+        const { rIdx, delta } = locate(playheadRef.current);
+        playSegment(rIdx, delta, playingRef.current);
+        return;
+      }
+      setPlaying(false);
+      // โหมดดูคลิปเดี่ยวมีข้อความของตัวเองอยู่แล้ว (previewClip) ไม่ต้องทับ
+      if (modeRef.current === "clip") return;
+      flash(MEDIA_ERR[code] ?? "เล่นวิดีโอไม่ได้");
+    };
+
+    const onEnded = () => {
+      if (modeRef.current !== "timeline" || playModeRef.current !== "segments") {
+        setPlaying(false);
+        return;
+      }
+      const next = segRef.current + 1;
+      if (next >= rendered.length) {
+        setPlaying(false);
+        setPlayhead(total);
+        return;
+      }
+      playSegment(next, 0, playingRef.current);
+    };
+
+    v.addEventListener("error", onError);
+    v.addEventListener("ended", onEnded);
+    return () => {
+      v.removeEventListener("error", onError);
+      v.removeEventListener("ended", onEnded);
+    };
+  }, [rendered, total, locate, playSegment, flash]);
 
   const seek = useCallback(
     (t: number) => {
