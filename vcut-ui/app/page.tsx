@@ -1919,6 +1919,7 @@ export default function Editor() {
           onPatch={(p) => sel != null && patchShot(sel, p)}
           onRemove={() => sel != null && removeShot(sel)}
           onPlayShot={() => sel != null && play(offsets[sel])}
+          onClose={() => setSel(null)}
         />
       </div>
 

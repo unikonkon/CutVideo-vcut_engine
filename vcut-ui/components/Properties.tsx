@@ -1,6 +1,6 @@
 "use client";
 
-import { Play, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Play, Trash2, X } from "lucide-react";
 import { thumbUrl, type Shot } from "@/lib/api";
 import { dur } from "@/lib/time";
 
@@ -41,32 +41,36 @@ export default function Properties({
   onPatch,
   onRemove,
   onPlayShot,
+  onClose,
 }: {
   shot: Shot | null;
   onPatch: (patch: Partial<Shot>) => void;
   onRemove: () => void;
   onPlayShot: () => void;
+  onClose?: () => void;
 }) {
-  if (!shot) {
-    return (
-      <aside className="flex w-72 shrink-0 flex-col items-center justify-center gap-3 rounded-xl border border-line bg-panel p-6 text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-line bg-panel-2">
-          <SlidersHorizontal size={20} className="text-muted" />
-        </div>
-        <div className="text-[15px] font-medium text-ink">ยังว่างอยู่</div>
-        <div className="text-[12px] leading-5 text-muted">
-          คลิกช็อตบนไทม์ไลน์
-          <br />
-          เพื่อดูและแก้คุณสมบัติ
-        </div>
-      </aside>
-    );
-  }
+  // ไม่ได้คลิกช็อตบนไทม์ไลน์ → ไม่ต้องมีคอลัมน์นี้เลย ให้ Preview กินพื้นที่แทน
+  if (!shot) return null;
 
   const maxDur = shot.clip_dur;
 
   return (
     <aside className="flex w-72 shrink-0 flex-col gap-3 overflow-y-auto rounded-xl border border-line bg-panel p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[10.5px] uppercase tracking-wide text-faint">
+          คุณสมบัติช็อต
+        </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            title="ปิด (ยกเลิกเลือกช็อต)"
+            className="-mr-1 rounded-md p-1 text-muted hover:bg-panel-2 hover:text-ink"
+          >
+            <X size={13} />
+          </button>
+        )}
+      </div>
+
       <div className="relative overflow-hidden rounded-lg border border-line bg-black">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
