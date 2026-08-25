@@ -23,3 +23,20 @@
 __pycache__/
 *.pyc
 .DS_Store
+
+# ฟอนต์ที่ scripts/fetch_fonts.py ดึงมา — สร้างซ้ำได้จากสคริปต์ ไม่ต้องอยู่ในประวัติ
+fonts/
+
+# ไบนารีที่ตัวห่อ bundle มา — ดึงใหม่ได้จาก scripts/fetch_vendor.py
+# (python-build-standalone · ffmpeg ที่มี libass · whisper-cli · แคชไฟล์ที่โหลดมา)
+vendor/
+bin/
+
+# ผลของ `next build` — สร้างใหม่ได้ทุกเมื่อ serve.py เสิร์ฟจากที่นี่
+vcut-ui/out/
+vcut-ui/.next/
+
+# ตัวห่อ Electron
+desktop/node_modules/
+desktop/dist/
+desktop/resources/
