@@ -6,7 +6,11 @@
 > อ่านคู่กับ [README.md](README.md) (เอนจินทำงานอย่างไร) และ
 > [vcut README.md](vcut%20README.md) (คู่มือใช้งาน)
 
-**สรุปหนึ่งบรรทัด:** Mac กับ Windows ห่อได้ใน 1–2 สัปดาห์จาก codebase เดียว ·
+> อัปเดต 25 ส.ค. 2026 — เพิ่ม [ข้อ 3](#3-ชั้นหน้าเว็บ-nextjs-ที่เพิ่มเข้ามา) เรื่องหน้าเว็บ
+> Next.js ที่เข้ามาแทน `viewer/index.html` และตรวจเลขบรรทัดที่อ้างถึงใหม่ทั้งไฟล์
+
+**สรุปหนึ่งบรรทัด:** Mac กับ Windows ห่อได้ใน 2–3 สัปดาห์จาก codebase เดียว ·
+หน้าเว็บ Next.js ที่เพิ่มเข้ามาไม่ได้ทำให้ยากขึ้น เพราะมันเป็น build step ไม่ใช่ runtime ·
 iOS เป็นแอปเดี่ยวไม่ได้เพราะระบบห้ามสิ่งที่เป็นแกนของการออกแบบนี้ ต้องเป็น client
 
 ---
@@ -15,11 +19,12 @@ iOS เป็นแอปเดี่ยวไม่ได้เพราะร�
 
 1. [ตอนนี้มันเป็นอะไรอยู่](#1-ตอนนี้มันเป็นอะไรอยู่)
 2. [ตารางความยากรายแพลตฟอร์ม](#2-ตารางความยากรายแพลตฟอร์ม)
-3. [ห้าทางที่เป็นไปได้](#3-ห้าทางที่เป็นไปได้)
-4. [สิ่งที่ต้องแก้จริงเพื่อไป Windows](#4-สิ่งที่ต้องแก้จริงเพื่อไป-windows)
-5. [ทำไม iOS ถึงเป็นคนละเรื่อง](#5-ทำไม-ios-ถึงเป็นคนละเรื่อง)
-6. [แผนที่เสนอ](#6-แผนที่เสนอ)
-7. [ข้อสรุปที่ต้องพูดให้ตรง](#7-ข้อสรุปที่ต้องพูดให้ตรง)
+3. [ชั้นหน้าเว็บ Next.js ที่เพิ่มเข้ามา](#3-ชั้นหน้าเว็บ-nextjs-ที่เพิ่มเข้ามา)
+4. [ห้าทางที่เป็นไปได้](#4-ห้าทางที่เป็นไปได้)
+5. [สิ่งที่ต้องแก้จริงเพื่อไป Windows](#5-สิ่งที่ต้องแก้จริงเพื่อไป-windows)
+6. [ทำไม iOS ถึงเป็นคนละเรื่อง](#6-ทำไม-ios-ถึงเป็นคนละเรื่อง)
+7. [แผนที่เสนอ](#7-แผนที่เสนอ)
+8. [ข้อสรุปที่ต้องพูดให้ตรง](#8-ข้อสรุปที่ต้องพูดให้ตรง)
 
 ---
 
@@ -29,11 +34,14 @@ vcut **เป็น local web app อยู่แล้ว** ซึ่งบั�
 ได้ง่ายที่สุด:
 
 ```
-[viewer/index.html  373 KB · 5,855 บรรทัด · ไฟล์เดียว]
-                    ↑ HTTP
-        [serve.py  ThreadingHTTPServer · stdlib ล้วน]
+[vcut-ui/          Next.js 16 + React 19 · 7,925 บรรทัด · client ล้วน]  ← หน้าหลักวันนี้
+[viewer/index.html  479 KB · 7,523 บรรทัด · ไฟล์เดียว]                  ← ของเดิม ยังเสิร์ฟอยู่
+                    ↑ HTTP   /engine/* → /api/*
+        [serve.py  ThreadingHTTPServer · stdlib ล้วน · 1,475 บรรทัด]
+                    ↑ subprocess   [sys.executable, ./vcut, <คำสั่ง>]
+        [vcut_engine/  27 โมดูล · 11,701 บรรทัด · stdlib ล้วน]
                     ↑ subprocess
-      ffmpeg · ffprobe · whisper-cli · claude (CLI)
+      ffmpeg · ffprobe · whisper-cli · claude (CLI) · yt-dlp
                     ↑
               .vcut/*.json   ← สถานะทั้งหมดของระบบ
 ```
@@ -42,7 +50,7 @@ vcut **เป็น local web app อยู่แล้ว** ซึ่งบั�
 
 | | ทำไมถึงสำคัญ |
 |---|---|
-| **UI เป็น HTML ไฟล์เดียว** | ไม่มี npm ไม่มี build step ยกไปวางใน webview ได้ทันที |
+| **หน้าเว็บไม่มีฝั่งเซิร์ฟเวอร์เลย** | ทั้งสองชุดกลายเป็นไฟล์ static ได้ — `viewer/index.html` เป็นอยู่แล้ว ส่วน vcut-ui เป็น client ล้วน ไม่มี API route ไม่มี server action (ดู [ข้อ 3](#3-ชั้นหน้าเว็บ-nextjs-ที่เพิ่มเข้ามา)) |
 | **สถานะทั้งหมดเป็นไฟล์ JSON** | ไม่มี DB ไม่มี migration ไม่มี state ในหน่วยความจำที่ต้องย้าย |
 | **เอนจินเป็น stdlib ล้วน** | ไม่มี dependency tree ที่จะพังตอน bundle — แค่ Python 3.11 กับ ffmpeg |
 
@@ -60,6 +68,7 @@ vcut **เป็น local web app อยู่แล้ว** ซึ่งบั�
 | ความสามารถที่เอนจินต้องใช้ | macOS | Windows | iOS / iPadOS |
 |---|---|---|---|
 | Python 3.11 runtime | ✅ ฝังได้ (python-build-standalone) | ✅ ฝังได้ | ⚠️ ฝังได้ แต่ห้ามโหลดโค้ดใหม่จากเน็ต |
+| Node.js + `next build` | ✅ **ตอน build เท่านั้น** | ✅ **ตอน build เท่านั้น** | ✅ static ที่ได้ไม่ต้องมี Node ตอนรัน |
 | `subprocess` เรียกไบนารีภายนอก | ✅ | ✅ | ❌ **ระบบบล็อก fork/exec** |
 | ffmpeg / ffprobe เป็น CLI | ✅ | ✅ | ❌ ต้องลิงก์เป็น library |
 | ฟิลเตอร์ `ass` (libass + harfbuzz) | ✅ `ffmpeg-full` | ✅ build ของ gyan.dev | ⚠️ ต้องคอมไพล์เอง |
@@ -71,16 +80,52 @@ vcut **เป็น local web app อยู่แล้ว** ซึ่งบั�
 
 ---
 
-## 3. ห้าทางที่เป็นไปได้
+## 3. ชั้นหน้าเว็บ Next.js ที่เพิ่มเข้ามา
+
+เอกสารรุ่นแรกเขียนตอนที่หน้าเว็บยังเป็น `viewer/index.html` ไฟล์เดียว — ตอนนี้ไม่ใช่แล้ว
+หน้าหลักคือ [vcut-ui/](vcut-ui/) · Next.js 16 + React 19 · 26 ไฟล์ · 7,925 บรรทัด
+(ไฟล์เดิมยังอยู่และยังถูกเสิร์ฟที่ `/` แต่ไม่ได้พัฒนาต่อ)
+
+**ข้อสรุปทุกข้อของเอกสารนี้ยังใช้ได้** เพราะสิ่งที่เพิ่มเข้ามาเป็น *build step*
+ไม่ใช่ *runtime dependency* — แอปที่ส่งถึงผู้ใช้ไม่ต้องมี Node.js อยู่ในเครื่อง
+
+| ข้อเท็จจริงจากโค้ด | ผลต่อการห่อเป็นแอป |
+|---|---|
+| ไม่มี API route · ไม่มี server action สักตัว | Next ทำหน้าที่แค่ bundler — `next build` แล้วได้ไฟล์ static ล้วน |
+| ทุกไฟล์ที่ถือ state ประกาศ `"use client"` | ไม่มีอะไรต้องรันฝั่งเซิร์ฟเวอร์ตอนใช้งานจริง |
+| browser API ที่ใช้จริงมีแค่ `window.addEventListener` กับ `window.innerWidth` — ไม่มี `localStorage` ไม่มี `AudioContext` ไม่มี File System Access | ไม่ต้องกลัวว่า WKWebView (Mac) กับ WebView2 (Windows) รองรับไม่เท่ากัน |
+| `public/` 24 MB (bgm 17 · stickers 5.7 · sfx 1.3) | สังเคราะห์เองด้วย numpy ตอน build ([gen_bgm.py](vcut-ui/scripts/gen_bgm.py) · [gen_sfx.py](vcut-ui/scripts/gen_sfx.py)) — ไม่มีลิขสิทธิ์ และ **numpy ไม่ใช่ dependency ตอนรัน** |
+| จุดต่อกับเอนจินอยู่บรรทัดเดียว | [lib/api.ts:3](vcut-ui/lib/api.ts#L3) — `export const engine = "/engine"` |
+
+### สี่จุดที่ต้องแก้เพราะ Next.js
+
+| # | จุด | ปัญหา | ทางแก้ |
+|---|---|---|---|
+| **N1** | [vcut-ui/next.config.ts](vcut-ui/next.config.ts) | proxy `/engine/*` ทำด้วย `rewrites()` ซึ่งเป็นความสามารถของ **Next server เท่านั้น** — พอสั่ง `output: "export"` ทุกคำขอ `/engine/*` จะกลายเป็น 404 ทันที | ให้ [serve.py](vcut_engine/serve.py) เสิร์ฟไฟล์ static ที่ export ออกมาเอง (แก้ route `/` ให้ชี้โฟลเดอร์ `out/` แทน `VIEWER`) แล้วรับ `/engine/*` เป็นชื่ออื่นของ `/api/*` — **ทำแบบนี้แล้วไม่ต้องแตะ CORS และไม่ต้องแตะ Host guard เลย** |
+| **N2** | [serve.py:797](vcut_engine/serve.py#L797) | ทางตรงข้ามของ N1 คือให้ webview ยิงไป `http://127.0.0.1:<port>` ตรง ๆ — ต้องเพิ่ม CORS ทั้งชุด และ `_guard()` จะตอบ 403 ให้ Tauri ทันทีเพราะมันส่ง `Host: tauri://localhost` | เลี่ยงด้วย N1 · ถ้าจำเป็นจริงค่อยเติม origin ที่อนุญาตแบบระบุชัด อย่าเปิดกว้าง |
+| **N3** | [serve.py:1461](vcut_engine/serve.py#L1461) | พอร์ต 8765 ตายตัว — เปิดสองหน้าต่างหรือมีของอื่นจองพอร์ตอยู่ก็สตาร์ตไม่ขึ้น | bind พอร์ต `0` แล้วพิมพ์พอร์ตจริงออก stdout ให้ตัวห่ออ่านไปเปิด webview |
+| **N4** | [serve.py:1438](vcut_engine/serve.py#L1438) | โปรเจกต์ถูกล็อกตั้งแต่ตอนสตาร์ต (`-c projects/x.toml`) ไม่มี API เปลี่ยน → เมนู "เปิดโปรเจกต์…" ของแอปเดสก์ท็อปทำไม่ได้ | ให้ตัวห่อ restart sidecar ด้วย config ใหม่ (ง่ายสุด) หรือเพิ่ม `POST /api/project` ที่สร้าง `Ctx` ใหม่ |
+
+### ⚠️ ห้าม freeze เอนจินด้วย PyInstaller
+
+[serve.py:1329](vcut_engine/serve.py#L1329) และอีก 3 จุด spawn ตัวเองด้วย
+`[sys.executable, str(ctx.launcher), ...]` — ถ้า freeze แล้ว `sys.executable` จะกลายเป็น
+ตัวแอปเอง ไม่ใช่ python ทำให้ **ทุกปุ่มที่สั่งงานในหน้าเว็บพังพร้อมกันหมด**
+ต้องฝัง Python จริง (python-build-standalone) เท่านั้น
+
+---
+
+## 4. ห้าทางที่เป็นไปได้
 
 ### ทาง A — ห่อของเดิมด้วย Tauri / Electron → Mac + Windows ★
 
-**แรง: 1–2 สัปดาห์ · ความเสี่ยง: ต่ำ · ได้ 2 ใน 3 แพลตฟอร์ม**
+**แรง: 2–3 สัปดาห์ · ความเสี่ยง: ต่ำ · ได้ 2 ใน 3 แพลตฟอร์ม**
 
 ตัวห่อทำแค่ 3 อย่าง:
 
-1. สตาร์ต `serve.py` เป็น sidecar (พอร์ตสุ่ม ไม่ใช่ 8765 ตายตัว)
-2. เปิด webview ชี้ `127.0.0.1:<port>`
+1. สตาร์ต `serve.py` เป็น sidecar (พอร์ตสุ่ม ไม่ใช่ 8765 ตายตัว — [N3](#3-ชั้นหน้าเว็บ-nextjs-ที่เพิ่มเข้ามา))
+2. เปิด webview ชี้ `127.0.0.1:<port>` ซึ่งเสิร์ฟทั้งไฟล์ static ของ vcut-ui และ `/api/*`
+   จาก origin เดียวกัน ([N1](#3-ชั้นหน้าเว็บ-nextjs-ที่เพิ่มเข้ามา))
 3. ปิดโปรเซสลูกให้สะอาดตอนออก — รวมถึง ffmpeg ที่ `serve.Job` spawn ไว้
 
 โครงร่างที่ต้อง bundle:
@@ -92,16 +137,22 @@ vcut.app/  (หรือ vcut/ บน Windows)
   bin/ffprobe
   bin/whisper-cli  + ggml model (small)          ~150 MB
   fonts/           Noto Sans Thai + fonts.conf     ~1 MB
+  ui/              ผลของ `next build` (static)     ~25 MB
   vcut_engine/  viewer/  config/
 ```
+
+รวมที่ผู้ใช้ต้องโหลด ~300 MB — ตัวใหญ่คือ whisper model กับ ffmpeg ไม่ใช่โค้ดของเรา
 
 เลือกตัวห่อ:
 
 | | ขนาดตัวห่อ | ข้อดี | ข้อควรระวัง |
 |---|---|---|---|
-| **Tauri** | ~10 MB | เบา · signing/updater มาให้ | ใช้ WebView ของ OS → WKWebView กับ WebView2 ไม่เหมือนกันเป๊ะ |
-| **Electron** | ~150 MB | Chromium ตัวเดียวกันทั้งสอง OS → `index.html` 5,855 บรรทัดไม่มีเซอร์ไพรส์ | อ้วน |
+| **Tauri** | ~10 MB | เบา · signing/updater มาให้ | ใช้ WebView ของ OS → WKWebView กับ WebView2 ไม่เหมือนกันเป๊ะ · ต้องระวัง Host guard ([N2](#3-ชั้นหน้าเว็บ-nextjs-ที่เพิ่มเข้ามา)) |
+| **Electron** | ~150 MB | Chromium ตัวเดียวกันทั้งสอง OS → หน้าเว็บทั้งสองชุดไม่มีเซอร์ไพรส์ | อ้วน |
 | **pywebview** | ~5 MB | เขียน Python ล้วน ต่อจากของเดิมได้ทันที | UX ระดับ "โปรแกรมที่มี" ไม่ใช่ "แอปที่ขาย" |
+
+ทั้งสามตัวไม่ต้องแบก Node.js ไปด้วย เพราะ `next build` เกิดขึ้นบนเครื่องที่ปั้นแอป
+ไม่ใช่บนเครื่องผู้ใช้
 
 **ผลลัพธ์: Mac + Windows จาก codebase เดียว และหน้าเว็บที่ทำมาทั้งหมดใช้ต่อได้ 100%**
 
@@ -115,7 +166,10 @@ SwiftUI สำหรับ Mac · WinUI 3 สำหรับ Windows คุย�
 ได้ drag-drop จริง · Finder/Explorer integration · เมนูบาร์ · ไทม์ไลน์ที่ลื่นกว่า HTML
 
 **คุ้มก็ต่อเมื่อ** ไทม์ไลน์กับพรีวิวของขั้น 4/5 เริ่มอืดจน HTML รับไม่ไหว —
-ตอนนี้ยังไม่มีสัญญาณนั้น และต้องดูแล UI สองชุดตลอดไป
+ตอนนี้ยังไม่มีสัญญาณนั้น ตรงกันข้าม vcut-ui ทำไทม์ไลน์ 6 เลเยอร์
+([Timeline.tsx](vcut-ui/components/Timeline.tsx) 653 บรรทัด) กับพรีวิวที่ลากจัดตำแหน่งได้
+([Preview.tsx](vcut-ui/components/Preview.tsx) 791 บรรทัด) ไปแล้วบน HTML ล้วน —
+เดินทางนี้แปลว่าต้องเขียนสองอย่างนั้นใหม่ทั้งหมด แล้วดูแล UI สองชุดตลอดไป
 
 ---
 
@@ -123,7 +177,7 @@ SwiftUI สำหรับ Mac · WinUI 3 สำหรับ Windows คุย�
 
 **แรง: 3–4 เดือน · ประโยชน์: น้อย — ไม่แนะนำ**
 
-จะได้ไฟล์เดียวไม่ต้องแบก Python runtime แต่ 9,172 บรรทัดที่มีอยู่ทำอยู่แค่
+จะได้ไฟล์เดียวไม่ต้องแบก Python runtime แต่ 11,701 บรรทัดที่มีอยู่ทำอยู่แค่
 *ประกอบสตริง + regex แกะตัวเลข + เขียน JSON* ซึ่งเป็นสิ่งที่ Python ทำได้ดีอยู่แล้ว
 งานหนักทั้งหมดอยู่ใน ffmpeg ที่เป็น C อยู่แล้ว — เขียนใหม่ไม่ได้เร็วขึ้นเลยสักนิด
 
@@ -139,7 +193,7 @@ SwiftUI สำหรับ Mac · WinUI 3 สำหรับ Windows คุย�
 [Mac / mini PC / VPS]  เอนจินเต็ม ทำงานหนักทั้งหมด
         │  HTTP + WebSocket
         ├── iPhone / iPad   ดูคลัง · ติ๊กเอา-ไม่เอา · ลากไทม์ไลน์ · กด render · ดูผล
-        └── Mac / Windows   หน้าเว็บเดิม ไม่ต้องแก้อะไร
+        └── Mac / Windows   vcut-ui ตัวเดิม ไม่ต้องแก้อะไร
 ```
 
 เหมาะกับความจริงของงานนี้มาก — ฟุตเทจ 3.1 GB · `render` ครั้งแรก ~40 นาที ไม่ใช่
@@ -189,19 +243,19 @@ App Store ต้อง build ffmpeg แบบ LGPL ที่ไม่มี x264
 
 ---
 
-## 4. สิ่งที่ต้องแก้จริงเพื่อไป Windows
+## 5. สิ่งที่ต้องแก้จริงเพื่อไป Windows
 
 ไล่จากโค้ดจริง ไม่ใช่การเดา — **ทั้งหมดนี้แก้ได้ในไม่กี่วัน**
 
 | # | จุด | ปัญหา | ทางแก้ |
 |---|---|---|---|
-| 1 | [render.py:176](vcut_engine/render.py#L176) · [config/default.toml:212](config/default.toml#L212) | `h264_videotoolbox` เป็น macOS อย่างเดียว | เลือก default ตาม OS: `h264_nvenc` / `h264_qsv` / `h264_amf` / fallback `libx264` |
+| 1 | [render.py:189](vcut_engine/render.py#L189) · [settings.py:353](vcut_engine/settings.py#L353) · [config/default.toml:212](config/default.toml#L212) | `h264_videotoolbox` เป็น macOS อย่างเดียว | เลือก default ตาม OS: `h264_nvenc` / `h264_qsv` / `h264_amf` / fallback `libx264` |
 | 2 | [caption.py:102-103](vcut_engine/caption.py#L102) | ฮาร์ดโค้ด `/opt/homebrew/...` ตอนหา ffmpeg ที่มีฟิลเตอร์ `ass` | ทำ resolver แยกตาม OS — Windows ใช้ build ของ gyan.dev ที่มี libass มาแล้ว |
-| 3 | [caption.py:34](vcut_engine/caption.py#L34) · [fxtext.py:292](vcut_engine/fxtext.py#L292) | ฟอนต์ตั้งต้น `Sukhumvit Set` ไม่มีบน Windows → libass fallback แล้วสระ/วรรณยุกต์เพี้ยน | bundle **Noto Sans Thai** ไปกับแอป + ตั้ง `FONTCONFIG_FILE` ให้ libass เห็น |
-| 4 | [caption.py:485](vcut_engine/caption.py#L485) | `-vf ass='{fpath}'` — path Windows มี `\` และ `C:` ซึ่งตัวแยกฟิลเตอร์ของ ffmpeg กินเอง | escape เป็น `C\:/path/x.ass` หรือ `cwd` เข้าโฟลเดอร์แล้วใช้ path สัมพัทธ์ |
-| 5 | [util.py:68](vcut_engine/util.py#L68) | `text=True` ไม่ระบุ encoding → Windows ใช้ locale (cp874) → ชื่อไฟล์/log ภาษาไทยเพี้ยน | ใส่ `encoding="utf-8", errors="replace"` ทุกจุดที่เรียก subprocess |
-| 6 | [listen.py:62](vcut_engine/listen.py#L62) · [ai.py:329](vcut_engine/ai.py#L329) | สมมติว่า `whisper-cli` / `claude` อยู่ใน PATH | ให้ config ชี้ path เต็มได้ + bundle `whisper-cli` ไปกับแอป |
-| 7 | [serve.py:169](vcut_engine/serve.py#L169) | `proc.terminate()` บน Windows ไม่ลามถึงลูกของลูก → ffmpeg กลายเป็นลูกกำพร้า | ใช้ Job Object บน Windows หรือ `taskkill /T /F /PID` |
+| 3 | [caption.py:34](vcut_engine/caption.py#L34) · [fx.py:144](vcut_engine/fx.py#L144) · [fxtext.py:411](vcut_engine/fxtext.py#L411) · [journey.py:48](vcut_engine/journey.py#L48) | ฟอนต์ตั้งต้น `Sukhumvit Set` ไม่มีบน Windows → libass fallback แล้วสระ/วรรณยุกต์เพี้ยน (มี 4 จุดที่ฮาร์ดโค้ดชื่อนี้ ต้องแก้ให้ครบ) | bundle **Noto Sans Thai** ไปกับแอป + ตั้ง `FONTCONFIG_FILE` ให้ libass เห็น |
+| 4 | [caption.py:535](vcut_engine/caption.py#L535) | `-vf ass='{fpath}'` — path Windows มี `\` และ `C:` ซึ่งตัวแยกฟิลเตอร์ของ ffmpeg กินเอง | escape เป็น `C\:/path/x.ass` หรือ `cwd` เข้าโฟลเดอร์แล้วใช้ path สัมพัทธ์ |
+| 5 | [util.py:70](vcut_engine/util.py#L70) · [serve.py:189](vcut_engine/serve.py#L189) | `text=True` **ไม่ระบุ encoding ทั้งสองจุด** → Windows ใช้ locale (cp874) → ชื่อไฟล์/log ภาษาไทยเพี้ยนทั้งระบบ รวมถึง log ที่ไหลขึ้นหน้าเว็บ | ใส่ `encoding="utf-8", errors="replace"` ทุกจุดที่เรียก subprocess |
+| 6 | [listen.py:86](vcut_engine/listen.py#L86) · [provider.py:134](vcut_engine/provider.py#L134) · [music.py:270](vcut_engine/music.py#L270) | สมมติว่า `whisper-cli` / `claude` / `yt-dlp` อยู่ใน PATH — สองตัวแรกมีช่อง config ให้ชี้ path เต็มอยู่แล้ว (`listen.binary` · `ai.binary`) แต่ `yt-dlp` เรียกผ่าน `shutil.which` ตรง ๆ ไม่มีช่องให้ตั้ง | ตั้ง default ของ `*.binary` ให้ชี้ `bin/` ในแอป + เพิ่มช่อง config ให้ yt-dlp |
+| 7 | [serve.py:174](vcut_engine/serve.py#L174) | `proc.terminate()` บน Windows ไม่ลามถึงลูกของลูก → ffmpeg กลายเป็นลูกกำพร้ากินซีพียูต่อ | ใช้ Job Object บน Windows หรือ `taskkill /T /F /PID` |
 | 8 | [vcut README.md](vcut%20README.md) | เอกสารสอน `pkill` · `lsof` · `pgrep` | ตัวห่อจัดการวงจรชีวิตโปรเซสให้เอง — ปัญหาหายไปเอง เหลือแค่แก้เอกสาร |
 
 ### สิ่งที่ไม่ต้องแก้เลย
@@ -210,7 +264,8 @@ App Store ต้อง build ffmpeg แบบ LGPL ที่ไม่มี x264
 pathlib ทุกจุด              ·  content-hash cache (seg_key)
 โครงสร้าง JSON ทั้งหมด       ·  ระบบ preset / config merge
 viewer/index.html           ·  ตรรกะ prepare / compose / render / fx
-ThreadPoolExecutor          ·  Progress bar parsing
+vcut-ui ทั้ง 7,925 บรรทัด    ·  ThreadPoolExecutor
+schema ของ settings.py      ·  Progress bar parsing
 ```
 
 **คิดเป็นเกินกว่า 90% ของโค้ด** — เพราะหลักการ "Python เป็นสมอง ffmpeg เป็นกล้ามเนื้อ"
@@ -218,7 +273,7 @@ ThreadPoolExecutor          ·  Progress bar parsing
 
 ---
 
-## 5. ทำไม iOS ถึงเป็นคนละเรื่อง
+## 6. ทำไม iOS ถึงเป็นคนละเรื่อง
 
 ไม่ใช่เพราะโค้ดเขียนไม่ดี แต่เพราะ **iOS ห้ามสิ่งที่เป็นแกนของการออกแบบนี้พอดี**
 
@@ -242,25 +297,36 @@ ThreadPoolExecutor          ·  Progress bar parsing
 
 ---
 
-## 6. แผนที่เสนอ
+## 7. แผนที่เสนอ
 
-### เฟส 1 — Mac + Windows (1–2 สัปดาห์)
+### เฟส 1 — Mac + Windows (2–3 สัปดาห์)
 
 ```
-1. แก้ 8 จุดในตารางข้อ 4 ให้เอนจินรันบน Windows ได้ก่อน  (ทดสอบด้วย CLI ล้วน)
-2. ห่อด้วย Tauri — sidecar + webview + จัดการโปรเซสลูก
-3. bundle ffmpeg(libass) · whisper-cli + model · Noto Sans Thai · python
-4. code signing + notarization (Mac) · code signing (Windows)
+1. แก้ N1–N4 ของข้อ 3 — เสิร์ฟ static จาก serve.py · พอร์ตสุ่ม · เปิดโปรเจกต์ได้
+2. แก้ 8 จุดในตารางข้อ 5 ให้เอนจินรันบน Windows ได้  (ทดสอบด้วย CLI ล้วน)
+3. ห่อด้วย Tauri — sidecar + webview + จัดการโปรเซสลูก
+4. bundle ffmpeg(libass) · whisper-cli + model · Noto Sans Thai · python · ui/
+5. code signing + notarization (Mac) · code signing (Windows)
 ```
+
+| งาน | แรง |
+|---|---|
+| N1–N4 (Next static · พอร์ต · เปิดโปรเจกต์) | 2–3 วัน |
+| 8 จุดฝั่ง Windows + ทดสอบด้วย CLI ล้วน | 3–5 วัน |
+| ห่อ Tauri + bundle ของทั้งหมด | 3–5 วัน |
+| signing + notarization | 2–3 วัน |
 
 **เกณฑ์ว่าเสร็จ:** ฟุตเทจชุดเดียวกันรันบน Mac กับ Windows แล้วได้ `edl.json`
 ตรงกันทุกชิ้น (ส่วน `final.mp4` จะไม่ไบต์ต่อไบต์เท่ากันเพราะคนละ encoder)
+
+**ลำดับสำคัญ:** ทำข้อ 1 ก่อนเสมอ — ตราบใดที่หน้าเว็บยังต้องพึ่ง `next dev`
+เป็น proxy อยู่ จะทดสอบตัวห่อจริงไม่ได้เลย
 
 ### เฟส 2 — iOS / iPadOS เป็น client (1–2 เดือน)
 
 ```
 1. เพิ่มชั้น auth + TLS + rate limit ให้ serve.py  ← ทำก่อนทุกอย่าง
-2. แยก API ออกจากหน้าเว็บให้ชัด (ตอนนี้ /api/* มีอยู่แล้ว ต่อยอดได้)
+2. แยก API ออกจากหน้าเว็บให้ชัด (ตอนนี้ /api/* กับ lib/api.ts แยกกันดีอยู่แล้ว)
 3. SwiftUI client — เน้นขั้น 1 กับขั้น 3 ที่นิ้วทำได้ดีกว่าเมาส์
 4. ดูผลผ่าน /seg/<i> ที่รองรับ Range อยู่แล้ว
 ```
@@ -272,12 +338,13 @@ ThreadPoolExecutor          ·  Progress bar parsing
 
 ---
 
-## 7. ข้อสรุปที่ต้องพูดให้ตรง
+## 8. ข้อสรุปที่ต้องพูดให้ตรง
 
 | คำถาม | คำตอบ |
 |---|---|
-| ทำเป็นแอป Mac ได้ไหม | **ได้ · ง่ายที่สุด** ห่ออย่างเดียว ไม่ต้องแก้โค้ดเอนจิน |
-| ทำเป็นแอป Windows ได้ไหม | **ได้** แก้ 8 จุด ส่วนใหญ่เป็นเรื่อง encoder · ฟอนต์ · path escaping |
+| ทำเป็นแอป Mac ได้ไหม | **ได้ · ง่ายที่สุด** แก้แค่ N1–N4 ของข้อ 3 ที่เหลือคือห่อ |
+| ทำเป็นแอป Windows ได้ไหม | **ได้** แก้ N1–N4 + อีก 8 จุด ส่วนใหญ่เป็นเรื่อง encoder · ฟอนต์ · encoding · path escaping |
+| หน้าเว็บ Next.js ทำให้ยากขึ้นไหม | **ไม่** — เป็น build step ไม่ใช่ runtime แอปที่ส่งถึงผู้ใช้ไม่ต้องมี Node.js · แก้ 4 จุด (N1–N4) |
 | ทำเป็นแอป iOS ได้ไหม | **แบบเดี่ยว: ไม่ได้** · แบบ client ต่อเครื่องใหญ่: **ได้และเหมาะกว่าด้วย** |
-| ต้องเขียนใหม่ไหม | **ไม่ต้อง** เกิน 90% ของโค้ดใช้ต่อได้ตามเดิม |
-| ควรเริ่มตรงไหน | แก้ 8 จุดให้รันบน Windows ได้ก่อน — ยังไม่ต้องมีตัวห่อ ทดสอบด้วย CLI ล้วนพอ |
+| ต้องเขียนใหม่ไหม | **ไม่ต้อง** เกิน 90% ของเอนจิน และ 100% ของหน้าเว็บใช้ต่อได้ตามเดิม |
+| ควรเริ่มตรงไหน | **N1** — ให้ `serve.py` เสิร์ฟ static ของ vcut-ui เองที่ origin เดียวกัน ทำเสร็จแล้วเลิกต้องรัน `next dev` คู่กันตอน dev ด้วย · จากนั้นค่อยไล่ 8 จุดฝั่ง Windows ด้วย CLI ล้วน ยังไม่ต้องมีตัวห่อ |
