@@ -133,6 +133,10 @@ def view(ctx):
             "size": cl.get("size", 0), "codec": cl.get("codec", ""),
             "motion": cl.get("motion"), "bright": cl.get("bright"),
             "created": cl.get("created") or cl.get("mtime", 0),
+            # วันที่ถ่าย (created) กับวันที่ไฟล์มาถึงคลัง (mtime) เป็นคนละเรื่อง —
+            # คลิปเก่าที่เพิ่งอัปโหลดเข้ามาวันนี้ต้องเรียงมาอยู่บนสุดได้ ถ้าใช้ค่า
+            # เดียวกันสองหน้าที่ "เพิ่มล่าสุด" จะกลายเป็น "ถ่ายล่าสุด" เงียบ ๆ
+            "added": cl.get("mtime", 0),
             "rot": str(rots.get(name, "") or ""),
             "vmode": vm, "vmode_eff": vm or vdefault,
             "picked": name not in excl,

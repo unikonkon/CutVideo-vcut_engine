@@ -68,6 +68,8 @@ export interface ClipInfo {
   motion: number | null;
   bright: number | null;
   created: number;
+  /** เวลาที่ไฟล์มาถึงโฟลเดอร์ฟุตเทจ (mtime) — คนละอันกับ created ที่เป็นวันถ่าย */
+  added: number;
   rot: string;
   vmode: string;
   vmode_eff: string;

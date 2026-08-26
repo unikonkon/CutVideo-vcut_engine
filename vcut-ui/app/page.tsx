@@ -101,6 +101,8 @@ export default function Editor() {
   const [notice, setNotice] = useState("");
 
   const [trash, setTrash] = useState<TrashItem[]>([]);
+  // ลำดับคลังที่ลากจัดไว้แต่ยังไม่ได้เขียนลงไฟล์โปรเจกต์
+  const [orderDirty, setOrderDirty] = useState(false);
 
   const [job, setJob] = useState<JobState | null>(null);
   const [jobLines, setJobLines] = useState<string[]>([]);
@@ -1659,7 +1661,13 @@ export default function Editor() {
         .map((x) => x.name);
       try {
         const r = await api.saveClips({ exclude });
-        setClips(r.clips.clips);
+        // คำตอบพกลำดับของเอนจินมาด้วย — ถ้ามีลำดับร่างที่ยังไม่บันทึกค้างอยู่
+        // แล้วเอามาทับทั้งก้อน สิ่งที่เพิ่งลากจัดไว้จะหายไปเงียบ ๆ
+        setClips((prev) =>
+          orderDirty
+            ? prev.map((x) => ({ ...x, picked: !exclude.includes(x.name) }))
+            : r.clips.clips,
+        );
         flash(
           c.picked
             ? `พัก ${c.name} ไว้ — ไม่เข้าหนังตอนจัดใหม่ ไฟล์ยังอยู่`
@@ -1669,28 +1677,48 @@ export default function Editor() {
         flash(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
       }
     },
-    [clips, flash],
+    [clips, orderDirty, flash],
   );
 
-  const reorderClips = useCallback(
-    async (from: number, to: number) => {
-      const next = [...clips];
+  /** ลากสลับในคลัง — แก้แค่ของบนจอ ยังไม่เขียนอะไรลงไฟล์โปรเจกต์
+   *
+   *  ของเดิมยิงบันทึกทุกครั้งที่ปล่อยการ์ด ลากสิบทีคือเขียน .toml สิบรอบ
+   *  (แล้วเอนจินโหลด config ใหม่ทุกรอบ) และไม่มีจังหวะให้ทบทวนหรือยกเลิกเลย
+   */
+  const reorderClips = useCallback((from: number, to: number) => {
+    setClips((prev) => {
+      const next = [...prev];
       const [x] = next.splice(from, 1);
       next.splice(to, 0, x);
-      setClips(next); // ขยับให้เห็นทันที แล้วค่อยให้ของจริงจากเอนจินทับอีกที
-      try {
-        const r = await api.saveClips({
-          order: next.map((c) => c.name),
-          exclude: clips.filter((c) => !c.picked).map((c) => c.name),
-        });
-        setClips(r.clips.clips);
-      } catch (e) {
-        setClips(clips);
-        flash(e instanceof Error ? e.message : "จัดลำดับไม่สำเร็จ");
-      }
-    },
-    [clips, flash],
-  );
+      return next;
+    });
+    setOrderDirty(true);
+  }, []);
+
+  const saveClipOrder = useCallback(async () => {
+    try {
+      const r = await api.saveClips({
+        order: clips.map((c) => c.name),
+        exclude: clips.filter((c) => !c.picked).map((c) => c.name),
+      });
+      setClips(r.clips.clips);
+      setOrderDirty(false);
+      flash("บันทึกลำดับคลังลงไฟล์โปรเจกต์แล้ว");
+    } catch (e) {
+      flash(e instanceof Error ? e.message : "บันทึกลำดับไม่สำเร็จ");
+    }
+  }, [clips, flash]);
+
+  const revertClipOrder = useCallback(async () => {
+    try {
+      const r = await api.clips();
+      setClips(r.clips);
+      setOrderDirty(false);
+      flash("ทิ้งลำดับที่จัดไว้ กลับไปใช้ของเดิม");
+    } catch (e) {
+      flash(e instanceof Error ? e.message : "โหลดลำดับเดิมไม่สำเร็จ");
+    }
+  }, [flash]);
 
   const deleteClip = useCallback(
     async (c: ClipInfo) => {
@@ -1962,6 +1990,9 @@ export default function Editor() {
             onPurge={purgeClip}
             onTogglePick={togglePick}
             onReorder={reorderClips}
+            orderDirty={orderDirty}
+            onSaveOrder={saveClipOrder}
+            onRevertOrder={revertClipOrder}
             busy={!!job?.running}
             flash={flash}
           />
