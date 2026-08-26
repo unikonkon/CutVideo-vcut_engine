@@ -15,7 +15,11 @@
 แก้ manifest ตรงจุดจึงถูกต้องเท่ากับ scan ใหม่ทั้งกอง แต่ใช้เวลาไม่ถึงวินาที
 แทนที่จะเป็น 40 นาที
 """
+import os
+import shutil
+import time
 import tomllib
+from pathlib import Path
 
 from . import config, render, scan, settings, thumbs
 from .util import build_lock, key_of, part_path, read_json, run as sh, write_json
@@ -221,6 +225,248 @@ def save(ctx, rel, payload):
             "rotated": sum(1 for v in rots.values() if v),
             "vmodes": sum(1 for v in vmodes.values() if v),
             "reordered": bool(values.get("scan.order"))}, None
+
+
+# ─────────────────────────── ถังขยะ ───────────────────────────
+#
+# ลบคลิปแล้วไฟล์ไปนอนที่ .vcut/trash/ ไม่ได้หายจากดิสก์ทันที — ฟุตเทจดิบเป็นของ
+# ที่ถ่ายใหม่ไม่ได้ กดพลาดทีเดียวแล้วจบเลยนั้นแพงเกินไป  แลกกับดิสก์ที่ยังไม่คืน
+# จนกว่าจะเทถัง ซึ่งเป็นราคาที่ผู้ใช้เห็นและกดคืนเองได้
+
+def trash_dir(ctx):
+    return ctx.work / "trash"
+
+
+def _index_path(ctx):
+    return trash_dir(ctx) / "index.json"
+
+
+def trash_view(ctx):
+    """ของในถังที่ยังกู้ได้จริง — รายการที่ไฟล์หายไปแล้ว (คนลบเองนอกโปรแกรม)
+    ถูกคัดออกตรงนี้ ไม่ใช่ปล่อยให้ไปพังตอนกดกู้"""
+    idx = read_json(_index_path(ctx), {}) or {}
+    out = []
+    for it in idx.get("items", []):
+        if it.get("kind") == "link" or (trash_dir(ctx) / it.get("file", "")).is_file():
+            out.append(it)
+    out.sort(key=lambda x: x.get("at", 0), reverse=True)
+    return {"items": out, "dir": str(trash_dir(ctx))}
+
+
+def _write_index(ctx, items):
+    write_json(_index_path(ctx), {"items": items})
+
+
+def _in_source(ctx, path):
+    """ไฟล์นี้นอนอยู่ในโฟลเดอร์ฟุตเทจของโปรเจกต์นี้ไหม
+
+    resolve() ที่ตัว *พ่อ* ไม่ใช่ที่ตัวไฟล์ — คลิปที่เพิ่มแบบอ้างอิง (symlink)
+    resolve แล้วจะพุ่งไปโผล่ที่โฟลเดอร์ต้นทางเดิม แล้วด่านนี้จะไล่มันออกทั้งที่
+    ตัวลิงก์เองอยู่ในคลังเรานี่แหละ
+    """
+    try:
+        return path.parent.resolve() == ctx.source.resolve()
+    except OSError:
+        return False
+
+
+def delete(ctx, rel, name):
+    """เอาคลิปออกจากคลัง — ย้ายไฟล์เข้าถังขยะ ไม่ได้ลบทิ้งเลย
+
+    ต่างจาก [scan] exclude ตรงที่อันนั้นแค่ "ไม่เอาเข้าหนัง" คลิปยังอยู่ในคลังและ
+    กดกลับมาใช้ได้ ทางนี้คือเอาออกจากคลัง (กู้ได้ผ่านถังขยะ)
+
+    คลิปที่เพิ่มแบบอ้างอิงจะถอดแค่ตัวลิงก์ **ไม่แตะไฟล์ต้นทาง** — ของคนอื่นที่เรา
+    แค่ชี้ไปหา ไม่ใช่ของที่เราจะเอาไปทิ้งได้
+
+    ไม่แตะ edl.json ที่นี่ — ฝั่งเรียกใช้ (serve) เป็นคนตัดชิ้นของคลิปนี้ออกจาก
+    ไทม์ไลน์ผ่านทางเดิมที่คิดสรุป/บทให้ครบ จะได้ไม่มีสองสูตรที่เขียนไฟล์เดียวกัน
+    """
+    if not rel:
+        return None, "ยังไม่มีไฟล์โปรเจกต์ให้บันทึก"
+    man = read_json(ctx.manifest, {}) or {}
+    cl = next((c_ for c_ in man.get("clips", []) if c_["name"] == name), None)
+    if not cl:
+        return None, f"ไม่พบคลิป '{name}' ในคลัง"
+
+    src = Path(cl["src"])
+    if not _in_source(ctx, src):
+        return None, (f"'{name}' ไม่ได้อยู่ในโฟลเดอร์ฟุตเทจของโปรเจกต์นี้ "
+                      "— เอาออกให้ไม่ได้")
+
+    tdir = trash_dir(ctx)
+    item = {"name": name, "at": int(time.time()), "kind": "file",
+            "orig": src.name, "file": "", "thumb": "",
+            "size": cl.get("size", 0), "dur": cl.get("duration", 0)}
+    try:
+        tdir.mkdir(parents=True, exist_ok=True)
+        if src.is_symlink():
+            item.update(kind="link", link_to=os.readlink(src))
+            src.unlink()
+        elif src.exists():
+            keep = tdir / src.name
+            if keep.exists():
+                keep = tdir / f"{src.stem}-{item['at']}{src.suffix}"
+            shutil.move(str(src), str(keep))
+            item["file"] = keep.name
+        thumb = ctx.thumb_dir / f"{name}.jpg"
+        if thumb.exists():
+            (tdir / "thumbs").mkdir(exist_ok=True)
+            shutil.move(str(thumb), str(tdir / "thumbs" / f"{name}.jpg"))
+            item["thumb"] = f"{name}.jpg"
+    except OSError as e:
+        return None, f"ย้ายเข้าถังขยะไม่ได้: {e}"
+
+    idx = read_json(_index_path(ctx), {}) or {}
+    _write_index(ctx, [x for x in idx.get("items", []) if x["name"] != name] + [item])
+
+    man["clips"] = [c_ for c_ in man.get("clips", []) if c_["name"] != name]
+    write_json(ctx.manifest, man)
+
+    # ค่ารายคลิปที่ชี้มาที่ชื่อนี้ไม่มีความหมายอีกต่อไป — เก็บไว้ก็เป็นบรรทัดขยะ
+    # ในไฟล์โปรเจกต์ที่ค่อย ๆ พอกขึ้นทุกครั้งที่ลบคลิป
+    values = {
+        "scan.exclude": sorted(n for n in (ctx.get("scan.exclude", []) or [])
+                               if n != name),
+        f"scan.rotation_overrides.{name}": "",
+        f"video.vertical_overrides.{name}": "",
+    }
+    order = [n for n in (ctx.get("scan.order", []) or []) if n != name]
+    natural = sorted((c_["name"] for c_ in man["clips"]), key=scan.sort_key)
+    values["scan.order"] = [] if arrange(natural, order) == natural else order
+
+    path, err = write_keys(rel, values)
+    if err:
+        return None, err
+    return {"path": path, "deleted": name, "kind": item["kind"]}, None
+
+
+def restore(ctx, name):
+    """เอาคลิปกลับจากถังขยะไปที่โฟลเดอร์ฟุตเทจ — ต้อง scan อีกทีถึงจะเข้าคลัง"""
+    idx = read_json(_index_path(ctx), {}) or {}
+    it = next((x for x in idx.get("items", []) if x["name"] == name), None)
+    if not it:
+        return None, f"ไม่มี '{name}' ในถังขยะ"
+    dst = ctx.source / it["orig"]
+    if dst.exists() or dst.is_symlink():
+        return None, f"มีไฟล์ชื่อ {it['orig']} อยู่ในโฟลเดอร์ฟุตเทจแล้ว"
+    try:
+        ctx.source.mkdir(parents=True, exist_ok=True)
+        if it["kind"] == "link":
+            if not Path(it.get("link_to", "")).exists():
+                return None, f"ไฟล์ต้นทาง {it.get('link_to')} หายไปแล้ว กู้ไม่ได้"
+            os.symlink(it["link_to"], dst)
+        else:
+            keep = trash_dir(ctx) / it["file"]
+            if not keep.is_file():
+                return None, "ไฟล์ในถังขยะหายไปแล้ว"
+            shutil.move(str(keep), str(dst))
+        if it.get("thumb"):
+            t = trash_dir(ctx) / "thumbs" / it["thumb"]
+            if t.is_file():
+                ctx.thumb_dir.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(t), str(ctx.thumb_dir / it["thumb"]))
+    except OSError as e:
+        return None, f"กู้คืนไม่ได้: {e}"
+    _write_index(ctx, [x for x in idx.get("items", []) if x["name"] != name])
+    return {"restored": name, "file": str(dst)}, None
+
+
+def purge(ctx, name=None):
+    """เทถังขยะ — ระบุชื่อ = ทิ้งอันเดียว ไม่ระบุ = ทิ้งทั้งถัง (ถาวรจริง ๆ)"""
+    idx = read_json(_index_path(ctx), {}) or {}
+    items = idx.get("items", [])
+    gone, keep = [], []
+    for it in items:
+        if name and it["name"] != name:
+            keep.append(it)
+            continue
+        if it.get("file"):
+            (trash_dir(ctx) / it["file"]).unlink(missing_ok=True)
+        if it.get("thumb"):
+            (trash_dir(ctx) / "thumbs" / it["thumb"]).unlink(missing_ok=True)
+        gone.append(it["name"])
+    if name and not gone:
+        return None, f"ไม่มี '{name}' ในถังขยะ"
+    _write_index(ctx, keep)
+    return {"purged": gone}, None
+
+
+# ─────────────────────── เพิ่มคลิปแบบอ้างอิงไฟล์เดิม ───────────────────────
+
+def _free_name(folder, stem, ext, limit=999):
+    """ชื่อแรกที่ยังว่างในโฟลเดอร์นี้ — ชนแล้วต่อท้ายด้วย -2 -3 ไปเรื่อย ๆ
+
+    คู่แฝดของ serve.free_name() ฝั่งอัปโหลด แยกกันอยู่เพราะโมดูลนี้ไม่ import serve
+    (serve เป็นฝ่าย import clips)  ที่นี่ต้องนับ symlink ที่ห้อยอยู่ด้วย ซึ่ง
+    exists() ตอบ False ให้ถ้าปลายทางหายไปแล้ว
+    """
+    def taken(n):
+        p = folder / n
+        return p.exists() or p.is_symlink()
+
+    if not taken(f"{stem}{ext}"):
+        return f"{stem}{ext}"
+    for n in range(2, limit + 1):
+        if not taken(f"{stem}-{n}{ext}"):
+            return f"{stem}-{n}{ext}"
+    return f"{stem}-{limit}{ext}"
+
+
+def link(ctx, path):
+    """ชี้ไปที่ไฟล์ที่มีอยู่แล้วบนเครื่อง แทนที่จะก๊อปสำเนาเข้ามา
+
+    ทำเป็น symlink ในโฟลเดอร์ฟุตเทจ — scan.list_sources() เดินดูไฟล์ในโฟลเดอร์
+    นั้นด้วย is_file() ซึ่งลิงก์ที่ชี้ไปหาไฟล์จริงก็ผ่าน ทั้งไปป์ไลน์จึงไม่ต้อง
+    รู้เลยว่ามันเป็นลิงก์ ต่างจากการเก็บ path ไว้ใน manifest ที่ต้องไล่แก้ทุกที่
+    ที่สมมติว่าคลิปอยู่ในโฟลเดอร์เดียว
+
+    ส่งโฟลเดอร์มาก็ได้ — ลิงก์ทุกไฟล์ที่นามสกุลตรงกับ [scan] extensions ในนั้น
+    """
+    p = Path(str(path or "").strip()).expanduser()
+    if not str(path or "").strip():
+        return None, "ยังไม่ได้ใส่ที่อยู่ไฟล์"
+    if not p.exists():
+        return None, f"ไม่พบ {p}"
+    exts = {e.lower() for e in ctx.get("scan.extensions", [".MOV"])}
+    if p.is_dir():
+        files = sorted(f for f in p.iterdir()
+                       if f.is_file() and f.suffix.lower() in exts
+                       and not f.name.startswith("."))
+        if not files:
+            return None, f"ไม่พบไฟล์วิดีโอใน {p}"
+    else:
+        files = [p]
+
+    try:
+        ctx.source.mkdir(parents=True, exist_ok=True)
+        root = ctx.source.resolve()
+    except OSError as e:
+        return None, f"เปิดโฟลเดอร์ฟุตเทจไม่ได้: {e}"
+
+    linked, skipped = [], []
+    for f in files:
+        if f.suffix.lower() not in exts:
+            skipped.append({"path": f.name, "why": f"นามสกุล {f.suffix} ไม่อยู่ใน [scan] extensions"})
+            continue
+        if f.resolve().parent == root:
+            skipped.append({"path": f.name, "why": "อยู่ในคลังอยู่แล้ว"})
+            continue
+        # ชื่อชนของเดิมก็อ้างอิงซ้ำได้ — ตั้งชื่อใหม่ให้ (ลิงก์ไม่กินดิสก์อยู่แล้ว)
+        dst = ctx.source / f.name
+        if dst.exists() or dst.is_symlink():
+            dst = ctx.source / _free_name(ctx.source, f.stem, f.suffix)
+        try:
+            os.symlink(f.resolve(), dst)
+            linked.append(dst.name)
+        except OSError as e:
+            skipped.append({"path": f.name, "why": str(e)})
+    if not linked and skipped:
+        first = f"{skipped[0]['path']}: {skipped[0]['why']}"
+        if len(skipped) == 1:
+            return None, first
+        return None, f"ไม่ได้เพิ่มสักไฟล์ — ข้าม {len(skipped)} ไฟล์ (เช่น {first})"
+    return {"linked": linked, "skipped": skipped}, None
 
 
 def sync_manifest(ctx):

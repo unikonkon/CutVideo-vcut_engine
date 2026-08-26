@@ -7,8 +7,9 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from .util import (Progress, c, info, measure_loudness, measure_motion_bright,
-                   probe_video, read_json, warn, write_json)
+from .util import (Progress, c, die, info, measure_loudness,
+                   measure_motion_bright, probe_video, read_json, warn,
+                   write_json)
 
 NUM_RE = re.compile(r"(\d+)")
 
@@ -135,7 +136,21 @@ def run(ctx, force=False):
         warn(f"ไม่พบไฟล์วิดีโอใน {ctx.source}")
         return {"clips": []}
 
-    old = {c_["name"]: c_ for c_ in (read_json(ctx.manifest, {}) or {}).get("clips", [])}
+    # scan เขียน manifest ใหม่จาก *ไฟล์ที่เห็นในโฟลเดอร์นี้เท่านั้น* — ถ้าโฟลเดอร์
+    # ถูกชี้ไปที่ใหม่ทั้งที่คลังเดิมยังมีคลิปอยู่ คลิปเดิมจะหายจากคลังทั้งกองเงียบ ๆ
+    # และ EDL ที่อ้างชื่อพวกนั้นจะบันทึกไม่ผ่านอีกเลย  หยุดไว้ก่อนดีกว่า
+    prev = read_json(ctx.manifest, {}) or {}
+    was = prev.get("source") or ""
+    try:                                   # เทียบที่อยู่จริง ไม่ใช่ตัวสะกด
+        same = Path(was).resolve() == ctx.source.resolve()
+    except OSError:
+        same = Path(was) == Path(ctx.source)
+    if not force and prev.get("clips") and was and not same:
+        die(f"โฟลเดอร์ฟุตเทจเปลี่ยนจาก {was}\n"
+            f"        เป็น {ctx.source} — คลิป {len(prev['clips'])} ตัวในคลังเดิม"
+            " จะหายทั้งกอง\n        ถ้าตั้งใจย้ายจริง ๆ ใช้ scan --force")
+
+    old = {c_["name"]: c_ for c_ in prev.get("clips", [])}
     todo, reuse = [], []
     for p in files:
         prev = old.get(p.stem)

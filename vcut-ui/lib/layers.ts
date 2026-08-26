@@ -185,4 +185,7 @@ export type DropPayload =
   | { type: "bgm"; file: string }
   | { type: "sticker"; file: string }
   | { type: "sticker-sample"; file: string }
-  | { type: "text-new"; text?: string };
+  | { type: "text-new"; text?: string }
+  // คลิปจากคลัง — ต่างจากชนิดอื่นตรงที่ไม่ได้ไปนอนบนชั้นแต่งหนัง แต่แทรกเป็นชิ้น
+  // วิดีโอจริง ๆ วินาทีที่ปล่อยจึงถูกแปลงเป็น "ระหว่างชิ้นไหน" ไม่ใช่ตำแหน่งเวลา
+  | { type: "clip"; name: string };

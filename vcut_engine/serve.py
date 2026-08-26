@@ -783,6 +783,103 @@ def probe_dir(ctx, path):
                     else "ไม่พบไฟล์วิดีโอที่นามสกุลตรงกับ [scan] extensions" + note)}
 
 
+DISK_MARGIN = 1 << 30            # กันที่ว่างไว้ 1 GB ไม่ให้ดิสก์เต็มพอดีเป๊ะ
+PART_LOCKS = {}                  # {ที่อยู่ไฟล์ .part: Lock} — ดู _upload_clip
+PART_LOCKS_GUARD = threading.Lock()
+
+
+def part_lock(path):
+    """ล็อกประจำไฟล์ .part หนึ่งไฟล์
+
+    เซิร์ฟเวอร์เป็น ThreadingHTTPServer — ก้อนของไฟล์เดียวกันสองก้อนมาถึงพร้อมกัน
+    ได้ถ้าเบราว์เซอร์ยิงซ้ำ (กดอัปโหลดรัว ๆ หรือ retry) สองเธรดเขียนไฟล์เดียวกัน
+    โดยไม่กันไว้ = ไฟล์ที่ได้เป็นขยะแต่ขนาดถูกต้อง ซึ่งจับไม่ได้เลยจนกว่าจะเปิดดู
+    """
+    with PART_LOCKS_GUARD:
+        return PART_LOCKS.setdefault(str(path), threading.Lock())
+
+
+def free_name(folder, stem, ext, limit=999):
+    """ชื่อแรกที่ยังว่างในโฟลเดอร์นี้ — ชนแล้วต่อท้ายด้วย -2 -3 ไปเรื่อย ๆ
+
+    เอาไว้ให้ "เพิ่มคลิปที่ซ้ำกัน" ทำได้จริง โดยไม่ต้องเขียนทับของเดิม — ทับไม่ได้
+    เพราะ EDL อ้างคลิปด้วย *ชื่อ* ถ้าไฟล์ชื่อเดิมกลายเป็นเนื้อหาอื่น ชิ้นที่ตัดไว้
+    แล้วบนไทม์ไลน์จะเปลี่ยนภาพไปเงียบ ๆ โดยไม่มีอะไรบอก
+
+    ดูเฉพาะไฟล์ที่เสร็จแล้ว ไม่นับ .part ที่ค้างอยู่ — ไม่งั้นอัปโหลดที่ล่มกลางทาง
+    แล้วส่งใหม่จะได้ชื่อใหม่ทุกรอบ กลายเป็นขยะกองโต
+    """
+    if not (folder / f"{stem}{ext}").exists():
+        return f"{stem}{ext}"
+    for n in range(2, limit + 1):
+        cand = f"{stem}-{n}{ext}"
+        if not (folder / cand).exists():
+            return cand
+    return f"{stem}-{limit}{ext}"
+
+
+def upload_target(ctx, raw, size=0, overwrite=False, make_dir=False, unique=False):
+    """ตรวจว่าไฟล์นี้ลงคลังได้ไหม แล้วคืนที่อยู่ปลายทาง
+
+    ใช้ตัวเดียวกันทั้งด่านตรวจล่วงหน้า (/api/upload/check) และตัวรับไฟล์จริง —
+    ถ้าเขียนแยกกันสองสูตร ผู้ใช้จะผ่านด่านแรกมาแล้วเสียเวลาส่งไฟล์ 3 GB เพื่อไป
+    โดนปฏิเสธเอาตอนท้าย
+
+    **ทำไมต้องมีด่านล่วงหน้า** — HTTP ตอบ error กลางคันระหว่างที่ฝั่งโน้นยังส่ง
+    ไฟล์อยู่นั้นแทบไม่มีประโยชน์: ไม่ปิดสายก็ทำให้ไบต์ที่เหลือไปกองบนสายจนฝั่ง
+    ตรงข้ามอ่านเป็นตอบกลับอันถัดไป (Parse Error: Expected HTTP/) ปิดสายฝั่งที่
+    กำลังเขียนอยู่ก็เจอ EPIPE แล้วทิ้งตอบกลับที่รับมาแล้วไปเฉย ๆ ทางเดียวที่
+    ผู้ใช้จะได้เห็นเหตุผลจริง ๆ คือถามให้จบก่อนจะเริ่มส่ง
+
+    ชื่อไฟล์ถูกกรองให้เหลือตัวอักษรที่เส้นทาง /thumb /clip รับ (SAFE_NAME) ไม่งั้น
+    อัปโหลดสำเร็จแต่เปิดภาพตัวอย่างไม่ได้เพราะชื่อไม่ผ่านด่านของเส้นทางพวกนั้น
+    """
+    name = Path(unquote(raw or "")).name
+    stem = re.sub(r"[^A-Za-z0-9._\-]+", "_", Path(name).stem).strip("._")
+    ext = Path(name).suffix
+    if not stem or not ext:
+        return None, f"ชื่อไฟล์ใช้ไม่ได้: {name or '(ว่าง)'}"
+    exts = {e.lower() for e in ctx.get("scan.extensions", [".MOV"])}
+    if ext.lower() not in exts:
+        return None, (f"นามสกุล {ext} ไม่อยู่ใน [scan] extensions "
+                      f"({', '.join(sorted(exts))})")
+
+    if not ctx.source.is_dir():
+        # โปรเจกต์เปิดใหม่ยังไม่มีโฟลเดอร์ก็เรื่องปกติ — สร้างให้เลย เพราะตอนนี้
+        # "เพิ่มคลิป" คือทางเข้าทางเดียวของคลัง ถ้าตรงนี้ปฏิเสธก็ไม่เหลือทางไหน
+        # ให้ตั้งโฟลเดอร์จากหน้าเว็บอีก
+        #
+        # ยกเว้นกรณีเดียว: คลังมีคลิปอยู่แล้วแต่ไฟล์จริงนอนอยู่คนละที่กับที่
+        # [project] source ชี้ — แปลว่าค่านั้นเพี้ยน ไม่ใช่ยังไม่ได้สร้าง สร้าง
+        # โฟลเดอร์ใหม่ให้ในกรณีนี้เท่ากับพาคลังแตกเป็นสองที่ แล้ว scan รอบหน้าจะ
+        # เห็นแค่ไฟล์ที่เพิ่งอัปโหลด คลิปเดิมหายจากคลังทั้งกอง
+        man = read_json(ctx.manifest, {}) or {}
+        had = man.get("source") or ""
+        if man.get("clips") and had and Path(had).is_dir():
+            return None, (f"[project] source ชี้ไปที่ {ctx.source} ซึ่งไม่มีอยู่ "
+                          f"แต่คลิป {len(man['clips'])} ตัวในคลังอยู่ที่ {had} "
+                          f"— แก้ source ในไฟล์โปรเจกต์ให้ตรงก่อน")
+        if make_dir:
+            try:
+                ctx.source.mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                return None, f"สร้างโฟลเดอร์ฟุตเทจ {ctx.source} ไม่ได้: {e}"
+
+    dst = ctx.source / f"{stem}{ext}"
+    if dst.exists() and not overwrite:
+        if not unique:
+            # ก้อนที่ 2 เป็นต้นไปห้ามเปลี่ยนชื่อเอง — ชื่อถูกล็อกไปแล้วตั้งแต่ก้อนแรก
+            # เปลี่ยนตรงนี้เท่ากับไปต่อท้ายไฟล์ผิดตัว
+            return None, f"มีไฟล์ชื่อ {dst.name} อยู่แล้วในโฟลเดอร์ฟุตเทจ"
+        dst = ctx.source / free_name(ctx.source, stem, ext)
+    if size > 0 and ctx.source.is_dir():
+        free = shutil.disk_usage(ctx.source).free
+        if size > free - DISK_MARGIN:
+            return None, (f"ดิสก์ไม่พอ — ไฟล์ {size / 1e9:.1f} GB "
+                          f"เหลือ {free / 1e9:.1f} GB")
+    return dst, None
+
+
 # ─────────────────────────── HTTP ───────────────────────────
 
 def make_handler(ctx, job):
@@ -930,68 +1027,127 @@ def make_handler(ctx, job):
                 lst.unlink(missing_ok=True)
 
         # ── รับไฟล์ฟุตเทจ ──
+        def _upload_fail(self, msg, code=400, **extra):
+            """ตอบข้อผิดพลาดของการอัปโหลด แล้ว **ปิดการเชื่อมต่อทิ้ง**
+
+            ทางนี้ตอบกลับตั้งแต่ยังไม่ได้อ่านเนื้อไฟล์ที่ยังไหลมาอีกเป็นกิกะไบต์
+            ถ้าปล่อยให้สายเปิดค้างตามธรรมเนียม HTTP/1.1 ไบต์ที่เหลือของไฟล์จะไป
+            กองอยู่บนสายแล้วฝั่งตรงข้ามอ่านมันเป็น "ตอบกลับครั้งถัดไป" — โผล่เป็น
+            `Parse Error: Expected HTTP/, RTSP/ or ICE/` ที่พร็อกซีของ next dev
+            แทนที่จะเป็นข้อความบอกสาเหตุจริงที่เราส่งไป  ผู้ใช้เลยเห็นแต่ error
+            ของ HTTP ที่ไม่เกี่ยวกับเรื่องที่ผิดจริงเลยสักนิด
+
+            อ่านทิ้งให้จบแทนการปิดสายก็ได้ แต่นั่นแปลว่าต้องรอไฟล์ 3 GB ไหลมาให้
+            ครบก่อนถึงจะบอกได้ว่า "นามสกุลไม่ผ่าน" ซึ่งไร้เหตุผล
+            """
+            self.close_connection = True
+            self._send(code, json.dumps({"error": msg, **extra}, ensure_ascii=False),
+                       "application/json", {"Connection": "close"})
+
         def _upload_clip(self, query):
-            """รับคลิปดิบลงโฟลเดอร์ฟุตเทจ — body คือเนื้อไฟล์ตรง ๆ ไม่ใช่ JSON
+            """รับคลิปดิบลงโฟลเดอร์ฟุตเทจ **ทีละก้อน** — body คือเนื้อไฟล์ตรง ๆ
 
-            ทำไมไม่ใช้ /api/asset: ทางนั้นห่อ base64 ทั้งไฟล์ใน JSON (เพดาน 40 MB)
-            ซึ่งพอเป็นฟุตเทจระดับกิกะไบต์จะกินหน่วยความจำ 1.3 เท่าของไฟล์ —
-            ทางนี้อ่านทีละก้อนแล้วเขียนลงดิสก์เลย ไม่อ่านทั้งไฟล์ขึ้นมาก่อน
+            ทำไมไม่รับรวดเดียวทั้งไฟล์: ตอน dev หน้าเว็บคุยผ่าน rewrites() ของ Next
+            ซึ่ง **โคลนเนื้อคำขอทั้งก้อนเก็บไว้ในหน่วยความจำ** แล้วตัดทิ้งที่ 10 MB
+            (proxyClientMaxBodySize) เกินแล้วไม่ error ด้วย — ส่งต่อแค่ 10 MB แรก
+            เฉย ๆ ฝั่งนี้จึงได้ไฟล์ไม่ครบทุกครั้งที่คลิปใหญ่กว่านั้น  จะไปตั้งค่าให้
+            ใหญ่ขึ้นก็เท่ากับให้ Next อมคลิป 3 GB ไว้ใน RAM
 
-            เขียนลง .part ก่อนแล้วค่อยเปลี่ยนชื่อ — สายหลุดกลางทางจะไม่เหลือไฟล์
-            ครึ่ง ๆ ที่ scan หยิบไปเข้าใจว่าเป็นคลิปจริง  ชื่อไฟล์ถูกกรองให้เหลือ
-            ตัวอักษรที่เส้นทาง /thumb /clip รับ (SAFE_NAME) ไม่งั้นอัปโหลดสำเร็จ
-            แต่เปิดภาพตัวอย่างไม่ได้เพราะชื่อไม่ผ่านด่านของเส้นทางพวกนั้น
+            ก้อนละไม่เกิน 8 MB จึงลอดใต้เพดานนั้นได้โดยไม่ต้องตั้งค่าอะไรเลย และ
+            ได้ของแถมคือส่งต่อจากก้อนที่ค้างได้ ไม่ต้องเริ่มไฟล์ 3 GB ใหม่ทั้งไฟล์
+
+            ต่อท้ายลงไฟล์ .part แล้วค่อยเปลี่ยนชื่อตอนครบ — สายหลุดกลางทางจะไม่
+            เหลือไฟล์ครึ่ง ๆ ที่ scan หยิบไปเข้าใจว่าเป็นคลิปจริง
             """
             q = dict(x.split("=", 1) for x in query.split("&") if "=" in x)
             raw = Path(unquote(q.get("name", ""))).name
-            stem = re.sub(r"[^A-Za-z0-9._\-]+", "_", Path(raw).stem).strip("._")
-            ext = Path(raw).suffix
-            if not stem or not ext:
-                return self._json({"error": f"ชื่อไฟล์ใช้ไม่ได้: {raw}"}, 400)
-            exts = {e.lower() for e in ctx.get("scan.extensions", [".MOV"])}
-            if ext.lower() not in exts:
-                return self._json(
-                    {"error": f"นามสกุล {ext} ไม่อยู่ใน [scan] extensions "
-                              f"({', '.join(sorted(exts))})"}, 400)
-            if not ctx.source.is_dir():
-                return self._json(
-                    {"error": f"ไม่พบโฟลเดอร์ฟุตเทจ {ctx.source} — "
-                              "ต่อดิสก์/สร้างโฟลเดอร์ก่อน"}, 400)
             try:
-                size = int(self.headers.get("Content-Length") or 0)
+                got = int(self.headers.get("Content-Length") or 0)
+                offset = int(q.get("offset", 0))
+                total = int(q.get("total", 0)) or got
             except ValueError:
-                size = 0
-            if size <= 0:
-                return self._json({"error": "ไม่รู้ขนาดไฟล์ (Content-Length)"}, 411)
-            free = shutil.disk_usage(ctx.source).free
-            if size > free - (1 << 30):
-                return self._json(
-                    {"error": f"ดิสก์ไม่พอ — ไฟล์ {size / 1e9:.1f} GB "
-                              f"เหลือ {free / 1e9:.1f} GB"}, 507)
-            dst = ctx.source / f"{stem}{ext}"
-            if dst.exists() and q.get("overwrite") != "1":
-                return self._json(
-                    {"error": f"มีไฟล์ชื่อ {dst.name} อยู่แล้ว", "exists": True}, 409)
+                return self._upload_fail("พารามิเตอร์ของก้อนไม่ถูกต้อง")
+            if got <= 0:
+                return self._upload_fail("ไม่รู้ขนาดก้อน (Content-Length)", 411)
+            if offset < 0 or offset + got > total:
+                return self._upload_fail(
+                    f"ก้อนนี้เกินขนาดไฟล์ที่บอกไว้ ({offset}+{got} > {total})")
+
+            dst, err = upload_target(ctx, raw, total,
+                                     overwrite=q.get("overwrite") == "1",
+                                     make_dir=True, unique=offset == 0)
+            if err:
+                return self._upload_fail(err)
+
             tmp = dst.with_suffix(dst.suffix + ".part")
-            got = 0
-            try:
-                with tmp.open("wb") as f:
-                    while got < size:
-                        buf = self.rfile.read(min(1 << 20, size - got))
-                        if not buf:
-                            break
-                        f.write(buf)
-                        got += len(buf)
-                if got != size:
+            with part_lock(tmp):
+                have = tmp.stat().st_size if tmp.exists() else 0
+                if offset == 0:
+                    have = 0                      # เริ่มไฟล์ใหม่ ทับของค้างเดิมทิ้ง
+                elif have != offset:
+                    return self._upload_fail(
+                        f"ก้อนไม่ต่อกัน — ไฟล์มีอยู่ {have} ไบต์ แต่ก้อนนี้เริ่มที่ "
+                        f"{offset} · เริ่มส่งไฟล์นี้ใหม่", 409, resume=have)
+                try:
+                    with tmp.open("wb" if offset == 0 else "r+b") as f:
+                        f.seek(offset)
+                        left = got
+                        while left > 0:
+                            buf = self.rfile.read(min(1 << 20, left))
+                            if not buf:
+                                break
+                            f.write(buf)
+                            left -= len(buf)
+                    if left > 0:
+                        return self._upload_fail(
+                            f"ก้อนมาไม่ครบ — ขาดอีก {left} ไบต์", 400,
+                            resume=offset)
+                    done = offset + got >= total
+                    if done:
+                        tmp.replace(dst)
+                except OSError as e:
                     tmp.unlink(missing_ok=True)
-                    return self._json(
-                        {"error": f"ได้ไม่ครบ — รับมา {got} จาก {size} ไบต์"}, 400)
-                tmp.replace(dst)
-            except OSError as e:
-                tmp.unlink(missing_ok=True)
-                return self._json({"error": f"เขียนไฟล์ไม่ได้: {e}"}, 500)
-            return self._json({"ok": True, "name": dst.name, "size": got,
-                               "renamed": dst.name != raw})
+                    return self._upload_fail(f"เขียนไฟล์ไม่ได้: {e}", 500)
+
+            if not done:
+                # ชื่ออาจถูกเปลี่ยนเพราะชนของเดิม — ก้อนถัดไปต้องส่งชื่อนี้มา ไม่ใช่
+                # ชื่อไฟล์ต้นทาง ไม่งั้นจะไปหา .part ผิดตัว
+                return self._json({"ok": True, "done": False, "name": dst.name,
+                                   "received": offset + got, "total": total})
+            return self._json({"ok": True, "done": True, "name": dst.name,
+                               "size": total, "renamed": dst.name != raw})
+
+        def _delete_clip(self, name):
+            """เอาคลิปออกจากคลังถาวร แล้วเก็บกวาดสิ่งที่อ้างถึงมันให้ครบในคราวเดียว
+
+            ลำดับสำคัญ: ตัดชิ้นออกจากไทม์ไลน์ *หลัง* ลบไฟล์ เพราะ apply_edit ตรวจ
+            ทุกชิ้นกับ manifest — ถ้าตัดก่อนแล้วลบไฟล์ไม่สำเร็จ ไทม์ไลน์จะหายไป
+            ฟรี ๆ  และต้องกันกรณีคลิปนี้เป็นเจ้าของชิ้นทั้งหมดที่เหลือไว้ตั้งแต่ต้น
+            เพราะ EDL ที่ว่างเปล่าคือสิ่งที่ apply_edit ปฏิเสธอยู่แล้ว
+            """
+            edl = read_json(ctx.edl, {}) or {}
+            tl = edl.get("timeline", [])
+            keep = [s for s in tl if s["name"] != name]
+            if tl and not keep:
+                return self._json(
+                    {"error": f"'{name}' เป็นคลิปเดียวที่เหลืออยู่บนไทม์ไลน์ "
+                              "— เพิ่มคลิปอื่นเข้าหนังก่อนถึงจะลบได้"}, 409)
+            out, err = clips.delete(ctx, project_rel(ctx), name)
+            if err:
+                return self._json({"error": err}, 400)
+            try:
+                reload_ctx(ctx)
+            except SystemExit:
+                return self._json({"error": "ลบแล้วแต่โหลด config กลับไม่ได้"}, 500)
+            dropped = len(tl) - len(keep)
+            if dropped:
+                _, err = apply_edit(ctx, {"keep": [
+                    {"name": s["name"], "start": s["start"], "end": s["end"],
+                     "kind": s["kind"]} for s in keep]})
+                if err:
+                    return self._json({"error": f"ลบไฟล์แล้ว แต่แก้ไทม์ไลน์ไม่ได้: {err}"}, 500)
+            return self._json({"ok": True, **out, "dropped": dropped,
+                               "clips": clips.view(ctx)})
 
         # ── เส้นทาง ──
         def do_GET(self):
@@ -1028,8 +1184,22 @@ def make_handler(ctx, job):
             if p == "/api/pool":
                 return self._json(build_pool(ctx))
 
+            if p == "/api/upload/check":
+                q = dict(x.split("=", 1) for x in u.query.split("&") if "=" in x)
+                try:
+                    want = int(q.get("size", 0))
+                except ValueError:
+                    want = 0
+                dst, err = upload_target(ctx, q.get("name", ""), want, unique=True)
+                if err:
+                    return self._json({"ok": False, "error": err})
+                return self._json({"ok": True, "name": dst.name})
+
             if p == "/api/clips":
                 return self._json(clips.view(ctx))
+
+            if p == "/api/trash":
+                return self._json(clips.trash_view(ctx))
 
             if p == "/api/transcript":
                 return self._json(build_transcript(ctx))
@@ -1252,6 +1422,13 @@ def make_handler(ctx, job):
             if p == "/api/clips":
                 if job.running:
                     return self._json({"error": "มีงานกำลังรันอยู่ — หยุดก่อน"}, 409)
+                if payload.get("delete"):
+                    return self._delete_clip(str(payload["delete"]))
+                if payload.get("link"):
+                    out, err = clips.link(ctx, payload["link"])
+                    if err:
+                        return self._json({"error": err}, 400)
+                    return self._json({"ok": True, **out})
                 out, err = clips.save(ctx, project_rel(ctx), payload)
                 if err:
                     return self._json({"error": err}, 400)
@@ -1262,6 +1439,20 @@ def make_handler(ctx, job):
                 # manifest ต้องตามหลัง config เสมอ ไม่ใช่ล่วงหน้า
                 out["retagged"] = clips.sync_manifest(ctx)
                 return self._json({"ok": True, **out, "clips": clips.view(ctx)})
+
+            if p == "/api/trash":
+                if job.running:
+                    return self._json({"error": "มีงานกำลังรันอยู่ — หยุดก่อน"}, 409)
+                if payload.get("restore"):
+                    out, err = clips.restore(ctx, str(payload["restore"]))
+                elif payload.get("purge") or payload.get("empty"):
+                    one = payload.get("purge")
+                    out, err = clips.purge(ctx, str(one) if isinstance(one, str) else None)
+                else:
+                    return self._json({"error": "ต้องบอกว่าจะกู้หรือจะทิ้งอันไหน"}, 400)
+                if err:
+                    return self._json({"error": err}, 400)
+                return self._json({"ok": True, **out, "trash": clips.trash_view(ctx)})
 
             if p == "/api/pool":
                 if job.running:

@@ -74,6 +74,19 @@ export interface ClipInfo {
   picked: boolean;
 }
 
+/** ของในถังขยะ — kind "link" คือคลิปที่แค่อ้างอิงไฟล์เดิม ถอดออกไปแค่ตัวลิงก์ */
+export interface TrashItem {
+  name: string;
+  at: number;
+  kind: "file" | "link";
+  orig: string;
+  file: string;
+  thumb: string;
+  size: number;
+  dur: number;
+  link_to?: string;
+}
+
 export interface JobProgress {
   label: string;
   n: number;
@@ -130,6 +143,37 @@ export const api = {
   runJob: (step: string, force = false) =>
     j<{ ok: boolean }>(`${engine}/api/job`, post({ step, force })),
   stopJob: () => j<{ ok: boolean }>(`${engine}/api/job/stop`, post({})),
+  // ส่ง exclude/order เต็มรายการเสมอ — เอนจินเขียนทับทั้งคีย์ ไม่ได้รับเป็นส่วนต่าง
+  saveClips: (payload: { exclude?: string[]; order?: string[] }) =>
+    j<{ ok: boolean; clips: { clips: ClipInfo[] } }>(
+      `${engine}/api/clips`,
+      post(payload),
+    ),
+  /** เอาคลิปออกจากคลัง — ไฟล์ไปนอนในถังขยะ (กู้ได้) และชิ้นของมันถูกตัดออกจาก
+   *  edl.json ให้ด้วย · คลิปที่อ้างอิงไฟล์เดิมจะถอดแค่ตัวลิงก์ ไม่แตะไฟล์ต้นทาง */
+  deleteClip: (name: string) =>
+    j<{ ok: boolean; deleted: string; kind: "file" | "link"; dropped: number;
+        clips: { clips: ClipInfo[] } }>(
+      `${engine}/api/clips`,
+      post({ delete: name }),
+    ),
+  /** เพิ่มคลิปแบบอ้างอิงไฟล์ที่อยู่เดิม — ส่งโฟลเดอร์มาก็ได้ (ลิงก์ทั้งโฟลเดอร์) */
+  linkClips: (path: string) =>
+    j<{ ok: boolean; linked: string[]; skipped: { path: string; why: string }[] }>(
+      `${engine}/api/clips`,
+      post({ link: path }),
+    ),
+  trash: () => j<{ items: TrashItem[]; dir: string }>(`${engine}/api/trash`),
+  restoreClip: (name: string) =>
+    j<{ ok: boolean; restored: string; trash: { items: TrashItem[] } }>(
+      `${engine}/api/trash`,
+      post({ restore: name }),
+    ),
+  purgeClip: (name?: string) =>
+    j<{ ok: boolean; purged: string[]; trash: { items: TrashItem[] } }>(
+      `${engine}/api/trash`,
+      post(name ? { purge: name } : { empty: true }),
+    ),
   saveEdl: (keep: KeepPiece[]) =>
     j<{ ok: boolean }>(`${engine}/api/edl`, post({ keep })),
   undo: () => j<{ ok: boolean }>(`${engine}/api/undo`, post({})),
@@ -471,18 +515,40 @@ export const api2 = {
     ),
 };
 
-/** อัปโหลดคลิปฟุตเทจแบบสตรีม — XHR เพราะ fetch ไม่มี progress ฝั่งส่ง */
-export function uploadClip(
+/** ถามก่อนว่าไฟล์นี้ลงคลังได้ไหม — ชื่อ · นามสกุล · ที่ว่างในดิสก์ · ชื่อซ้ำ
+ *
+ *  ต้องถามให้จบ *ก่อน* เริ่มส่งไฟล์ เพราะ error ที่ตอบกลางคันระหว่างที่เบราว์เซอร์
+ *  ยังส่งไฟล์อยู่นั้นไปไม่ถึงผู้ใช้: ฝั่งที่กำลังเขียนสายอยู่จะเห็นแค่ EPIPE แล้ว
+ *  ทิ้งตอบกลับที่รับมาแล้วไป (พร็อกซีของ next dev ก็ฟ้อง Parse Error แทน)
+ */
+export function checkClip(file: File) {
+  const q = `name=${encodeURIComponent(file.name)}&size=${file.size}`;
+  return j<{ ok: boolean; name?: string; error?: string }>(
+    `${engine}/api/upload/check?${q}`,
+  );
+}
+
+// ก้อนละ 8 MB — ต้องต่ำกว่าเพดาน 10 MB ที่ rewrites() ของ Next ตัดเนื้อคำขอทิ้ง
+// (proxyClientMaxBodySize) ตอน dev  ใหญ่กว่านี้แล้วคลิปจะขาดหายโดยไม่มีใครฟ้อง
+const CHUNK = 8 * 1024 * 1024;
+
+/** ส่งก้อนเดียว — XHR เพราะ fetch ไม่มี progress ฝั่งส่ง */
+function putChunk(
   file: File,
-  onProgress: (pct: number) => void,
-  overwrite = false,
-): Promise<{ ok: boolean; name: string; size: number; renamed: boolean }> {
+  name: string,
+  offset: number,
+  overwrite: boolean,
+  onBytes: (sent: number) => void,
+): Promise<{ done: boolean; name?: string; renamed?: boolean }> {
+  const blob = file.slice(offset, Math.min(offset + CHUNK, file.size));
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    const q = `name=${encodeURIComponent(file.name)}${overwrite ? "&overwrite=1" : ""}`;
+    const q =
+      `name=${encodeURIComponent(name)}&offset=${offset}` +
+      `&total=${file.size}${overwrite ? "&overwrite=1" : ""}`;
     xhr.open("POST", `${engine}/upload/clip?${q}`);
     xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+      if (e.lengthComputable) onBytes(offset + e.loaded);
     };
     xhr.onload = () => {
       try {
@@ -494,8 +560,36 @@ export function uploadClip(
       }
     };
     xhr.onerror = () => reject(new Error("ส่งไฟล์ไม่สำเร็จ"));
-    xhr.send(file);
+    xhr.send(blob);
   });
+}
+
+/** อัปโหลดคลิปฟุตเทจ — ซอยเป็นก้อนแล้วส่งต่อกันจนครบ
+ *
+ *  ส่งรวดเดียวทั้งไฟล์ไม่ได้ เพราะพร็อกซีของ `next dev` อมเนื้อคำขอไว้ในหน่วยความจำ
+ *  แล้วตัดทิ้งที่ 10 MB โดยไม่ฟ้องอะไรเลย — คลิปที่ใหญ่กว่านั้นจะไปถึงเอนจินไม่ครบ
+ */
+export async function uploadClip(
+  file: File,
+  onProgress: (pct: number) => void,
+  overwrite = false,
+): Promise<{ ok: boolean; name: string; size: number; renamed: boolean }> {
+  let offset = 0;
+  // ชื่อที่จะใช้จริง — ชนของเดิมแล้วเอนจินจะเปลี่ยนให้ตั้งแต่ก้อนแรก (IMG → IMG-2)
+  // ก้อนถัดไปต้องยึดชื่อนั้น ไม่ใช่ชื่อไฟล์ต้นทาง ไม่งั้นจะไปต่อท้าย .part ผิดตัว
+  let name = file.name;
+  for (;;) {
+    const r = await putChunk(file, name, offset, overwrite, (sent) =>
+      onProgress(Math.min(100, Math.round((sent / file.size) * 100))),
+    );
+    if (r.name) name = r.name;
+    offset = Math.min(offset + CHUNK, file.size);
+    if (r.done) {
+      onProgress(100);
+      return { ok: true, name, size: file.size, renamed: name !== file.name };
+    }
+    if (offset >= file.size) throw new Error("ส่งครบแล้วแต่เอนจินยังไม่ปิดไฟล์");
+  }
 }
 
 /** แปลงไฟล์เป็น base64 (ไม่รวมหัว data:) สำหรับ /api/asset */

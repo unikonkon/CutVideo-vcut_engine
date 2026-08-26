@@ -17,6 +17,7 @@ import {
   segUrl,
   type CaptionsData,
   type ClipInfo,
+  type TrashItem,
   type FxData,
   type FxOverlay,
   type FxTextItem,
@@ -98,6 +99,8 @@ export default function Editor() {
   const [saving, setSaving] = useState(false);
   const [sel, setSel] = useState<number | null>(null);
   const [notice, setNotice] = useState("");
+
+  const [trash, setTrash] = useState<TrashItem[]>([]);
 
   const [job, setJob] = useState<JobState | null>(null);
   const [jobLines, setJobLines] = useState<string[]>([]);
@@ -277,9 +280,14 @@ export default function Editor() {
   // ── โหลดสถานะจากเอนจิน ──
   const refresh = useCallback(async () => {
     try {
-      const [st, cl] = await Promise.all([api.state(), api.clips()]);
+      const [st, cl, tr] = await Promise.all([
+        api.state(),
+        api.clips(),
+        api.trash().catch(() => ({ items: [] })), // เอนจินรุ่นเก่ายังไม่มีถังขยะ
+      ]);
       setProj(st);
       setClips(cl.clips);
+      setTrash(tr.items);
       setShots(st.timeline);
       setDirty(false);
       setOffline(false);
@@ -1590,44 +1598,167 @@ export default function Editor() {
     [fxDraft, fxData, layers, total, patchFx, flash, ensureAsset],
   );
 
-  const dropOnTimeline = useCallback(
-    (p: DropPayload, tl: number) => {
-      if (p.type === "music-file") addMusicAt(tl, p.file);
-      else if (p.type === "sfx") addSfxAt(tl, p.file, p.dur, p.loop);
-      else if (p.type === "bgm") addBgmAt(tl, p.file);
-      else if (p.type === "sticker") addStickerAt(tl, p.file);
-      else if (p.type === "sticker-sample") addStickerSampleAt(tl, p.file);
-      else if (p.type === "text-new") addTextAt(tl, p.text);
-    },
-    [addMusicAt, addSfxAt, addBgmAt, addStickerAt, addStickerSampleAt, addTextAt],
+  // ชิ้นเต็มคลิปหนึ่งชิ้น — ยังไม่มีไฟล์ตัด (seg: null) จนกว่าจะบันทึกแล้ว render
+  const pieceOf = useCallback(
+    (c: ClipInfo): Shot => ({
+      i: -1,
+      name: c.name,
+      kind: "BROLL",
+      start: 0,
+      end: Math.round(c.dur * 1000) / 1000,
+      dur: Math.round(c.dur * 1000) / 1000,
+      clip_dur: c.dur,
+      orient: c.orient,
+      rot: c.rot,
+      text: "",
+      motion: c.motion,
+      bright: c.bright,
+      chapter: "",
+      chapter_title: "",
+      ai_score: null,
+      gain: null,
+      limiter: null,
+      seg: null,
+    }),
+    [],
   );
 
   const addClip = useCallback(
     (c: ClipInfo) => {
-      const piece: Shot = {
-        i: -1,
-        name: c.name,
-        kind: "BROLL",
-        start: 0,
-        end: Math.round(c.dur * 1000) / 1000,
-        dur: Math.round(c.dur * 1000) / 1000,
-        clip_dur: c.dur,
-        orient: c.orient,
-        rot: c.rot,
-        text: "",
-        motion: c.motion,
-        bright: c.bright,
-        chapter: "",
-        chapter_title: "",
-        ai_score: null,
-        gain: null,
-        limiter: null,
-        seg: null,
-      };
-      mutate((prev) => [...prev, piece]);
+      mutate((prev) => [...prev, pieceOf(c)]);
       flash(`เพิ่ม ${c.name} ต่อท้ายแล้ว — บันทึก EDL แล้ว render เพื่อตัด`);
     },
-    [mutate, flash],
+    [mutate, pieceOf, flash],
+  );
+
+  /** ลากคลิปจากคลังมาปล่อยบนไทม์ไลน์ — แทร็กวิดีโอเรียงติดกันไม่มีช่องว่าง
+   *  วินาทีที่ปล่อยจึงแปลเป็น "แทรกก่อนชิ้นไหน" โดยใช้กึ่งกลางชิ้นเป็นเส้นแบ่ง */
+  const insertClipAt = useCallback(
+    (tl: number, name: string) => {
+      const c = clips.find((x) => x.name === name);
+      if (!c) return flash(`ไม่พบ ${name} ในคลังแล้ว`);
+      let at = shots.length;
+      for (let i = 0; i < shots.length; i++) {
+        if (tl < offsets[i] + shots[i].dur / 2) {
+          at = i;
+          break;
+        }
+      }
+      mutate((prev) => [...prev.slice(0, at), pieceOf(c), ...prev.slice(at)]);
+      setSel(at);
+      flash(`แทรก ${c.name} เป็นชิ้นที่ ${at + 1} — บันทึก EDL แล้ว render เพื่อตัด`);
+    },
+    [clips, shots, offsets, mutate, pieceOf, flash],
+  );
+
+  const togglePick = useCallback(
+    async (c: ClipInfo) => {
+      // ส่งรายการ "ไม่เอา" เต็มชุดเสมอ — เอนจินเขียนทับคีย์ scan.exclude ทั้งคีย์
+      const exclude = clips
+        .filter((x) => (x.name === c.name ? c.picked : !x.picked))
+        .map((x) => x.name);
+      try {
+        const r = await api.saveClips({ exclude });
+        setClips(r.clips.clips);
+        flash(
+          c.picked
+            ? `พัก ${c.name} ไว้ — ไม่เข้าหนังตอนจัดใหม่ ไฟล์ยังอยู่`
+            : `เอา ${c.name} กลับมาใช้แล้ว`,
+        );
+      } catch (e) {
+        flash(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
+      }
+    },
+    [clips, flash],
+  );
+
+  const reorderClips = useCallback(
+    async (from: number, to: number) => {
+      const next = [...clips];
+      const [x] = next.splice(from, 1);
+      next.splice(to, 0, x);
+      setClips(next); // ขยับให้เห็นทันที แล้วค่อยให้ของจริงจากเอนจินทับอีกที
+      try {
+        const r = await api.saveClips({
+          order: next.map((c) => c.name),
+          exclude: clips.filter((c) => !c.picked).map((c) => c.name),
+        });
+        setClips(r.clips.clips);
+      } catch (e) {
+        setClips(clips);
+        flash(e instanceof Error ? e.message : "จัดลำดับไม่สำเร็จ");
+      }
+    },
+    [clips, flash],
+  );
+
+  const deleteClip = useCallback(
+    async (c: ClipInfo) => {
+      try {
+        const r = await api.deleteClip(c.name);
+        setClips(r.clips.clips);
+        if (r.dropped > 0) {
+          // เอนจินตัดชิ้นของคลิปนี้ออกจาก edl.json ให้แล้ว — ของบนจอต้องตามให้ตรง
+          // และประวัติย้อนกลับเดิมใช้ต่อไม่ได้ เพราะมันพาชิ้นที่ไม่มีไฟล์ต้นฉบับ
+          // แล้วกลับมา ซึ่งจะบันทึกไม่ผ่านด่านตรวจของเอนจินอีกต่อไป
+          setShots((prev) => prev.filter((s) => s.name !== c.name));
+          setSel(null);
+          clearHistory();
+        }
+        api.trash().then((t) => setTrash(t.items)).catch(() => {});
+        const how =
+          r.kind === "link" ? "ถอดลิงก์แล้ว (ไฟล์ต้นทางไม่ถูกแตะ)" : "ย้ายเข้าถังขยะแล้ว";
+        flash(
+          r.dropped > 0
+            ? `${c.name} ${how} — เอาออกจากไทม์ไลน์ ${r.dropped} ชิ้นด้วย`
+            : `${c.name} ${how}`,
+        );
+      } catch (e) {
+        flash(e instanceof Error ? e.message : "เอาคลิปออกไม่สำเร็จ");
+      }
+    },
+    [clearHistory, flash],
+  );
+
+  const linkClips = useCallback(
+    async (path: string) => {
+      try {
+        const r = await api.linkClips(path);
+        const skip = r.skipped.length ? ` · ข้าม ${r.skipped.length}` : "";
+        flash(`อ้างอิง ${r.linked.length} คลิป${skip} — กำลังอ่านเข้าคลัง`);
+        runJob("scan");
+      } catch (e) {
+        flash(e instanceof Error ? e.message : "อ้างอิงไฟล์ไม่สำเร็จ");
+      }
+    },
+    [runJob, flash],
+  );
+
+  const restoreClip = useCallback(
+    async (name: string) => {
+      try {
+        const r = await api.restoreClip(name);
+        setTrash(r.trash.items);
+        flash(`กู้ ${name} กลับมาแล้ว — กำลังอ่านเข้าคลัง (ยังไม่กลับขึ้นไทม์ไลน์)`);
+        runJob("scan");
+      } catch (e) {
+        flash(e instanceof Error ? e.message : "กู้คืนไม่สำเร็จ");
+      }
+    },
+    [runJob, flash],
+  );
+
+  const purgeClip = useCallback(
+    async (name?: string) => {
+      try {
+        const r = await api.purgeClip(name);
+        setTrash(r.trash.items);
+        flash(`ทิ้งถาวรแล้ว ${r.purged.length} คลิป`);
+      } catch (e) {
+        flash(e instanceof Error ? e.message : "เทถังขยะไม่สำเร็จ");
+      }
+    },
+    [flash],
   );
 
   const previewClip = useCallback(
@@ -1642,6 +1773,20 @@ export default function Editor() {
       v.play().then(() => setPlaying(true)).catch(() => flash(`เบราว์เซอร์เล่นโคเดกของ ${c.name} ไม่ได้ — ตัดก่อนถึงจะดูได้`));
     },
     [shots, flash],
+  );
+
+  const dropOnTimeline = useCallback(
+    (p: DropPayload, tl: number) => {
+      if (p.type === "music-file") addMusicAt(tl, p.file);
+      else if (p.type === "sfx") addSfxAt(tl, p.file, p.dur, p.loop);
+      else if (p.type === "bgm") addBgmAt(tl, p.file);
+      else if (p.type === "sticker") addStickerAt(tl, p.file);
+      else if (p.type === "sticker-sample") addStickerSampleAt(tl, p.file);
+      else if (p.type === "text-new") addTextAt(tl, p.text);
+      else if (p.type === "clip") insertClipAt(tl, p.name);
+    },
+    [addMusicAt, addSfxAt, addBgmAt, addStickerAt, addStickerSampleAt, addTextAt,
+     insertClipAt],
   );
 
   // ── บันทึก EDL กลับเข้าเอนจิน ──
@@ -1810,6 +1955,13 @@ export default function Editor() {
             onAdd={addClip}
             onPreview={previewClip}
             onScan={() => runJob("scan")}
+            trash={trash}
+            onDelete={deleteClip}
+            onLink={linkClips}
+            onRestore={restoreClip}
+            onPurge={purgeClip}
+            onTogglePick={togglePick}
+            onReorder={reorderClips}
             busy={!!job?.running}
             flash={flash}
           />
