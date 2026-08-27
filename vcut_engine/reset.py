@@ -17,7 +17,7 @@ import time
 import tomllib
 from pathlib import Path
 
-from . import fx, settings
+from . import compare, fx, settings
 from .util import read_json, write_json
 
 HISTORY_DIR = settings.PKG_ROOT / ".vcut-history"
@@ -80,6 +80,11 @@ def _entries(ctx):
              "ต้องหาไฟล์มาใส่ใหม่เองทั้งหมด", True),
             ("fxout", "ไฟล์หนังที่แต่งแล้ว", [fx.out_path(ctx)],
              "แต่งใหม่ — เข้ารหัสภาพหนึ่งรอบ (~5 นาที)", False),
+        ],
+        "compare": [
+            ("cmpout", "ไฟล์เทียบก่อน-หลัง",
+             [compare.out_path(ctx, quiet=True), ctx.work / "compare.ass"],
+             "ประกอบใหม่ — เข้ารหัสภาพหนึ่งรอบ (~3 นาที)", False),
         ],
     }
 

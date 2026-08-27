@@ -154,6 +154,12 @@ export default function StickerPanel({
   // ภาพซ้อนเพราะเป็น "ของที่วางทับภาพ" เหมือนกัน แต่ไม่มีคลังไฟล์เป็นของตัวเอง
   const shapes = draft.shapes;
   const shapeKinds = (data.defaults.shape_kind ?? {}) as Record<string, string>;
+  // เอนจินที่ยังไม่มีชั้นเรืองแสงจะ *ทิ้งค่าเงียบ ๆ* ตอนบันทึก (fx._pick เอาเฉพาะ
+  // คีย์ที่รู้จัก) ช่องที่กดแล้วเด้งกลับเป็น 0 ทุกครั้งแย่กว่าไม่มีช่องให้กด
+  const hasGlow = data.defaults.shape?.glow !== undefined;
+  const lookOpts = Object.entries(
+    (data.defaults.journey_look ?? {}) as Record<string, string>,
+  ).map(([v, label]) => ({ v, label }));
   // รูปทรงใช้แอนิเมชันชุดเต็มของข้อความ (มี pop) ต่างจากภาพซ้อนที่ไม่มี — มันวาด
   // ด้วย \\fscx/\\fscy ได้ฟรี ไม่ต้องปรับขนาดภาพใหม่ทุกเฟรม
   const shapeAnimOpts = Object.keys(
@@ -552,6 +558,17 @@ export default function StickerPanel({
                     onChange={(v) => onPatchShape(i, { border: v })}
                   />
                 </Field>
+                {hasGlow && (
+                  <Field label="เรืองแสง (0 = ปิด)">
+                    <NInput
+                      value={sh.glow ?? 0}
+                      step={0.1}
+                      min={0}
+                      max={1}
+                      onChange={(v) => onPatchShape(i, { glow: v })}
+                    />
+                  </Field>
+                )}
                 <Field label="แอนิเมชัน">
                   <Sel
                     value={sh.anim}
@@ -584,6 +601,32 @@ export default function StickerPanel({
           />
         }
       >
+        {lookOpts.length > 0 && (
+          <div className="grid grid-cols-3 gap-1.5">
+            <Field label="หน้าตาของเส้น">
+              <Sel
+                value={String(journey.look ?? "map")}
+                onChange={(v) => fxs.patch({ journey: { ...journey, look: v } })}
+                options={lookOpts}
+              />
+            </Field>
+            <Field label="แรงแสงฟุ้ง">
+              <NInput
+                value={Number(journey.glow ?? 0.9)}
+                step={0.1}
+                min={0}
+                max={1}
+                onChange={(v) => fxs.patch({ journey: { ...journey, glow: v } })}
+              />
+            </Field>
+            <Field label="สีแกนเส้น">
+              <CInput
+                value={String(journey.core ?? "#FFFFFF")}
+                onChange={(v) => fxs.patch({ journey: { ...journey, core: v } })}
+              />
+            </Field>
+          </div>
+        )}
         <button
           onClick={() => setShowJourney((v) => !v)}
           className="flex items-center gap-1.5 text-left text-[11.5px] text-muted hover:text-ink"

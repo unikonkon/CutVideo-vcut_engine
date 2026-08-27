@@ -11,6 +11,9 @@
   decide   →  .vcut/edl.json          ★ สัญญากลาง แก้ด้วยมือได้
   render   →  .vcut/segments/         ชิ้นที่ตัดแล้ว (cache ด้วย content hash)
   assemble →  final.mp4
+  caption  →  final-text.mp4          ★ ขั้น 4 · เขียนข้อความลงภาพ
+  fx       →  final-fx.mp4            ★ ขั้น 5 · แต่งหนัง
+  compare  →  final-vs.mp4            ★ ขั้น 6 · วางเทียบข้างฟุตเทจดิบ
 """
 import argparse
 import re
@@ -19,9 +22,9 @@ import sys
 import time
 from pathlib import Path
 
-from . import (ai, assemble, caption, compose, config, decide, finish, fx, listen,
-               prepare, render, reset, review, scan, serve, settings, silence,
-               thumbs)
+from . import (ai, assemble, caption, compare, compose, config, decide, finish,
+               fx, listen, prepare, render, reset, review, scan, serve, settings,
+               silence, thumbs)
 from .util import (c, die, disk_free_gb, hhmmss, info, read_json,
                    require_tools, sweep_dir, warn)
 
@@ -42,6 +45,7 @@ USAGE = """vcut — ตัดต่อวิดีโออัตโนมัต
                                   (--task cut|trim|music|sfx|sticker|text)
   vcut caption                    เขียนข้อความลงหนัง → final-text.mp4
   vcut fx                         ขั้น 5 · แต่งหนัง → final-fx.mp4
+  vcut compare                    ขั้น 6 · เทียบก่อน-หลัง → final-vs.mp4
   vcut view                       เปิดหน้าเว็บดู/แก้ EDL ในเครื่อง
   vcut info                       สรุปสถานะโปรเจกต์
   vcut presets                    ดู preset ที่มี
@@ -78,7 +82,7 @@ def build_parser():
 
     for name in ("scan", "listen", "thumbs", "ai", "silence", "prepare",
                  "compose", "decide", "render", "assemble", "caption", "fx",
-                 "review", "view",
+                 "compare", "review", "view",
                  "run", "info", "gc", "presets", "config", "reset"):
         p = sub.add_parser(name, add_help=False)
         p.add_argument("-h", "--help", action="store_true")
@@ -86,7 +90,7 @@ def build_parser():
         if name in ("scan", "listen", "ai", "silence", "render", "run"):
             p.add_argument("-f", "--force", action="store_true",
                            help="ไม่ใช้ cache ทำใหม่ทั้งหมด")
-        if name in ("assemble", "caption", "fx", "run"):
+        if name in ("assemble", "caption", "fx", "compare", "run"):
             p.add_argument("-o", "--out", help="ไฟล์ผลลัพธ์")
         if name == "compose":
             p.add_argument("--mode", choices=list(compose.MODES),
@@ -480,6 +484,7 @@ def cmd_run(ctx, args):
         # ไม่ส่ง --out ต่อเหมือน caption — ธงตัวนั้นเป็นของ assemble ในแผนนี้
         # ส่งต่อให้สองขั้นพร้อมกันคือสั่งให้เขียนทับกันเองที่ไฟล์เดียว
         "finish": lambda: finish.run(ctx),
+        "compare": lambda: compare.run(ctx),
     }
     for sid in todo:
         runner[sid]()
@@ -546,6 +551,8 @@ def main(argv=None):
         caption.run(ctx, out=args.out)
     elif args.cmd == "fx":
         finish.run(ctx, out=args.out)
+    elif args.cmd == "compare":
+        compare.run(ctx, out=args.out)
     elif args.cmd == "review":
         review.run(ctx, context=args.context, force=args.force, tasks=args.tasks)
     elif args.cmd == "view":

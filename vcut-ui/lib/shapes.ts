@@ -153,3 +153,41 @@ export function assPathToSvg(path: string): string {
     .replace(/\bb\b/g, "C")
     .trim() + " Z";
 }
+
+// ── แสงฟุ้ง (รอบ 4) ────────────────────────────────────────────────────────
+//
+// ตัวเลขทุกตัวในบล็อกนี้ต้องตรงกับ vcut_engine/journey.py เป๊ะ (GLOW · glow_unit)
+// ไม่งั้นชิปที่ตั้งไว้จนพอดีในพรีวิวจะฟุ้งคนละขนาดในไฟล์จริง — กันไว้ด้วย
+// scripts/check_shape_parity.py เหมือนสูตรรูป
+
+const GLOW: readonly (readonly [number, number, number])[] = [
+  [2.6, 2.0, 0.6],
+  [1.1, 0.8, 0.35],
+];
+
+/** ขนาดอ้างอิงของแสงฟุ้ง — โตตามความหนาของรูป แต่ตันที่ 1.2% ของด้านสั้นของจอ
+ *
+ *  เพดานมีเพราะฮาโลไม่ได้โตตามความหนาไปเรื่อย ๆ (ดูเหตุผลเต็มที่ journey.py)
+ */
+export function glowUnit(thickness: number, w: number, h: number): number {
+  return Math.min(Math.min(w, h) * 0.012, Math.max(3, thickness));
+}
+
+/** ชั้นฟุ้งที่ต้องวาด *ใต้* รูปจริง — คืน [] เมื่อปิด
+ *
+ *  ความแรงคุมแค่ *ขนาด* ของฮาโล ไม่ได้คุมความทึบ — ความทึบของแต่ละชั้นตายตัว
+ *  ตามตาราง GLOW เหมือนฝั่งเอนจิน (glow_layers ส่ง op ตรง ๆ ไม่ได้คูณ strength)
+ */
+export function glowLayers(
+  kind: string,
+  size: number,
+  thick: number,
+  strength: number,
+  w: number,
+  h: number,
+): { bord: number; blur: number; op: number }[] {
+  const g = Math.min(1, Math.max(0, strength || 0));
+  if (g <= 0.01) return [];
+  const u = glowUnit(size * (kind === "dot" ? 0.5 : thick), w, h);
+  return GLOW.map(([bo, bl, op]) => ({ bord: u * bo * g, blur: u * bl * g, op }));
+}

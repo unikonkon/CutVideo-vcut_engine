@@ -99,7 +99,12 @@ def cues(ctx, fxdata=None, man=None):
                "style": st, "x": t.get("x"), "y": t.get("y"), "fx": anim,
                # การ์ดหลายบรรทัด — ส่งดิบ ๆ ให้ตัวเขียน ASS กับหน้าเว็บกางเอง
                # ทั้งคู่ต้องรู้ความสูงรวมเพื่อวาดให้ตรงกัน (ดู stack_lines)
-               "lines": list(t.get("lines") or [])}
+               "lines": list(t.get("lines") or []),
+               # การนับเลขไม่ได้อยู่ใน fx.TEXT (ซึ่งเป็นชุดแอนิเมชัน) จึงต้อง
+               # หยิบมาใส่แถวเอง — ซับจากบทพูดไม่มีช่องพวกนี้ ตกไปเป็นค่าปิด
+               "count": str(t.get("count", "") or ""),
+               "count_from": float(t.get("count_from", 0.0) or 0.0),
+               "count_to": float(t.get("count_to", 0.0) or 0.0)}
         spans = shape_spans(man, t.get("name", ""), t.get("at", 0), t.get("dur", 3))
         if not spans:
             # ชิ้นกำพร้า — ช่วงที่มันเกาะอยู่ถูกตัดออกจากหนังไปแล้ว ส่งต่อให้
@@ -175,6 +180,11 @@ def anim_tags(cue, cfg, W, H):
     if kind not in fx.ANIM or kind == "none" or cue["a"] is None:
         return [], False
     ti, to = _budget(cue["a"], cue["b"], cfg)
+    if kind in fx.WORD_ANIM:
+        # ขาเข้าเป็นหน้าที่ของแท็กที่แทรกกลางบรรทัด (stagger_words) — ใส่ \fad
+        # ขาเข้าซ้ำที่นี่ด้วยจะได้ทั้งบรรทัดจางเข้าพร้อมกันทับจังหวะทีละคำ
+        # จนมองไม่ออกว่าไล่ทีละคำ
+        return ([rf"\fad(0,{to})"] if to > 0 else []), False
     if ti <= 0 and to <= 0:
         return [], False
 
@@ -209,6 +219,163 @@ def anim_tags(cue, cfg, W, H):
     sx = x + dx if (al - 1) % 3 == 2 else x - dx
     return ([rf"\move({sx:.0f},{y:.0f},{x:.0f},{y:.0f},0,{ti})",
              rf"\fad({ti},{to})"], True)
+
+
+# ─────────────────────── โผล่ทีละคำ ───────────────────────
+
+def stagger_words(txt, kind, ti, room_ms):
+    """แทรกแท็กคั่นกลางบรรทัดให้แต่ละคำโผล่ไม่พร้อมกัน → สตริง ASS ทั้งบรรทัด
+
+    **ทำในบรรทัดเดียว ไม่ใช่แยกเป็นข้อความหลายชิ้น**
+
+    แยกชิ้นก็ได้หน้าตาเหมือนกัน จนกระทั่งต้องแก้ข้อความ — ตอนนั้นต้องลากทุกคำ
+    ให้ระยะห่างเท่าเดิมด้วยมือ และฟอนต์ไทยกว้างไม่เท่ากันทุกคำ  ปล่อยให้ libass
+    จัดวางเองแล้วสั่งแค่ *เวลา* จึงถูกกว่าทุกทาง
+
+    **ทำไม pop ไม่ย่อจาก 58% เหมือน pop ปกติ**
+
+    คำที่ยังไม่ถึงคิวยังกินที่เท่าเดิม (มองไม่เห็นแต่ยังกว้างเท่าเดิม) ถ้าย่อมัน
+    ไว้ที่ 58% ความกว้างรวมของบรรทัดจะสั้นลง แล้วบรรทัดที่จัดกลางจะเลื่อนทั้งแถบ
+    ทุกครั้งที่มีคำโผล่  วัดจริงบนจอ 1080: ย่อจาก 58% ขอบซ้ายไหล 90 พิกเซล ส่วน
+    เด้ง 100→112→100 ไหลราว 15 พิกเซล ซึ่งอ่านเป็นจังหวะเด้ง ไม่ใช่ภาพสั่น
+    """
+    words = [w for w in txt.split(" ") if w != ""]
+    if len(words) < 2:
+        return txt
+    d = max(60, int(ti))
+    step = max(40, int(d * 0.55))
+    # ทั้งชุดต้องจบก่อนชิ้นหาย ไม่งั้นคำท้าย ๆ ไม่ทันโผล่ก็ถูกเก็บแล้ว
+    span = (len(words) - 1) * step + d
+    if room_ms > 0 and span > room_ms:
+        sc = room_ms / span
+        d, step = max(40, int(d * sc)), max(20, int(step * sc))
+    out = []
+    for i, w in enumerate(words):
+        t0 = i * step
+        if kind == "pop_words":
+            t1 = t0 + max(1, int(d * 0.62))
+            out.append(
+                r"{\alpha&HFF&"
+                rf"\t({t0},{t1},\fscx112\fscy112\alpha&H00&)"
+                rf"\t({t1},{t0 + d},\fscx100\fscy100)}}{w}")
+        else:
+            out.append(r"{\alpha&HFF&"
+                       rf"\t({t0},{t0 + d},\alpha&H00&)}}{w}")
+    return " ".join(out)
+
+
+# ─────────────────────── ตัวเลขที่นับขึ้น ───────────────────────
+
+def _fmt_count(v, kind):
+    if kind == "comma":
+        return f"{v:,.0f}"
+    if kind == "k":
+        a = abs(v)
+        if a >= 1e6:
+            return f"{v / 1e6:.1f}M"
+        if a >= 1e3:
+            return f"{v / 1e3:.1f}K"
+        return f"{v:.0f}"
+    if kind == "pct":
+        return f"{v:.0f}%"
+    if kind == "1dp":
+        return f"{v:.1f}"
+    return f"{v:.0f}"
+
+
+def count_steps(cue):
+    """ชิ้นที่นับเลข → [(เริ่ม, จบ, ค่าที่จะเอาไปแทน {n})] · ไม่ได้นับ → ก้อนเดียว
+
+    ผู้เรียกวนตามรายการนี้แล้วปล่อย Dialogue ทีละก้าว — ชิ้นที่ไม่ได้นับจึงได้
+    บรรทัดเดียวเหมือนเดิมทุกไบต์ ไม่ต้องมีทางแยกที่ฝั่งผู้เรียก
+
+    ยุบก้าวที่ได้ข้อความเท่ากันเข้าด้วยกัน — ช่วง 0→5 ที่ 12 ก้าว/วิ จะได้เลขซ้ำ
+    หลายสิบบรรทัดโดยไม่มีอะไรต่างกันเลย
+    """
+    kind = str(cue.get("count", "") or "")
+    a, b = float(cue["a"]), float(cue["b"])
+    if kind not in fx.COUNT or not kind or b <= a or not uses_count(cue):
+        return [(a, b, None)]
+    v0 = float(cue.get("count_from", 0.0) or 0.0)
+    v1 = float(cue.get("count_to", 0.0) or 0.0)
+    dur = b - a
+    steps = min(40, max(2, int(dur * 12)))
+    raw = []
+    for i in range(steps):
+        p = i / (steps - 1)
+        # ช้าลงตอนท้าย — เลขที่วิ่งเร็วเท่ากันจนวินาทีสุดท้ายอ่านว่า "ยังไม่จบ"
+        # ทั้งที่จบแล้ว  ค่าปลายทางคือสิ่งที่คนดูต้องจำ ต้องมีเวลาให้อ่าน
+        p = 1 - (1 - p) ** 3
+        raw.append((a + dur * i / steps, a + dur * (i + 1) / steps,
+                    _fmt_count(v0 + (v1 - v0) * p, kind)))
+    out = []
+    for s, e, txt in raw:
+        if out and out[-1][2] == txt:
+            out[-1] = (out[-1][0], e, txt)
+        else:
+            out.append((s, e, txt))
+    return out
+
+
+def uses_count(cue):
+    """ชิ้นนี้มีที่ให้เลขไปลงจริงไหม — ทางลัดออกก่อนซอยก้าว
+
+    การ์ดหลายบรรทัด **ต้องมี `{n}` ชัด ๆ** ส่วนข้อความธรรมดาไม่ต้อง เพราะกรณีที่
+    ใช้บ่อยที่สุดคือชิ้นที่มีแต่ตัวเลขใหญ่ ๆ ตัวเดียว
+
+    เป็นด่านนอกสุดของสามด่าน ไม่ใช่ด่านที่รับน้ำหนักจริง — ตัวที่กันไม่ให้หัวเรื่อง
+    ในการ์ดกลายเป็นตัวเลขคือการเลือกก้าวรายบรรทัดใน build_ass (บรรทัดที่ไม่มี
+    `{n}` ได้ก้าวเดียวยาวทั้งชิ้น) กับ `whole=False` ที่ count_apply  ด่านนี้แค่
+    ตัดจบก่อนตั้งแต่ต้นเมื่อทั้งการ์ดไม่มี `{n}` เลย จะได้ไม่ต้องคำนวณก้าวทิ้ง
+    """
+    if cue.get("lines"):
+        return any("{n}" in str(v.get("text", "")) for v in cue["lines"])
+    return True
+
+
+def count_apply(text, value, whole=True):
+    """เอาเลขไปแทนที่ `{n}` · `whole` = ไม่มี `{n}` ให้เลขแทนข้อความทั้งก้อน
+
+    ต้องทำ *ก่อน* esc() เพราะ esc แปลงปีกกาเป็นวงเล็บกันคนพิมพ์ทำ ASS พัง —
+    ทำหลังจากนั้นจะหาตัวแทนที่ไม่เจอแล้ว
+    """
+    if value is None:
+        return text
+    if "{n}" in text:
+        return text.replace("{n}", value)
+    return value if whole else text
+
+
+def _step_cfg(cfg, i, total):
+    """ค่าแอนิเมชันของก้าวที่ i จากทั้งหมด total ก้าว
+
+    เลขที่วิ่งถูกซอยเป็นหลาย Dialogue ถ้าปล่อยให้ทุกก้าวจางเข้า-ออกตามที่ตั้งไว้
+    จะได้ตัวเลขกะพริบทั้งช่วง แทนที่จะเป็นเลขที่วิ่ง — เข้าเฉพาะก้าวแรก
+    ออกเฉพาะก้าวสุดท้าย ก้าวกลางไม่ต้องมีอะไรเลย
+    """
+    if total <= 1:
+        return cfg
+    if i == 0:
+        return {**cfg, "out": 0.0}
+    if i == total - 1:
+        return {**cfg, "in": 0.0}
+    return {**cfg, "anim": "none"}
+
+
+def _body_text(raw, cue, sa, sb, cv):
+    """ข้อความที่จะเขียนลงบรรทัด — แทนเลข แล้วค่อย escape แล้วค่อยแทรกแท็กทีละคำ
+
+    ลำดับสามอย่างนี้สลับกันไม่ได้: แทนเลขต้องมาก่อน escape (esc แปลงปีกกาเป็น
+    วงเล็บ ตัวแทนที่จะหายไป) และแท็กทีละคำต้องมาหลัง escape (ไม่งั้นปีกกาของ
+    แท็กเองจะโดนแปลงไปด้วย)
+    """
+    txt = esc(count_apply(raw, cv, whole=not cue.get("lines")))
+    kind = str(cue["fx"].get("anim", "") or "")
+    if txt and kind in fx.WORD_ANIM:
+        ti, to = _budget(sa, sb, cue["fx"])
+        txt = stagger_words(txt, kind, ti or 180,
+                            max(0.0, (sb - sa) * 1000.0 - to))
+    return txt
 
 
 # ─────────────────────────── การ์ดหลายบรรทัด ───────────────────────────
@@ -386,22 +553,39 @@ def _shape_line(sh, W, H):
     \\an7 เลื่อนเป็นศูนย์ พิกัดในรูปจึงถูกใช้ตรง ๆ และรูปที่คร่อม (0,0) ก็ไปอยู่
     กลาง \\pos พอดี — และ \\frz ยังหมุนรอบจุดเดียวกันนั้น (ตรวจแล้วด้วยภาพ)
     """
+    return _shape_lines(sh, W, H)[-1]
+
+
+def _shape_lines(sh, W, H):
+    """รูปทรงหนึ่งชิ้น → บรรทัด Dialogue ทุกบรรทัดที่มันต้องใช้ · ตัวจริงอยู่ท้ายสุด
+
+    ชิ้นที่ไม่ได้เปิดเรืองแสงได้บรรทัดเดียวเหมือนเดิมทุกไบต์ — ชั้นฟุ้งเป็นบรรทัด
+    ที่ *เพิ่มเข้ามาข้างหน้า* ไม่ใช่การแก้บรรทัดเดิม  ทั้งกองอยู่ layer เดียวกัน
+    ลำดับในไฟล์จึงเป็นตัวตัดสินว่าฮาโลอยู่ใต้รูปจริง (ดู journey.glow_layers)
+    """
     cue = {"kind": "box", "a": sh["a"], "b": sh["b"], "x": sh["x"], "y": sh["y"],
            "style": {"size": sh["size"], "align": 5}}
     tags, moved = anim_tags(cue, sh, W, H)
     pre = [r"\an7"]
     if not moved:
         pre.append(rf"\pos({float(sh['x']) * W:.0f},{float(sh['y']) * H:.0f})")
-    pre += [rf"\c{colour(sh['color'])}&",
-            rf"\3c{colour(sh['outline'])}&",
-            rf"\bord{float(sh['border']):g}", r"\shad0"]
-    if float(sh.get("angle") or 0):
-        pre.append(rf"\frz{float(sh['angle']):g}")
-    pre += tags
-    body = ("{" + "".join(pre) + r"\p1}"
-            + (sh.get("path") or path_of(sh["kind"], sh["size"], sh["thick"])))
-    # ต้องปิดโหมดวาดทุกครั้ง — ปล่อยค้างไว้บรรทัดถัดไปจะถูกอ่านเป็นพิกัดต่อ
-    return body + r"{\p0}"
+    paint = [rf"\c{colour(sh['color'])}&",
+             rf"\3c{colour(sh['outline'])}&",
+             rf"\bord{float(sh['border']):g}", r"\shad0"]
+    spin = [rf"\frz{float(sh['angle']):g}"] if float(sh.get("angle") or 0) else []
+    path = sh.get("path") or path_of(sh["kind"], sh["size"], sh["thick"])
+
+    def line(mid):
+        # ต้องปิดโหมดวาดทุกครั้ง — ปล่อยค้างไว้บรรทัดถัดไปจะถูกอ่านเป็นพิกัดต่อ
+        return "{" + "".join(pre + mid + spin + tags) + r"\p1}" + path + r"{\p0}"
+
+    # หน่วยอ้างอิงของแสงฟุ้งคือ *ความหนาของรูป* ไม่ใช่ size — แถบมุมมนที่ยาว 600
+    # แต่หนา 40 ต้องได้ฮาโลเท่ากับจุดที่โต 40 ไม่ใช่ฮาโลหนา 60 ที่กลืนทั้งชิป
+    # (glow_unit ใส่เพดานให้อีกชั้น — ดูเหตุผลที่นั่น)
+    thick = float(sh["size"]) * (0.5 if sh["kind"] == "dot" else float(sh["thick"]))
+    return [line(g) for g in journey.glow_layers(
+        sh["color"], journey.glow_unit(thick, W, H), sh.get("glow", 0.0))] \
+        + [line(paint)]
 
 
 # ─────────────────────────── เขียนไฟล์ ───────────────────────────
@@ -475,58 +659,72 @@ def build_ass(ctx, W, H, fxdata=None, man=None):
 
         # การ์ดหลายบรรทัด — หนึ่งชิ้นในไฟล์ กลายเป็นหลาย Dialogue ตรงนี้ที่เดียว
         # ทุกบรรทัดใช้เวลาและแอนิเมชันชุดเดียวกัน จึงเข้า-ออกพร้อมกันเสมอ
+        steps = count_steps(cue)
+
         if cue.get("lines"):
             al = int(cue["style"].get("align", 5) or 5)
             cx = float(cue.get("x") if cue.get("x") is not None else 0.5) * W
             for v, ly in stack_lines(cue["lines"], float(
                     cue.get("y") if cue.get("y") is not None else 0.5), H):
-                ltxt = esc(v.get("text", ""))
-                if not ltxt:
-                    continue
-                # จุดยึดของแอนิเมชันคือที่ของ *บรรทัดนี้* ไม่ใช่กลางการ์ด —
-                # ไม่งั้น rise/slide จะไถลไปจบที่กลางการ์ดทุกบรรทัด แล้วสามบรรทัด
-                # จะกองทับกันตอนจบ  ขนาดตัวอักษรก็ต้องเป็นของบรรทัดนี้ เพราะ
-                # ระยะไถลคิดจากขนาดตัวอักษร
-                anim, moved = anim_tags(
-                    {**cue, "y": ly / H,
-                     "style": {**cue["style"], "size": v.get("size")}},
-                    cue["fx"], W, H)
-                pre = [rf"\an{al}"]
-                if not moved:
-                    pre.append(rf"\pos({cx:.0f},{ly:.0f})")
-                tags = pre + _line_tags(v, cue["style"], base) + anim
-                body.append(f"Dialogue: {L_TEXT},{clock(cue['a'])},{clock(cue['b'])},"
-                            f"sub,,0,0,0,,{'{' + ''.join(tags) + '}'}{ltxt}")
-                n += 1
+                # บรรทัดที่ไม่มี {n} ไม่เปลี่ยนตามเวลา — ปล่อยบรรทัดเดียวยาวทั้งชิ้น
+                # ไม่ใช่ซ้ำเท่าจำนวนก้าวของเลขที่บรรทัดอื่นนับอยู่
+                mine = steps if "{n}" in str(v.get("text", "")) \
+                    else [(cue["a"], cue["b"], None)]
+                for si, (sa, sb, cv) in enumerate(mine):
+                    ltxt = _body_text(v.get("text", ""), cue, sa, sb, cv)
+                    if not ltxt:
+                        continue
+                    # จุดยึดของแอนิเมชันคือที่ของ *บรรทัดนี้* ไม่ใช่กลางการ์ด —
+                    # ไม่งั้น rise/slide จะไถลไปจบที่กลางการ์ดทุกบรรทัด แล้วสาม
+                    # บรรทัดจะกองทับกันตอนจบ  ขนาดตัวอักษรก็ต้องเป็นของบรรทัดนี้
+                    # เพราะระยะไถลคิดจากขนาดตัวอักษร
+                    anim, moved = anim_tags(
+                        {**cue, "a": sa, "b": sb, "y": ly / H,
+                         "style": {**cue["style"], "size": v.get("size")}},
+                        _step_cfg(cue["fx"], si, len(mine)), W, H)
+                    pre = [rf"\an{al}"]
+                    if not moved:
+                        pre.append(rf"\pos({cx:.0f},{ly:.0f})")
+                    tags = pre + _line_tags(v, cue["style"], base) + anim
+                    body.append(f"Dialogue: {L_TEXT},{clock(sa)},{clock(sb)},"
+                                f"sub,,0,0,0,,{'{' + ''.join(tags) + '}'}{ltxt}")
+                    n += 1
             continue
 
-        txt = esc(cue["text"])
-        if not txt:
-            continue
         on_plate = bool(cue["fx"].get("plate"))
         pl, (ml, mr, mv) = place_of(cue, base, W, H)
-        anim, moved = anim_tags(cue, cue["fx"], W, H)
-        if moved:
-            # \move เป็นคนกำหนดตำแหน่งแล้ว — \pos ที่ตามมาจะลบล้างมันทิ้ง
-            pl = [t for t in pl if not t.startswith(r"\pos")]
         over = tags_of(cue, base)
         if on_plate:
             # บนสไตล์กล่อง \3c คือสีกล่อง \bord คือระยะขอบ — ของที่ _tags ส่งมา
             # ยังหมายถึงขอบตัวอักษรอยู่ ปล่อยผ่านไปจะได้กล่องสีมั่วขนาดมั่ว
             over = [t for t in over
                     if not t.startswith(r"\3c") and not t.startswith(r"\bord")]
-        tags = pl + over + (plate_tags(plate) if on_plate else []) + anim
-        pre = "{" + "".join(tags) + "}" if tags else ""
-        body.append(f"Dialogue: {L_AUTO if cue['kind'] == 'auto' else L_TEXT},"
-                    f"{clock(cue['a'])},{clock(cue['b'])},"
-                    f"{'subplate' if on_plate else 'sub'},,"
-                    f"{ml},{mr},{mv},,{pre}{txt}")
-        n += 1
+        for si, (sa, sb, cv) in enumerate(steps):
+            txt = _body_text(cue["text"], cue, sa, sb, cv)
+            if not txt:
+                continue
+            anim, moved = anim_tags({**cue, "a": sa, "b": sb},
+                                    _step_cfg(cue["fx"], si, len(steps)), W, H)
+            place = pl
+            if moved:
+                # \move เป็นคนกำหนดตำแหน่งแล้ว — \pos ที่ตามมาจะลบล้างมันทิ้ง
+                place = [x for x in pl if not x.startswith(r"\pos")]
+            tags = place + over + (plate_tags(plate) if on_plate else []) + anim
+            pre = "{" + "".join(tags) + "}" if tags else ""
+            body.append(f"Dialogue: {L_AUTO if cue['kind'] == 'auto' else L_TEXT},"
+                        f"{clock(sa)},{clock(sb)},"
+                        f"{'subplate' if on_plate else 'sub'},,"
+                        f"{ml},{mr},{mv},,{pre}{txt}")
+            n += 1
 
     for sh in shapes:
         lay = L_BACK if sh.get("behind") else L_SHAPE
-        body.append(f"Dialogue: {lay},{clock(sh['a'])},{clock(sh['b'])},sub,,"
-                    f"0,0,0,,{_shape_line(sh, W, H)}")
+        for ln in _shape_lines(sh, W, H):
+            body.append(f"Dialogue: {lay},{clock(sh['a'])},{clock(sh['b'])},sub,,"
+                        f"0,0,0,,{ln}")
+        # นับ *ชิ้น* ไม่ใช่บรรทัด — ตัวเลขนี้ถูกลบด้วยจำนวนรูปทรงเพื่อหาจำนวน
+        # ข้อความที่ finish.run พิมพ์ (n - nsh) ถ้านับบรรทัด ชิ้นที่เปิดเรืองแสง
+        # จะไปโผล่เป็น "ข้อความ" เพิ่มขึ้นมาสองชิ้นต่อรูปหนึ่งรูป
         n += 1
 
     # แผนที่เส้นทางอยู่บนสุดของทุกอย่างที่ ASS วาด แต่ยังอยู่ *ใต้* ภาพซ้อน

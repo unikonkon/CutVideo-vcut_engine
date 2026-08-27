@@ -128,6 +128,12 @@ export default function TextPanel({
     (data.defaults.anim as Record<string, unknown>) ?? { none: 1 },
   ).map((k) => ({ v: k, label: k }));
 
+  // เอนจินรุ่นก่อนหน้ายังไม่ส่งรายการนี้มา — ไม่มี = ไม่ขึ้นช่องนับเลขเลย
+  // ดีกว่าขึ้นช่องว่างเปล่าที่กดแล้วค่าถูกทิ้งเงียบ ๆ ตอนบันทึก
+  const countOpts = Object.entries(
+    (data.defaults.count as Record<string, string>) ?? {},
+  ).map(([v, label]) => ({ v, label }));
+
   const patch = (i: number, p: Partial<FxTextItem>) =>
     fxs.patch({ texts: draft.texts.map((t, k) => (k === i ? { ...t, ...p } : t)) });
 
@@ -288,6 +294,53 @@ export default function TextPanel({
                         <NInput value={t.border} step={0.5} min={0} onChange={(v) => patch(i, { border: v })} />
                       </Field>
                     </div>
+                    {countOpts.length > 0 && (
+                      <div className="flex flex-col gap-2 rounded-lg border border-line bg-panel-2/60 p-2">
+                        <Field label="ตัวเลขที่นับขึ้น">
+                          <Sel
+                            value={t.count ?? ""}
+                            onChange={(v) => {
+                              // เปิดนับครั้งแรกแล้วยังไม่มีที่ให้เลขลง — ใส่ {n}
+                              // ให้เลย ไม่งั้นกดเปิดแล้วจอตัวอย่างไม่เปลี่ยนอะไร
+                              // และไม่มีอะไรบอกว่าต้องพิมพ์ {n} เอง
+                              const need =
+                                v &&
+                                !t.text.includes("{n}") &&
+                                (t.lines?.length ?? 0) === 0 &&
+                                t.text.trim() !== "";
+                              patch(i, need ? { count: v, text: "{n}" } : { count: v });
+                            }}
+                            options={countOpts}
+                          />
+                        </Field>
+                        {t.count ? (
+                          <>
+                            <div className="grid grid-cols-2 gap-2">
+                              <Field label="เริ่มที่">
+                                <NInput
+                                  value={t.count_from ?? 0}
+                                  step={1}
+                                  onChange={(v) => patch(i, { count_from: v })}
+                                />
+                              </Field>
+                              <Field label="จบที่">
+                                <NInput
+                                  value={t.count_to ?? 0}
+                                  step={1}
+                                  onChange={(v) => patch(i, { count_to: v })}
+                                />
+                              </Field>
+                            </div>
+                            <div className="text-[10.5px] leading-4 text-faint">
+                              {(t.lines?.length ?? 0) > 0
+                                ? "การ์ดหลายบรรทัด — พิมพ์ {n} ตรงบรรทัดที่อยากให้เลขไปลง (ไม่มี = ไม่นับให้)"
+                                : "เลขไปแทนที่ {n} ในข้อความ · ไม่มี {n} = เลขแทนข้อความทั้งก้อน"}
+                            </div>
+                          </>
+                        ) : null}
+                      </div>
+                    )}
+
                     <div className="flex items-center gap-4">
                       <Toggle value={t.bold} onChange={(v) => patch(i, { bold: v })} label="หนา" />
                       <Toggle value={t.plate} onChange={(v) => patch(i, { plate: v })} label="พื้นหลังทึบ" />

@@ -19,13 +19,19 @@ UI = Path(__file__).resolve().parent.parent
 ENGINE = UI.parent
 sys.path.insert(0, str(ENGINE))
 
-from vcut_engine import fxtext  # noqa: E402
+from vcut_engine import fxtext, journey  # noqa: E402
 
 # ค่าที่กวาด — คลุมค่าตั้งต้น (160 / 0.28) ขอบบน-ล่างของ LIMITS และค่าที่ตกครึ่ง
 # พิกเซลพอดี ซึ่งเป็นจุดเดียวที่การปัดของสองภาษาต่างกัน
 KINDS = ("arrow", "bar", "dot", "rrect")
 SIZES = (4, 5, 7, 10, 33, 100, 160, 161, 250, 333, 1000, 2000)
 THICKS = (0.03, 0.1, 0.25, 0.28, 0.5, 0.5523, 0.75, 0.9)
+
+
+# ความแรงของแสงฟุ้ง + ขนาดจอที่กวาด — ตัวคูณอยู่คนละภาษาสองชุด จึงต้องเทียบ
+# ด้วย เพดานคิดจากด้านสั้นของจอ จอแนวตั้ง/แนวนอนจึงต้องมีทั้งคู่
+GLOWS = (0.0, 0.005, 0.01, 0.011, 0.35, 0.6, 1.0, 1.4, -0.2)
+FRAMES = ((1080, 1920), (1920, 1080), (3840, 2160), (640, 640))
 
 
 def main():
@@ -46,8 +52,31 @@ def main():
         if want != got:
             bad.append((c, want, got))
 
+    # ── แสงฟุ้ง ──
+    gcases = [{"kind": k, "size": s, "thick": t, "glow": g, "w": w, "h": h}
+              for k in ("dot", "rrect") for s in (60, 161, 600) for t in (0.06, 0.28, 0.9)
+              for g in GLOWS for (w, h) in FRAMES]
+    gnode = subprocess.run(
+        ["node", "--input-type=module", "-e", GLOW_SRC],
+        input=json.dumps(gcases), capture_output=True, text=True, cwd=UI)
+    if gnode.returncode != 0:
+        print("รัน node (แสงฟุ้ง) ไม่สำเร็จ:\n" + gnode.stderr[-2000:])
+        return 1
+    for c, got in zip(gcases, json.loads(gnode.stdout)):
+        thick = c["size"] * (0.5 if c["kind"] == "dot" else c["thick"])
+        unit = journey.glow_unit(thick, c["w"], c["h"])
+        want = [{"bord": round(unit * bo * max(0.0, min(1.0, c["glow"])), 6),
+                 "blur": round(unit * bl * max(0.0, min(1.0, c["glow"])), 6),
+                 "op": op}
+                for bo, bl, op in journey.GLOW] \
+            if max(0.0, min(1.0, c["glow"])) > 0.01 else []
+        got = [{k: round(v, 6) if k != "op" else v for k, v in g.items()} for g in got]
+        if want != got:
+            bad.append((c, want, got))
+
     if bad:
-        print(f"ต่างกัน {len(bad)}/{len(cases)} กรณี — สูตรสองชุดเพี้ยนจากกันแล้ว\n")
+        print(f"ต่างกัน {len(bad)}/{len(cases) + len(gcases)} กรณี "
+              "— สูตรสองชุดเพี้ยนจากกันแล้ว\n")
         for c, want, got in bad[:8]:
             print(f"  {c}")
             print(f"    เอนจิน  {want}")
@@ -57,7 +86,8 @@ def main():
         return 1
 
     print(f"ตรงกันครบ {len(cases)} กรณี "
-          f"({len(KINDS)} ทรง × {len(SIZES)} ขนาด × {len(THICKS)} ความหนา)")
+          f"({len(KINDS)} ทรง × {len(SIZES)} ขนาด × {len(THICKS)} ความหนา)"
+          f" + แสงฟุ้ง {len(gcases)} กรณี")
     return 0
 
 
@@ -77,6 +107,21 @@ const cases = JSON.parse(readFileSync(0, "utf8"));
 process.stdout.write(
   JSON.stringify(cases.map((c) => mod.shapePath(c.kind, c.size, c.thick))),
 );
+"""
+
+
+GLOW_SRC = r"""
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+const ts = createRequire(import.meta.url)("typescript");
+const src = readFileSync("lib/shapes.ts", "utf8");
+const js = ts.transpileModule(src, {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+}).outputText;
+const mod = await import("data:text/javascript," + encodeURIComponent(js));
+const cases = JSON.parse(readFileSync(0, "utf8"));
+process.stdout.write(JSON.stringify(cases.map((c) =>
+  mod.glowLayers(c.kind, c.size, c.thick, c.glow, c.w, c.h))));
 """
 
 

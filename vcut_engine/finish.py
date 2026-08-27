@@ -204,6 +204,9 @@ def status(ctx):
                      "text": fx.TEXT, "plate": fx.PLATE, "shape": fx.SHAPE,
                      "anim": fx.ANIM, "needs_pos": list(fx.NEEDS_POS),
                      "shape_kind": fx.SHAPE_KIND, "grade": fx.GRADE,
+                     "pan": fx.PAN, "count": fx.COUNT, "split": fx.SPLIT,
+                     "journey_look": journey.LOOK,
+                     "word_anim": sorted(fx.WORD_ANIM),
                      "overlay": fx.OVERLAY, "overlay_anim": fx.OVERLAY_ANIM,
                      # ชั้นข้อความของขั้น 5 เอง — หน้าเว็บสร้างชิ้นใหม่จากค่าพวกนี้
                      "style": fx.STYLE, "text_item": fx.TEXT_ITEM,

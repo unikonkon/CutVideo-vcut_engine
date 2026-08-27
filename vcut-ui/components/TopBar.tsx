@@ -30,6 +30,11 @@ const EXPORTS = [
     label: "สร้างพร้อมเอฟเฟกต์",
     desc: "render + เพลง · ภาพซ้อน · เอฟเฟกต์ขั้น 5",
   },
+  {
+    step: "build_compare",
+    label: "สร้างไฟล์เทียบก่อน-หลัง",
+    desc: "วางไฟล์ที่ทำไว้ข้างฟุตเทจดิบ — ตั้ง [compare] ในแท็บตั้งค่าก่อน",
+  },
 ];
 
 export default function TopBar({

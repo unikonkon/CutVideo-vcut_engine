@@ -511,6 +511,20 @@ export default function Editor() {
     return i < 0 ? null : fxOfShot(i);
   }, [shots, offsets, playhead, fxOfShot]);
 
+  /**
+   *  เดินมาถึงไหนของช็อตที่เส้นหัวเล่นอยู่ (0–1)
+   *
+   *  จอตัวอย่างต้องรู้ค่านี้ถึงจะวาดกล้องที่เคลื่อนตามเวลากับเบลอหัว-ท้ายได้ —
+   *  เอฟเฟกต์พวกนี้ไม่ได้ขึ้นกับ "ตั้งค่าอะไรไว้" อย่างเดียว แต่ขึ้นกับ "ตอนนี้
+   *  อยู่วินาทีที่เท่าไรของช็อต" ด้วย ซึ่งเป็นข้อมูลที่อยู่ที่นี่ที่เดียว
+   */
+  const playheadAt = useMemo(() => {
+    const i = shots.findIndex((s, k) => playhead < offsets[k] + s.dur);
+    if (i < 0) return null;
+    const dur = shots[i].dur || 1;
+    return { p: Math.min(1, Math.max(0, (playhead - offsets[i]) / dur)), dur };
+  }, [shots, offsets, playhead]);
+
   // ── งานฝั่งเอนจิน (render/assemble/scan) ──
   const pollJob = useCallback(async () => {
     try {
@@ -2281,6 +2295,7 @@ export default function Editor() {
           onPatchText={patchTextAt}
           onPatchShape={patchShapeAt}
           clipFx={playheadFx}
+          clipAt={playheadAt}
         />
         <MusicMixer
           tracks={fxDraft?.music ?? []}
@@ -2313,6 +2328,9 @@ export default function Editor() {
           fx={sel != null ? fxOfShot(sel) : null}
           fxBase={fxData?.defaults.clip ?? null}
           grade={fxData?.defaults.grade ?? {}}
+          pan={fxData?.defaults.pan ?? {}}
+          split={fxData?.defaults.split ?? {}}
+          clipNames={clips.map((c) => c.name)}
           onFx={(p) => sel != null && setShotFx(sel, p)}
         />
       </div>

@@ -41,7 +41,7 @@ JOB_STEPS = {
     "silence": ["silence"], "prepare": ["prepare"],
     "compose": ["compose"], "decide": ["decide"],
     "render": ["render"], "assemble": ["assemble"], "caption": ["caption"],
-    "finish": ["fx"],
+    "finish": ["fx"], "compare": ["compare"],
     "plan": ["run"],          # ครบขั้น 1→5 — ปุ่ม "ทำทุกขั้น" ของ viewer เก่าใช้ตัวนี้
 }
 # ปุ่ม "รัน Phase นี้" — รันทุกขั้นใน Phase เดียว โดยไม่แตะ Phase อื่น
@@ -76,6 +76,10 @@ BUILD_JOBS = {
     # เด้งกลับไปกดขั้นก่อนหน้า
     "build_text": ["render", "caption"],
     "build_fx":   ["render", "finish"],
+    # ขั้น 6 ไม่ต้องเติม render ให้เหมือนสองตัวบน — มันกิน *ไฟล์ที่ทำเสร็จแล้ว*
+    # ไม่ใช่ชิ้นในไทม์ไลน์ ลาก render มาด้วยจะใช้เวลาเป็นสิบนาทีเพื่อของที่ขั้นนี้
+    # ไม่ได้อ่านเลยสักไฟล์
+    "build_compare": ["compare"],
 }
 
 
@@ -520,8 +524,23 @@ def build_setup(ctx):
         except SystemExit:
             pass
 
+    # ── ช่อง "คลิปดิบฝั่ง Before" กลายเป็นรายการให้เลือกเมื่อรู้จักคลิปแล้ว ──
+    #
+    # ทำที่นี่ไม่ใช่ใน settings.FIELDS เพราะรายการคลิปเปลี่ยนทุกครั้งที่มีคน
+    # อัปโหลด ส่วน FIELDS เป็นตารางนิ่งที่ CLI กับหน้าเว็บใช้ร่วมกัน — ยัดของที่
+    # ขึ้นกับสถานะโปรเจกต์เข้าไปแปลว่ามันไม่ใช่ตารางนิ่งอีกต่อไป
+    fields = [dict(f) for f in settings.FIELDS]
+    names = [c["name"] for c in (read_json(ctx.manifest, {}) or {}).get("clips", [])
+             if c.get("name")]
+    if names:
+        for f in fields:
+            if f["key"] == "compare.before":
+                f["type"] = "select"
+                f["options"] = [""] + sorted(names)
+                f["labels"] = {"": "(ยังไม่เลือก)"}
+
     return {
-        "fields": settings.FIELDS,
+        "fields": fields,
         "tiers": settings.TIERS,
         "phases": settings.phase_view(ctx, ctx.cfg),
         "steps": settings.step_status(ctx, ctx.cfg),
@@ -1213,6 +1232,10 @@ def make_handler(ctx, job):
 
             if p == "/api/fx":
                 return self._json(build_fx(ctx))
+
+            if p == "/api/compare":
+                from . import compare as cmp_
+                return self._json(cmp_.status(ctx))
 
             # ไฟล์ในโฟลเดอร์ assets — หน้าเว็บใช้วาดพรีวิวภาพซ้อน
             if p.startswith("/asset/"):

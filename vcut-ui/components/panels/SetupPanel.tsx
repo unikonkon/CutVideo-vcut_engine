@@ -31,6 +31,7 @@ const STAGE_LABEL: Record<string, string> = {
   render: "④ ตัดชิ้น",
   assemble: "④ ต่อไฟล์",
   fx: "⑤ แต่งหนัง",
+  compare: "⑥ เทียบก่อน-หลัง",
 };
 
 function Editor({

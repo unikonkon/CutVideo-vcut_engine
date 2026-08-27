@@ -6,6 +6,7 @@ import {
   type RefObject,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -30,7 +31,14 @@ import {
   type FxTextItem,
 } from "@/lib/api";
 import { GRADE_STEPS, gradeFilter, gradeFilterId } from "@/lib/grade";
-import { assPathToSvg, shapePath } from "@/lib/shapes";
+import {
+  applyCount,
+  countValue,
+  formatCount,
+  usesCount,
+  wordStates,
+} from "@/lib/textfx";
+import { assPathToSvg, glowLayers, shapePath } from "@/lib/shapes";
 import { tc } from "@/lib/time";
 
 const FITS = [
@@ -107,6 +115,53 @@ function outlineShadow(px: number, color: string): string {
   ].join(", ");
 }
 
+/**
+ *  เนื้อข้อความหนึ่งบรรทัด ณ เวลาที่เส้นหัวเล่นอยู่
+ *
+ *  รวมสองเรื่องไว้ที่เดียว: แทนตัวเลขที่นับขึ้น แล้วซอยเป็นคำถ้าเป็นแอนิเมชัน
+ *  แบบทีละคำ — แยกกันวาดจะได้ข้อความที่นับเลขแล้วแต่ไม่ไล่ทีละคำ (หรือกลับกัน)
+ *  เวลาใช้สองอย่างพร้อมกัน
+ */
+function Body({
+  raw,
+  t,
+  p,
+  whole,
+}: {
+  raw: string;
+  t: FxTextItem;
+  /** เดินมาถึงวินาทีที่เท่าไรของชิ้น */
+  p: number;
+  whole: boolean;
+}) {
+  const kind = String(t.count || "");
+  let txt = raw;
+  if (kind && usesCount(t.text, t.lines as { text?: string }[])) {
+    const v = countValue(t.dur > 0 ? p / t.dur : 1, t.count_from, t.count_to);
+    txt = applyCount(raw, formatCount(v, kind), whole);
+  }
+  const ws = wordStates(txt, t.anim, p, t.in, t.dur, t.out);
+  if (!ws) return <>{txt}</>;
+  return (
+    <>
+      {ws.map((s, i) => (
+        <span
+          key={i}
+          style={{
+            opacity: s.o,
+            // ย่อ-ขยายรอบตัวเอง — inline-block ไม่งั้น transform ไม่มีผลกับ span
+            display: "inline-block",
+            transform: s.s === 1 ? undefined : `scale(${s.s.toFixed(3)})`,
+          }}
+        >
+          {s.w}
+          {i < ws.length - 1 ? "\u00a0" : ""}
+        </span>
+      ))}
+    </>
+  );
+}
+
 function TextOv({
   t,
   ph,
@@ -132,6 +187,7 @@ function TextOv({
   const p = ph - tl;
   const q = tl + t.dur - ph;
   const { tx, ty } = anchor(t.align || 5);
+  const wordAnim = t.anim === "pop_words" || t.anim === "fade_words";
   const rise =
     t.anim === "rise" ? (1 - Math.min(1, p / Math.max(t.in, 0.05))) * 26 * s : 0;
   const style: CSSProperties = {
@@ -146,9 +202,11 @@ function TextOv({
     fontStyle: t.italic ? "italic" : "normal",
     letterSpacing: (t.spacing || 0) * s,
     textShadow: outlineShadow((t.border || 0) * s, t.outline),
+    // แบบทีละคำจัดการความทึบเองรายคำแล้ว — จางทั้งก้อนซ้ำจะกลบจังหวะไล่คำจน
+    // มองไม่ออก (เอนจินก็ตัด \fad ขาเข้าทิ้งด้วยเหตุผลเดียวกัน ดู anim_tags)
     opacity: edit
-      ? Math.max(fadeOpacity(p, q, t.in, t.out), 0.35)
-      : fadeOpacity(p, q, t.in, t.out),
+      ? Math.max(fadeOpacity(p, q, wordAnim ? 0 : t.in, t.out), 0.35)
+      : fadeOpacity(p, q, wordAnim ? 0 : t.in, t.out),
     whiteSpace: "pre",
     textAlign: "center",
     lineHeight: 1.25,
@@ -178,7 +236,9 @@ function TextOv({
         onDown("move", e);
       }}
     >
-      <div>{t.text}</div>
+      <div>
+        <Body raw={t.text} t={t} p={p} whole={!lines.length} />
+      </div>
       {lines.map((ln, i) => (
         <div
           key={i}
@@ -189,11 +249,29 @@ function TextOv({
             textShadow: outlineShadow((ln.border ?? t.border ?? 0) * s, ln.outline ?? t.outline),
           }}
         >
-          {String(ln.text ?? "")}
+          <Body raw={String(ln.text ?? "")} t={t} p={p} whole={false} />
         </div>
       ))}
     </div>
   );
+}
+
+/** id ของฟิลเตอร์กระตุก — แยกตามความแรง เพราะระยะเลื่อนช่องสีต่างกัน */
+const shiftId = (px: number) => `vcut-shift-${px}`;
+
+/**
+ *  ภาพกระตุกตอนนี้ติดอยู่ไหม + เลื่อนช่องสีกี่พิกเซล
+ *
+ *  ประตูเวลาต้องเป็นสูตรเดียวกับที่ fx.seg_vfilter() เขียนลง enable= เป๊ะ
+ *  (`lt(mod(t, 1/hz), min(0.10, period*0.28))`) ไม่งั้นจอตัวอย่างจะกระตุกคนละ
+ *  จังหวะกับไฟล์ แล้วคนตั้งค่าจะไล่หาความถี่ที่ "ถูก" จากภาพที่โกหก
+ */
+function glitchNow(f: FxClip | null, tInShot: number) {
+  const g = f?.glitch ?? 0;
+  if (g <= 1e-6) return 0;
+  const period = 1 / (f?.glitch_hz || 1.4);
+  const on = Math.min(0.1, period * 0.28);
+  return tInShot % period < on ? Math.round(28 * g) : 0;
 }
 
 /** ประกาศฟิลเตอร์โทนสีทั้งชุดครั้งเดียวต่อหน้า — <svg> ขนาดศูนย์ที่ไม่กินที่
@@ -219,6 +297,36 @@ function GradeDefs() {
                 </feComponentTransfer>
               ),
             )}
+          </filter>
+        ))}
+        {/* กระตุก = เลื่อนช่องแดงไปทางหนึ่ง ช่องน้ำเงินไปอีกทาง แล้วรวมกลับ —
+            ตรงกับ rgbashift=rh=-N:bh=N ของ ffmpeg ไม่ใช่การประมาณด้วย
+            drop-shadow ซึ่งวาดเงาสีทับ ไม่ได้แยกช่องสีจริง */}
+        {[...new Set([8, 11, 14, 17, 20, 22, 25, 28])].map((px) => (
+          <filter key={px} id={shiftId(px)} colorInterpolationFilters="sRGB">
+            <feColorMatrix
+              in="SourceGraphic"
+              type="matrix"
+              values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"
+              result="r"
+            />
+            <feOffset in="r" dx={-px} dy={0} result="rm" />
+            <feColorMatrix
+              in="SourceGraphic"
+              type="matrix"
+              values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0"
+              result="g"
+            />
+            <feColorMatrix
+              in="SourceGraphic"
+              type="matrix"
+              values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0"
+              result="b"
+            />
+            <feOffset in="b" dx={px} dy={0} result="bm" />
+            {/* บวกกันแบบ arithmetic — screen/lighten จะทำให้ส่วนที่ซ้อนกันสว่างผิด */}
+            <feComposite in="rm" in2="g" operator="arithmetic" k2={1} k3={1} result="rg" />
+            <feComposite in="rg" in2="bm" operator="arithmetic" k2={1} k3={1} />
           </filter>
         ))}
       </defs>
@@ -289,6 +397,26 @@ function ShapeLayer({
             style={{ pointerEvents: edit ? "auto" : "none", cursor: edit ? "move" : "default" }}
             onPointerDown={(e) => edit && onDown(idx, "move", e)}
           >
+            {/* แสงฟุ้ง — วาดรูปเดิมซ้ำแล้วขยายด้วย stroke + เบลอ ท่าเดียวกับที่
+                เอนจินใช้ \bord กับ \blur  ค่าทุกตัวมาจาก lib/shapes.ts ซึ่งถูก
+                เทียบกับเอนจินไว้แล้วใน scripts/check_shape_parity.py */}
+            {glowLayers(sh.kind, sh.size, sh.thick, sh.glow ?? 0, fw, fh).map(
+              (g, k) => (
+                <path
+                  key={`g${k}`}
+                  d={assPathToSvg(shapePath(sh.kind, sh.size, sh.thick))}
+                  fill={sh.color}
+                  stroke={sh.color}
+                  // \bord ขยายออก *นอก* รูป ส่วน stroke ของ SVG คร่อมครึ่ง-ครึ่ง
+                  strokeWidth={g.bord * 2}
+                  paintOrder="stroke"
+                  strokeLinejoin="round"
+                  opacity={g.op}
+                  // blur() บนลูกของ svg คิดเป็นหน่วยของ viewBox = พิกเซลหนังจริง
+                  style={{ filter: `blur(${g.blur}px)` }}
+                />
+              ),
+            )}
             <path
               d={assPathToSvg(shapePath(sh.kind, sh.size, sh.thick))}
               fill={sh.color}
@@ -487,6 +615,7 @@ export default function Preview({
   onPatchText,
   onPatchShape,
   clipFx,
+  clipAt,
 }: {
   videoRef: RefObject<HTMLVideoElement | null>;
   stageRef: RefObject<HTMLDivElement | null>;
@@ -508,6 +637,8 @@ export default function Preview({
   onPatchShape: (idx: number, p: Partial<FxShape>) => void;
   /** เอฟเฟกต์ของช็อตที่เส้นหัวเล่นอยู่ — null = ยังไม่รู้ (ยังไม่ได้ตัดชิ้น) */
   clipFx: FxClip | null;
+  /** เดินมาถึงไหนของช็อตนั้น (p = 0–1) และช็อตยาวกี่วินาที */
+  clipAt: { p: number; dur: number } | null;
 }) {
   const frameRef = useRef<HTMLDivElement>(null);
   const drag = useRef<Drag | null>(null);
@@ -520,6 +651,7 @@ export default function Preview({
   const [layoutOpen, setLayoutOpen] = useState(false);
   const [showOv, setShowOv] = useState(true);
   const [dims, setDims] = useState({ bw: 0, bh: 0 });
+
 
   // ขนาดเวที — ไว้คำนวณกรอบผืนหนัง (layout) ที่ใหญ่สุดที่ยังพอดีเวที
   useEffect(() => {
@@ -545,6 +677,65 @@ export default function Preview({
     W = fw * k;
     H = fh * k;
   }
+
+  /**
+   *  กล้อง (ซูม/ไถล) + สี + กระตุก + เบลอหัว-ท้าย ของเฟรมที่กำลังโชว์
+   *
+   *  คิดที่เดียวแล้วส่งออกเป็น transform กับ filter — แยกคิดคนละที่แล้วสองอย่าง
+   *  จะหลุดจากกันทันทีที่มีคนเพิ่มชั้นใหม่
+   */
+  const camCss = useMemo(() => {
+    const f = clipFx;
+    const p = clipAt?.p ?? 0;
+    if (!f) return { transform: undefined as string | undefined, filter: "" };
+
+    // ── ซูม: ค้างหรือเดิน (สูตรเดียวกับ fx._zoom_pair) ──
+    const z0 = f.zoom || 1;
+    let z1 = f.zoom_to || 0;
+    if (z1 <= 1e-6) z1 = z0;
+    else if (z1 < 1) z1 = 1;
+    const room = Math.max(z0, z1) > 1 + 1e-6;
+    const panning = room && !!f.pan;
+    const z = room ? z0 + (z1 - z0) * p : 1;
+
+    // ── ไถล: zoompan เลื่อนกรอบที่ *มอง* ไปทางหนึ่ง = ภาพขยับสวนทาง ──
+    //
+    // ระยะที่เลื่อนได้คือครึ่งหนึ่งของส่วนที่ล้นออกนอกกรอบ คิดเป็นสัดส่วนของ
+    // ความกว้างกรอบ  ที่ zoom = z ภาพกว้าง z เท่า จึงล้น (z−1) และเลื่อนได้ ±(z−1)/2
+    const room01 = Math.max(0, (z - 1) / 2);
+    let tx = 0;
+    let ty = 0;
+    if (panning) {
+      if (f.pan === "r") tx = -room01 * (2 * p - 1);
+      else if (f.pan === "l") tx = -room01 * (1 - 2 * p);
+      else if (f.pan === "d") ty = -room01 * (2 * p - 1);
+      else if (f.pan === "u") ty = -room01 * (1 - 2 * p);
+    }
+
+    const parts: string[] = [];
+    if (z > 1 + 1e-6) parts.push(`scale(${z.toFixed(4)})`);
+    if (tx || ty)
+      parts.push(`translate(${(tx * 100).toFixed(3)}%, ${(ty * 100).toFixed(3)}%)`);
+
+    const fil: string[] = [];
+    const grade = gradeFilter(f.grade);
+    if (grade) fil.push(grade);
+    const px = glitchNow(f, p * (clipAt?.dur ?? 0));
+    if (px) fil.push(`url(#${shiftId(px)})`);
+    // เบลอหัว-ท้าย — gblur sigma กับ CSS blur() ใช้หน่วยเดียวกัน (ส่วนเบี่ยงเบน
+    // มาตรฐานเป็นพิกเซล) แต่ที่นี่วัดบนจอตัวอย่างซึ่งเล็กกว่าผืนจริงหลายเท่า
+    // จึงย่อตามสัดส่วนความกว้าง ไม่งั้นพรีวิวจะเบลอกว่าไฟล์จริงมาก
+    const wp = f.whip || 0;
+    if (wp > 1e-6 && clipAt) {
+      const d = Math.min(0.12, (clipAt.dur || 1) / 3);
+      const tt = p * (clipAt.dur || 0);
+      if (tt < d || tt > (clipAt.dur || 0) - d) {
+        const sigma = 18 * wp * (W > 0 ? W / 1080 : 1);
+        fil.push(`blur(${sigma.toFixed(2)}px)`);
+      }
+    }
+    return { transform: parts.join(" ") || undefined, filter: fil.join(" ") };
+  }, [clipFx, clipAt, W]);
 
   const refH = frame?.h || REF_H;
   const ph = playhead;
@@ -760,12 +951,45 @@ export default function Preview({
               // ซูมของเอนจินคือ "ขยายแล้วครอบกลับให้เท่าเดิม" — กรอบไม่เปลี่ยน
               // ภาพโตขึ้นรอบจุดกึ่งกลาง  scale() รอบ center ให้ผลเดียวกันเป๊ะ
               // (กรอบผืนหนังตั้ง overflow-hidden ไว้แล้ว จึงครอบให้เอง)
-              transform:
-                clipFx && clipFx.zoom > 1 ? `scale(${clipFx.zoom})` : undefined,
-              filter: gradeFilter(clipFx?.grade) || undefined,
+              transform: camCss.transform,
+              filter: camCss.filter || undefined,
             }}
             onClick={() => (edit ? onClearSel() : onToggle())}
           />
+          {/* ── แบ่งจอสองคน ──
+              วาดได้แค่ *เส้นแบ่งกับป้าย* ไม่ใช่ภาพของอีกครึ่ง — วิดีโอในจอนี้
+              คือหนังที่ต่อเสร็จแล้วหนึ่งสาย ส่วนอีกครึ่งเป็นฟุตเทจดิบคนละไฟล์
+              ที่ต้องถอดรหัสเพิ่มอีกสาย  บอกตรง ๆ ว่ายังไม่เห็นภาพจริงดีกว่า
+              วาดอะไรมั่ว ๆ ไว้แล้วให้เชื่อจนกว่าจะ render เสร็จ */}
+          {clipFx && (clipFx.split === "v" || clipFx.split === "h")
+            && clipFx.split_with && W > 0 && (
+            <div className="pointer-events-none absolute inset-0">
+              <div
+                className="absolute bg-accent/70"
+                style={
+                  clipFx.split === "v"
+                    ? { left: 0, right: 0, top: "50%", height: 2 }
+                    : { top: 0, bottom: 0, left: "50%", width: 2 }
+                }
+              />
+              <div
+                className="absolute flex items-center justify-center bg-black/55 text-center text-[11px] leading-4 text-ink"
+                style={
+                  clipFx.split === "v"
+                    ? { left: 0, right: 0, top: "50%", bottom: 0 }
+                    : { top: 0, bottom: 0, left: "50%", right: 0 }
+                }
+              >
+                <span className="px-2">
+                  {clipFx.split_with}
+                  <br />
+                  <span className="text-faint">
+                    @{(clipFx.split_at ?? 0).toFixed(1)} วิ · เห็นของจริงในไฟล์
+                  </span>
+                </span>
+              </div>
+            </div>
+          )}
           <GradeDefs />
           {/* ชั้นซ้อนสด — ตัวเลขชุดเดียวกับที่ ffmpeg จะเผาใน render ขั้น 5 */}
           {showOv && W > 0 && (

@@ -46,6 +46,16 @@ JOURNEY = {
     "walker": "#FF3B30",  # สีตัวคนเดิน
     "size": 34,           # ขนาดตัวอักษรของป้ายชื่อจุด (หน่วยของ box)
     "font": "Sukhumvit Set",
+
+    # ── หน้าตาของเส้น ──
+    #
+    # คีย์ชื่อ "look" ไม่ใช่ "style" ทั้งที่ความหมายคือสไตล์ — เพราะ _pick ของ
+    # fx.py ดัดค่าตามชื่อคีย์จากตารางกลางตัวเดียว (ENUMS) ถ้าจองชื่อ "style" ไว้
+    # ที่นี่ วันที่มีใครใส่คีย์ชื่อเดียวกันในชั้นอื่นค่าจะถูกดัดด้วยรายการของแผนที่
+    # โดยไม่มีอะไรฟ้อง
+    "look": "map",        # map = แบน · neon = เส้นเรืองแสง
+    "glow": 0.9,          # ความแรงของแสงฟุ้ง (มีผลเมื่อ look = neon)
+    "core": "#FFFFFF",    # สีแกนกลางของเส้นนีออน — หลอดนีออนจริงแกนขาว ฮาโลมีสี
     "show_dist": True,
     "unit": "ม.",
     "box": [1000.0, 550.0],
@@ -75,6 +85,9 @@ WALK_FPS = 12.5
 
 # จำนวนจุดที่ใช้ตัดเส้นโค้งเบซิเยร์หนึ่งท่อนให้กลายเป็นเส้นตรงหลายท่อน
 FLATTEN = 24
+
+# ── หน้าตาที่เลือกได้ — ค่าคือคำอธิบายที่หน้าเว็บเอาไปขึ้นตัวเลือก ──
+LOOK = {"map": "แบน — เส้นทึบขอบคม", "neon": "นีออน — เส้นเรืองแสง"}
 
 # ชั้นล่างสุดของแผนที่ — ชั้นที่ต่ำกว่านี้เป็นของข้อความกับรูปทรง (fxtext.L_*)
 # แผงกินพื้นที่จอเยอะและมีพื้นหลังทึบ จึงต้องอยู่บนสุดเสมอ ไม่งั้นซับที่บังเอิญ
@@ -389,6 +402,54 @@ def _a(v):
     return f"&H{max(0, min(255, int(round((1.0 - v) * 255)))):02X}&"
 
 
+# ── ชั้นที่ทำให้ของเรืองแสง ──
+#
+# (ขยายออกกี่เท่าของ unit, ละลายขอบกี่เท่าของ unit, ทึบแค่ไหน)
+#
+# **ขยายด้วย \bord แล้วละลายด้วย \blur ไม่ใช่วาดเรขาคณิตใหม่ที่ความหนาสามค่า**
+# ทางแรกใช้สตริงรูปเดิมซ้ำได้ทั้งสามชั้น (ซึ่งของเส้นทางยาวเป็นพันตัวอักษร)
+# ส่วนทางที่สองต้องเรียก stroke() ใหม่ทุกชั้นแล้วไฟล์บวมสามเท่าจริง ๆ
+#
+# สองชั้น ไม่ใช่ชั้นเดียว เพราะแสงจริงมีทั้งฮาโลกว้างจาง ๆ กับวงในสว่างชิดตัว
+# ชั้นเดียวได้ขอบฟุ้งเท่ากันทั้งวง ตาอ่านว่า "เบลอ" ไม่ใช่ "เรืองแสง"
+GLOW = ((2.6, 2.0, 0.60), (1.1, 0.8, 0.35))
+
+# แกนกลาง — ละลายขอบนิดเดียวพอให้ไม่เป็นขอบบันได แต่ยังคมกว่าฮาโลชัดเจน
+CORE_BLUR = 0.22
+
+
+def glow_unit(thickness, W, H):
+    """ขนาดอ้างอิงของแสงฟุ้ง — โตตามความหนาของของ แต่ตันที่ค่าหนึ่ง
+
+    **ฮาโลไม่ได้โตตามความหนาไปเรื่อย ๆ** หลอดนีออนที่อ้วนขึ้นสองเท่าไม่ได้มีแสง
+    ฟุ้งกว้างขึ้นสองเท่า ความกว้างของฮาโลขึ้นกับความสว่างกับอากาศรอบ ๆ มากกว่า
+
+    วัดจริงตอนทำรอบ 4: ปล่อยให้โตตามความหนาแบบไม่มีเพดาน ชิปที่หนา 57 พิกเซล
+    ได้ฮาโลกว้าง 148 พิกเซล ซึ่งท่วมทั้งเฟรมจนอ่านไม่ออกว่ามีรูปอะไรอยู่ข้างใน
+
+    เพดานคิดจาก *ด้านสั้นของจอ* ไม่ใช่ค่าคงที่เป็นพิกเซล — ไม่งั้นแสงที่พอดีบน
+    หนัง 1080 จะกลายเป็นขอบเรืองบาง ๆ ที่แทบมองไม่เห็นบน 4K
+    """
+    return min(min(int(W), int(H)) * 0.012, max(3.0, float(thickness)))
+
+
+def glow_layers(col, unit, strength, alpha=1.0, dim=1.0):
+    """แท็กของชั้นฟุ้งที่ต้องวาด *ก่อน* รูปจริง — คืนรายการของรายการแท็ก
+
+    unit = ขนาดอ้างอิงของรูปนั้นเป็นพิกเซลจอ (ความหนาเส้น · รัศมีจุด · ขนาดรูปทรง)
+    แสงฟุ้งจึงโตตามของที่มันห่ออยู่เสมอ ไม่ใช่ค่าคงที่ที่พอย่อแผงแล้วกลืนทั้งเส้น
+
+    คืน [] เมื่อไม่ได้เปิด — ตัวเรียกจึงเขียนเป็นลูปเดียวได้โดยไม่ต้องมี if
+    """
+    g = max(0.0, min(1.0, float(strength or 0.0)))
+    if g <= 0.01 or unit <= 0:
+        return []
+    return [[rf"\c{colour(col)}&", rf"\3c{colour(col)}&", r"\shad0",
+             rf"\bord{unit * bo * g:.2f}", rf"\blur{unit * bl * g:.2f}",
+             rf"\alpha{_a(alpha * op * dim)}"]
+            for bo, bl, op in GLOW]
+
+
 def ass_events(data, W, H, man):
     """ทุกบรรทัด Dialogue ของชั้นแผนที่ — ตัวเรียกเอาไปต่อท้าย [Events] ได้เลย
 
@@ -436,6 +497,14 @@ def ass_events(data, W, H, man):
     c_line = j.get("line") or "#FFFFFF"
     c_trail = j.get("trail") or "#8695A3"
     c_walk = j.get("walker") or "#FF3B30"
+    c_core = j.get("core") or "#FFFFFF"
+    # glow = 0 เมื่อลุคเป็นแบน — ตัวเดียวคุมทั้งไฟล์ ที่อื่นจึงไม่ต้องถามซ้ำว่า
+    # "ลุคไหน *และ* แรงเท่าไร" ซึ่งเป็นคำถามที่ตอบไม่ครบทีเดียวได้ง่ายมาก
+    glow = (max(0.0, min(1.0, float(j.get("glow", 0.9) or 0.0)))
+            if str(j.get("look") or "map") == "neon" else 0.0)
+
+    def gu(thickness):
+        return glow_unit(thickness, W, H)
 
     # ระยะทางบนเส้นของแต่ละหมุด — คิดครั้งเดียว ใช้ทุกแผง
     s_of = [nearest_s(pts, cum, float(st.get("px") or 0), float(st.get("py") or 0))
@@ -449,6 +518,26 @@ def ass_events(data, W, H, man):
             return
         ev.append(f"Dialogue: {layer},{clock(a)},{clock(b)},jrn,,0,0,0,,"
                   "{" + "".join(tags) + r"\p1}" + body + r"{\p0}")
+
+    def draw(layer, a, b, flat, geom, body, col, unit, alpha=1.0,
+             core=None, dim=1.0):
+        """ของหนึ่งชิ้น — ลุคแบนวาดครั้งเดียว · ลุคนีออนวางฮาโลก่อนแล้วทับด้วยแกน
+
+        รับแท็กสองชุดเพราะสองลุคทาสีคนละท่า: flat คือชุดครบของลุคแบน (ส่งต่อ
+        ตรง ๆ จะได้ไฟล์เดิมทุกไบต์เมื่อไม่ได้เปิดนีออน) ส่วน geom คือเฉพาะที่วาง
+        ตำแหน่ง/จังหวะ ซึ่งชั้นฟุ้งเอาไปประกอบกับสีของมันเอง
+
+        ทุกชั้นอยู่ layer เดียวกัน ลำดับในไฟล์เป็นตัวตัดสินว่าอะไรทับอะไร —
+        ยกขึ้นคนละ layer ไม่ได้เพราะชั้นถัดไปของแผนที่จองเลขต่อกันไว้หมดแล้ว
+        """
+        if not glow:
+            emit(layer, a, b, flat, body)
+            return
+        for g in glow_layers(col, unit, glow, alpha, dim):
+            emit(layer, a, b, geom + g, body)
+        emit(layer, a, b, geom + [rf"\c{colour(core or c_core)}&", r"\bord0",
+                                  rf"\blur{unit * CORE_BLUR:.2f}",
+                                  rf"\alpha{_a(alpha)}"], body)
 
     base = [r"\an7", r"\pos(0,0)", r"\bord0", r"\shad0"]
     BASE = LAYER
@@ -475,8 +564,12 @@ def ass_events(data, W, H, man):
                  rrect(ox - pad, oy - pad, pw + pad * 2, ph + pad * 2, pad * 0.9))
 
         # เส้นทางทั้งเส้นสีจาง — ส่วนที่เดินผ่านแล้วจะถูกทับด้วยสีสว่างข้างบน
-        emit(BASE + 1, a, b, base + [fade, rf"\c{colour(c_trail)}&"],
-             stroke(txs(pts), thick))
+        # ช่วงที่ยังไปไม่ถึงในลุคนีออน = หลอดที่ยังไม่ติดไฟ — แกนเป็นสีเส้นเอง
+        # ไม่ใช่ขาว และฮาโลหรี่ลงครึ่งหนึ่ง ไม่งั้นทั้งเส้นสว่างเท่ากันหมดแล้ว
+        # "เดินมาถึงไหนแล้ว" ซึ่งเป็นคำถามเดียวของชั้นนี้ก็อ่านไม่ออก
+        draw(BASE + 1, a, b, base + [fade, rf"\c{colour(c_trail)}&"],
+             base + [fade], stroke(txs(pts), thick),
+             c_trail, gu(thick), core=c_trail, dim=0.5)
 
         # หมุด + ป้ายชื่อ เปิดเผยทีละจุดตามที่ไปถึง — โผล่ครบตั้งแต่แผงแรกแปลว่า
         # แผนที่เล่าตอนจบให้ฟังตั้งแต่นาทีแรก
@@ -492,9 +585,11 @@ def ass_events(data, W, H, man):
             labels.append((st.get("color") or "#FFFFFF", lx, ly, txt, q == i))
 
         for col, cx, cy in dots:
-            emit(BASE + 3, a, b, base + [fade, rf"\c{colour(col)}&",
-                                  rf"\3c{colour('#FFFFFF')}&", rf"\bord{thick * 0.35:g}"],
-                 circle(cx, cy, thick * 0.85))
+            draw(BASE + 3, a, b,
+                 base + [fade, rf"\c{colour(col)}&",
+                         rf"\3c{colour('#FFFFFF')}&", rf"\bord{thick * 0.35:g}"],
+                 base + [fade], circle(cx, cy, thick * 0.85),
+                 col, gu(thick * 0.85))
 
         for col, lx, ly, txt, cur in labels:
             tags = [r"\an5", rf"\pos({lx:.0f},{ly:.0f})", fade,
@@ -504,6 +599,11 @@ def ass_events(data, W, H, man):
                     rf"\b{1 if cur else 0}"]
             if cur:
                 tags.append(rf"\3c{colour(col)}&")
+            if glow:
+                # ป้ายในลุคนีออนต้องเรืองแสงด้วย ไม่งั้นตัวหนังสือขอบดำคมลอยอยู่
+                # เหนือเส้นที่ฟุ้ง แล้วอ่านว่าเอาป้ายจากแผนที่คนละใบมาแปะ
+                tags += [rf"\3c{colour(col)}&",
+                         rf"\bord{2.4 + 2.6 * glow:.2f}", rf"\blur{2.2 * glow:.2f}"]
             ev.append(f"Dialogue: {BASE + 4},{clock(a)},{clock(b)},jrn,,0,0,0,,"
                       "{" + "".join(tags) + "}" + txt)
 
@@ -533,15 +633,18 @@ def ass_events(data, W, H, man):
             if len(done) >= 2:
                 # หนากว่าเส้นพื้นเล็กน้อย — สีอย่างเดียวแยกไม่ค่อยออกบนฟุตเทจ
                 # ป่าที่มีทั้งจุดสว่างและจุดมืดอยู่ใต้แผงพร้อมกัน
-                emit(BASE + 2, a + t0, a + t1,
+                draw(BASE + 2, a + t0, a + t1,
                      base + [rf"\c{colour(c_line)}&", rf"\alpha{_a(alpha)}"],
-                     stroke(txs(done), thick * 1.15))
+                     base, stroke(txs(done), thick * 1.15),
+                     c_line, gu(thick * 1.15), alpha=alpha)
 
             fx_, fy_ = tx(here)
-            emit(BASE + 5, a + t0, a + t1,
+            draw(BASE + 5, a + t0, a + t1,
                  base + [rf"\c{colour(c_walk)}&", rf"\3c{colour('#FFFFFF')}&",
                          rf"\bord{max(1.0, thick * 0.22):g}", rf"\alpha{_a(alpha)}"],
-                 walker(fx_, fy_ + fig * 0.06, fig, prog * math.pi * 6.0, lean=0.35))
+                 base,
+                 walker(fx_, fy_ + fig * 0.06, fig, prog * math.pi * 6.0, lean=0.35),
+                 c_walk, gu(max(1.0, thick * 0.22) * 2.2), alpha=alpha)
 
             if show_dist:
                 # ตัวเลขระยะทางอยู่ *มุมบนขวาของแผง* ไม่ใช่ลอยตามคนเดิน
@@ -551,13 +654,16 @@ def ass_events(data, W, H, man):
                 # เพื่อไม่ให้ป้ายทับกันเอง) ตัวเลขจึงไปทับป้ายทุกครั้งที่เดินถึง
                 # จุดหมาย ซึ่งเป็นวินาทีเดียวที่คนดูอยากอ่านทั้งสองอย่าง
                 dist = d_from + (d_to - d_from) * e
+                ntags = [rf"\3c{colour(c_line)}&",
+                         rf"\bord{2.6 + 2.6 * glow:.2f}",
+                         rf"\blur{2.2 * glow:.2f}"] if glow else []
                 ev.append(
                     f"Dialogue: {BASE + 5},{clock(a + t0)},{clock(a + t1)},jrn,,0,0,0,,"
                     + "{" + "".join([
                         r"\an9", rf"\pos({ox + pw:.0f},{oy - pad * 0.1:.0f})",
                         rf"\fs{int(size * 1.15)}", rf"\c{colour('#FFFFFF')}&",
                         rf"\3c{colour('#0B1216')}&", r"\bord2.6", r"\shad0", r"\b1",
-                        rf"\alpha{_a(alpha)}"]) + "}"
+                        rf"\alpha{_a(alpha)}"] + ntags) + "}"
                     + esc(f"{dist:,.0f} {unit}".strip()))
 
     return ev

@@ -13,7 +13,7 @@ import threading
 import tomllib
 from pathlib import Path
 
-from . import config, fx
+from . import compare, config, fx
 from .util import read_json
 
 PKG_ROOT = Path(__file__).resolve().parent.parent
@@ -44,6 +44,7 @@ STEPS = [
     {"id": "assemble", "label": "ต่อเป็นไฟล์"},
     {"id": "caption",  "label": "ใส่ข้อความ"},
     {"id": "finish",   "label": "แต่งหนัง"},
+    {"id": "compare",  "label": "เทียบก่อน-หลัง"},
 ]
 STEP_ORDER = [s["id"] for s in STEPS]
 STEP_LABEL = {s["id"]: s["label"] for s in STEPS}
@@ -82,6 +83,16 @@ PHASES = [
      "why": "ใช้ไทม์ไลน์ของขั้น 3 กับข้อความของขั้น 4 แล้วแต่งเป็นไฟล์ตัวที่สาม "
             "— ข้อความเคลื่อนไหว · รูปทรง · สโลว์โม/ซูม/สี · ภาพซ้อน · เพลง",
      "steps": ["finish"]},
+    # ขั้น 6 กิน *หนังสองเรื่อง* — ผลของขั้นก่อนหน้ากับคลิปดิบที่ไม่ได้อยู่ใน
+    # ไทม์ไลน์เลย  ยัดเข้าขั้น 5 จะพังสัญญา "ไม่ตั้งอะไร → ได้ไฟล์เหมือนขั้น 4"
+    # ของมันทันที เพราะขั้น 5 ทำงานบนไทม์ไลน์เดียวเสมอ (ดู compare.py)
+    #
+    # ปิดไว้เป็นค่าตั้งต้น: ขั้นนี้ต้องมีคนบอกก่อนว่าคลิปดิบตัวไหนคือ "ก่อน"
+    # ไม่มีค่าที่เดาให้ได้ และ `vcut run` ต้องไม่ไปตายที่ขั้นสุดท้ายเพราะเรื่องนี้
+    {"id": "compare", "no": 6, "label": "เทียบก่อน-หลัง",
+     "why": "วางหนังที่ตัดเสร็จแล้วไว้ข้างฟุตเทจดิบตัวเดียวกัน "
+            "— คลิปสายสอนตัดต่อใช้ท่านี้เพื่อให้เห็นว่าการตัดทำอะไรกับของดิบ",
+     "steps": ["compare"]},
 ]
 
 # ── คีย์ไหนเป็นของขั้นไหน — ใช้ตอนรีเซ็ตทีละขั้น ────────────────
@@ -95,6 +106,7 @@ PHASE_STAGES = {
     "compose": ["compose", "render", "assemble"],
     "text": ["caption"],
     "fx": ["fx"],
+    "compare": ["compare"],
 }
 SCOPES = ["all"] + [p["id"] for p in PHASES]
 SCOPE_LABEL = {"all": "ทุกขั้น",
@@ -376,6 +388,37 @@ FIELDS = [
     # captions.json) ที่นี่มีแต่ค่ากลางจริง ๆ
     F("fx.out_suffix", "ท้ายชื่อไฟล์ของขั้น 5", "str", "free", "fx",
       help="ต่อท้ายชื่อไฟล์ของขั้น 3 — final.mp4 + '-fx' = final-fx.mp4"),
+
+    # ── ขั้น 6 · เทียบก่อน-หลัง ──
+    F("compare.enabled", "ทำไฟล์เทียบก่อน-หลัง", "bool", "free", "compare",
+      help="ปิดไว้เป็นค่าตั้งต้น — ต้องมีคนบอกก่อนว่าคลิปดิบตัวไหนคือ 'ก่อน'"),
+    F("compare.before", "คลิปดิบฝั่ง Before", "str", "free", "compare",
+      help="ชื่อไฟล์ในโฟลเดอร์ฟุตเทจ — ฟุตเทจตัวเดียวกับที่หนังฝั่ง After ตัดมา"),
+    F("compare.after", "หนังฝั่ง After", "str", "free", "compare",
+      placeholder="(ว่าง = ไฟล์ล่าสุดที่ทำไว้)",
+      help="ว่าง = ไล่หาจากขั้น 5 → 4 → 3 แล้วบอกทุกครั้งว่าหยิบตัวไหนมา"),
+    F("compare.layout", "เลย์เอาต์", "select", "free", "compare",
+      options=["tilt", "side", "stack"],
+      labels={"tilt": "เหลื่อมกัน (ตามคลิปต้นแบบ)", "side": "เทียบข้างเท่ากัน",
+              "stack": "บน-ล่าง"},
+      help="tilt = เรขาคณิตที่วัดจากคลิปต้นแบบจริง (สองช่องเหลื่อมและไม่เท่ากัน)"),
+    F("compare.hold", "เมื่อฝั่งหนึ่งจบก่อน", "select", "free", "compare",
+      options=["freeze", "cut"],
+      labels={"freeze": "ค้างเฟรมสุดท้ายรออีกฝั่ง", "cut": "จบพร้อมกันที่ตัวสั้นสุด"},
+      help="After สั้นกว่า Before คือประเด็นทั้งหมดของคลิปแนวนี้ — cut จะตัด "
+           "Before ทิ้งกลางคัน ซึ่งแทบไม่มีใครต้องการ"),
+    F("compare.bg", "สีพื้นหลัง", "str", "free", "compare", placeholder="#3B1418"),
+    F("compare.label_before", "ป้ายฝั่งซ้าย", "str", "free", "compare",
+      placeholder="Before", help="ว่าง = ไม่ต้องมีป้าย"),
+    F("compare.label_after", "ป้ายฝั่งขวา", "str", "free", "compare",
+      placeholder="After"),
+    F("compare.title", "หัวเรื่อง", "str", "free", "compare"),
+    F("compare.subtitle", "หัวเรื่องรอง", "str", "free", "compare"),
+    F("compare.font", "ฟอนต์ป้าย", "str", "free", "compare"),
+    F("compare.timeline", "สกรีนเรคคอร์ดไทม์ไลน์", "str", "free", "compare",
+      help="ไฟล์วิดีโอที่จะวางเป็นแถบล่าง — ไม่มีก็ปล่อยว่าง"),
+    F("compare.out_suffix", "ท้ายชื่อไฟล์ของขั้น 6", "str", "free", "compare",
+      help="ต่อท้ายชื่อไฟล์ของขั้น 3 — final.mp4 + '-vs' = final-vs.mp4"),
 ]
 
 FIELD_BY_KEY = {f["key"]: f for f in FIELDS}
@@ -476,6 +519,10 @@ def plan(cfg, start=None, no_thumbs=False):
             skip = "ปิด [jumpcut] enabled ไว้"
         elif sid == "listen" and not get_at(cfg, "listen.enabled", True):
             skip = "ปิด [listen] enabled ไว้"
+        elif sid == "compare" and not get_at(cfg, "compare.enabled", False):
+            skip = "ปิด [compare] enabled ไว้"
+        elif sid == "compare" and not str(get_at(cfg, "compare.before", "") or ""):
+            skip = "ยังไม่ได้เลือกคลิปดิบฝั่ง Before"
         out.append({"id": sid, "label": STEP_LABEL[sid], "phase": ph["id"],
                     "phase_no": ph["no"], "run": skip is None, "skip": skip})
     return out
@@ -808,6 +855,7 @@ def step_status(ctx, cfg):
             "caption": Path(ctx.out).with_name(
                 Path(ctx.out).stem + "-text" + Path(ctx.out).suffix),
             "finish": fx.out_path(ctx),
+            "compare": compare.out_path(ctx, quiet=True),
         }[sid]
         exists = path.exists() and (not path.is_dir() or any(path.iterdir()))
         rec = {**st, "exists": exists,
@@ -882,6 +930,14 @@ def step_status(ctx, cfg):
             if newer:
                 rec["changed"] = newer
                 rec["summary"] += " · " + " กับ ".join(newer) + "เปลี่ยนไปหลังจากนั้น"
+        elif sid == "compare" and exists:
+            # เทียบด้วยเวลาแก้เหมือนขั้น 4/5 — วัตถุดิบของขั้นนี้คือหนังฝั่ง After
+            # ซึ่งถูกทำใหม่ทุกครั้งที่ขั้นก่อนหน้าถูกสั่ง
+            rec["summary"] = f"{path.stat().st_size / 1e9:.2f} GB"
+            src, _ = compare.after_path(ctx)
+            if src.exists() and src.stat().st_mtime > path.stat().st_mtime:
+                rec["changed"] = ["หนังฝั่ง After"]
+                rec["summary"] += " · หนังฝั่ง After เปลี่ยนไปหลังจากนั้น"
         out.append(rec)
     return out
 
