@@ -18,13 +18,15 @@ import {
   type CaptionsData,
   type ClipInfo,
   type TrashItem,
+  type FxClip,
   type FxData,
   type FxOverlay,
+  type FxShape,
   type FxTextItem,
   type JobState,
-  type MusicTrack,
   type ProjectState,
   type ReviewOp,
+  type VModeOption,
   type ReviewTask,
   type Shot,
   type TranscriptData,
@@ -35,6 +37,7 @@ import {
   MAX_STACK,
   musicBlocks,
   overlapCount,
+  shapeBlocks,
   speechBlocks,
   stickerBlocks,
   textBlocks,
@@ -45,7 +48,7 @@ import {
 import { BGM_LIST, bgmLabel, bgmUrl } from "@/lib/bgm";
 import { SFX_LIST, sfxUrl } from "@/lib/sfx";
 import { STICKER_LIST, stickerUrl } from "@/lib/stickers";
-import type { CapDraft } from "@/components/panels/types";
+import type { CapDraft, FxStore } from "@/components/panels/types";
 import TopBar from "@/components/TopBar";
 import { type Tab } from "@/components/TabNav";
 import AssetsPanel from "@/components/AssetsPanel";
@@ -61,6 +64,14 @@ import StickerPanel from "@/components/panels/StickerPanel";
 import TranscriptPanel from "@/components/panels/TranscriptPanel";
 import ReviewPanel from "@/components/panels/ReviewPanel";
 import SetupPanel from "@/components/panels/SetupPanel";
+
+/** ก๊อปเอฟเฟกต์รายชิ้นทั้งกองแบบตื้นสองชั้น — draft ต้องไม่ใช้ object เดียวกับ
+ *  ที่โหลดมา ไม่งั้นแก้ค่าแล้ว "ของเดิม" เปลี่ยนตาม แล้วปุ่มย้อนกลับคืนอะไรไม่ได้ */
+function cloneClips(src: Record<string, FxClip> | undefined) {
+  const out: Record<string, FxClip> = {};
+  for (const [k, v] of Object.entries(src ?? {})) out[k] = { ...v };
+  return out;
+}
 
 /** ข้อความไทยประจำรหัสผิดพลาดของ <video> (MediaError.code) */
 const MEDIA_ERR: Record<number, string> = {
@@ -91,6 +102,10 @@ function isWebKit(): boolean {
 export default function Editor() {
   const [proj, setProj] = useState<ProjectState | null>(null);
   const [clips, setClips] = useState<ClipInfo[]>([]);
+  // ตัวเลือกโหมดแนวตั้ง + ค่ากลางของเรื่อง — มาจากเอนจินทั้งชุด หน้าเว็บไม่มี
+  // รายการของตัวเอง จะได้ไม่หลุดจากของจริงตอนเอนจินเพิ่ม/แก้โหมด
+  const [vmodes, setVmodes] = useState<VModeOption[]>([]);
+  const [vmodeDefault, setVmodeDefault] = useState("blur_pad");
   const [offline, setOffline] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -113,13 +128,9 @@ export default function Editor() {
 
   // ── fx (ขั้น 5) เป็น state กลาง — แผงซ้ายกับเลเยอร์บนไทม์ไลน์แก้ก้อนเดียวกัน ──
   const [fxData, setFxData] = useState<FxData | null>(null);
-  const [fxDraft, setFxDraft] = useState<{
-    music: MusicTrack[];
-    texts: FxTextItem[];
-    overlays: FxOverlay[];
-    journey: Record<string, unknown>;
-    auto_sub: { enabled: boolean };
-  } | null>(null);
+  // ทรงเดียวกับ FxStore["draft"] — ประกาศชนิดที่นั่นที่เดียวแล้วยืมมาใช้ ไม่งั้น
+  // เพิ่มชั้นใหม่ทีต้องแก้สองที่ แล้วที่หนึ่งจะลืมทุกครั้ง
+  const [fxDraft, setFxDraft] = useState<FxStore["draft"]>(null);
   const [fxDirty, setFxDirty] = useState(false);
   const [fxSaving, setFxSaving] = useState(false);
   const [capData, setCapData] = useState<CaptionsData | null>(null);
@@ -133,6 +144,7 @@ export default function Editor() {
   const [vis, setVis] = useState<Record<LayerKind, boolean>>({
     text: true,
     sticker: true,
+    shape: true,
     music: true,
     caption: false,
     speech: false,
@@ -263,6 +275,7 @@ export default function Editor() {
         .filter((x) => x.seg),
     [shots],
   );
+
   const usage = useMemo(() => {
     const m = new Map<string, number>();
     for (const s of shots) m.set(s.name, (m.get(s.name) ?? 0) + 1);
@@ -289,6 +302,8 @@ export default function Editor() {
       ]);
       setProj(st);
       setClips(cl.clips);
+      setVmodes(cl.vmodes ?? []);
+      setVmodeDefault(cl.vertical_default || "blur_pad");
       setTrash(tr.items);
       setShots(st.timeline);
       setDirty(false);
@@ -326,6 +341,8 @@ export default function Editor() {
             (d.fx.auto_sub as { enabled?: boolean } | undefined)?.enabled,
           ),
         },
+        clips: cloneClips(d.fx.clips),
+        shapes: (d.fx.shapes ?? []).map((sh) => ({ ...sh })),
       });
       setFxDirty(false);
       clearHistory();
@@ -416,6 +433,8 @@ export default function Editor() {
             (r.fx.fx.auto_sub as { enabled?: boolean } | undefined)?.enabled,
           ),
         },
+        clips: cloneClips(r.fx.fx.clips),
+        shapes: (r.fx.fx.shapes ?? []).map((sh) => ({ ...sh })),
       });
       setFxDirty(false);
       flash("บันทึก fx.json แล้ว — มีผลตอนสร้างไฟล์แบบมีเอฟเฟกต์");
@@ -425,6 +444,72 @@ export default function Editor() {
       setFxSaving(false);
     }
   }, [fxDraft, flash]);
+
+  // ── ช็อตบนไทม์ไลน์ → กุญแจเอฟเฟกต์ของขั้น 5 ──
+  //
+  // **กุญแจมาจากเอนจิน (view.segments[].key) ไม่ใช่ประกอบเองจาก Shot**
+  //
+  // fx.clip_key ผูกกับ (คลิป, ช่วงที่ตัด) ด้วยทศนิยมสามตำแหน่ง ถ้าฝั่งนี้ประกอบ
+  // สตริงเอง วันที่เอนจินเปลี่ยนรูปแบบกุญแจ (หรือปัดคนละแบบ) หน้าเว็บจะเขียน
+  // เอฟเฟกต์ลงกุญแจที่ไม่ตรงกับชิ้นไหนเลย แล้วเงียบ — ค่าถูกบันทึก ไฟล์ออกมา
+  // เหมือนเดิมทุกประการ ไม่มีอะไรฟ้อง  จับคู่ด้วยตัวเลขที่เอนจินพิมพ์มาเองแทน
+  //
+  // ชิ้นที่ยังไม่ได้ตัด (แก้ไทม์ไลน์หลัง render) จะไม่มีกุญแจ — ตั้งใจ เพราะ
+  // เอฟเฟกต์ที่ตั้งไว้กับช่วงเก่าไม่มีผลกับช่วงใหม่อยู่แล้ว
+  const fxKeys = useMemo(() => {
+    const byRange = new Map<string, string>();
+    for (const seg of fxData?.view.segments ?? []) {
+      byRange.set(
+        `${seg.name}|${seg.start.toFixed(3)}|${seg.dur.toFixed(3)}`,
+        seg.key,
+      );
+    }
+    return shots.map(
+      (s) =>
+        byRange.get(`${s.name}|${s.start.toFixed(3)}|${s.dur.toFixed(3)}`) ?? null,
+    );
+  }, [shots, fxData]);
+
+  /** เอฟเฟกต์ของช็อตลำดับนี้ — ค่าตั้งต้นทับด้วยที่ตั้งไว้เอง (เหมือน fx.for_seg) */
+  const fxOfShot = useCallback(
+    (i: number): FxClip | null => {
+      const base = fxData?.defaults.clip;
+      const key = fxKeys[i];
+      if (!base || !key || !fxDraft) return null;
+      return { ...base, ...(fxDraft.clips[key] ?? {}) };
+    },
+    [fxData, fxKeys, fxDraft],
+  );
+
+  /** ตั้งเอฟเฟกต์ให้ช็อตหนึ่ง — ค่าที่กลับไปเท่าค่าตั้งต้นทุกช่องถูกลบกุญแจทิ้ง
+   *  ไม่ใช่เก็บ {speed:1, zoom:1, …} ไว้ ซึ่งจะทำให้ fx.json บวมด้วยชิ้นที่ไม่ได้
+   *  แต่งอะไรเลย และ fx.touched นับผิดจนหน้าเว็บบอกว่ามีชิ้นต้องตัดใหม่ทั้งที่ไม่มี */
+  const setShotFx = useCallback(
+    (i: number, patch: Partial<FxClip>) => {
+      const base = fxData?.defaults.clip;
+      const key = fxKeys[i];
+      const cur = fxOfShot(i);
+      if (!base || !key || !cur || !fxDraft) return;
+      const next = { ...cur, ...patch };
+      const clips = { ...fxDraft.clips };
+      const untouched = (Object.keys(base) as (keyof FxClip)[]).every(
+        (k) => next[k] === base[k],
+      );
+      if (untouched) delete clips[key];
+      else clips[key] = next;
+      patchFx({ clips });
+    },
+    [fxData, fxKeys, fxOfShot, fxDraft, patchFx],
+  );
+
+  /** เอฟเฟกต์ของช็อตที่เส้นหัวเล่นอยู่ — จอตัวอย่างทาสี/ซูม/เร่งความเร็วตามตัวนี้
+   *
+   *  คิดจาก draft ไม่ใช่จากไฟล์ที่บันทึกแล้ว หมุนแถบซูมแล้วภาพจึงขยับทันทีโดย
+   *  ไม่ต้องกดบันทึกก่อน (ท่าเดียวกับ previewCues ของซับขั้น 4) */
+  const playheadFx = useMemo(() => {
+    const i = shots.findIndex((s, k) => playhead < offsets[k] + s.dur);
+    return i < 0 ? null : fxOfShot(i);
+  }, [shots, offsets, playhead, fxOfShot]);
 
   // ── งานฝั่งเอนจิน (render/assemble/scan) ──
   const pollJob = useCallback(async () => {
@@ -1147,11 +1232,14 @@ export default function Editor() {
     () => ({
       text: fxDraft ? textBlocks(fxDraft.texts, shots, offsets) : [],
       sticker: fxDraft ? stickerBlocks(fxDraft.overlays, shots, offsets) : [],
+      shape: fxDraft
+        ? shapeBlocks(fxDraft.shapes, shots, offsets, fxData?.defaults.shape_kind)
+        : [],
       music: fxDraft ? musicBlocks(fxDraft.music, total) : [],
       caption: capData ? captionBlocks(capData.cues) : [],
       speech: speechBlocks(trData, shots, offsets),
     }),
-    [fxDraft, capData, trData, shots, offsets, total],
+    [fxDraft, fxData, capData, trData, shots, offsets, total],
   );
 
   // ซับที่จะ "เห็นจริง" ตามที่แก้ค้างอยู่ — ปิดสวิตช์/ซ่อน cue/แก้คำ/เปลี่ยนสไตล์
@@ -1221,7 +1309,7 @@ export default function Editor() {
   // ข้อมูลให้ตัวอย่างซ้อนสดใน preview — ตัวเลขชุดเดียวกับที่จะถูกเผาตอน render
   const overlayData = useMemo(() => {
     if (!fxDraft) {
-      return { texts: [], stickers: [], cues: previewCues };
+      return { texts: [], stickers: [], shapes: [], cues: previewCues };
     }
     const kindOf = new Map(
       (fxData?.overlay.assets ?? []).map((a) => [a.file, a.kind]),
@@ -1243,6 +1331,9 @@ export default function Editor() {
             idx: b.idx,
           };
         }),
+      shapes: layers.shape
+        .filter((b) => !b.orphan)
+        .map((b) => ({ item: fxDraft.shapes[b.idx], tl: b.tl, idx: b.idx })),
       cues: previewCues,
     };
   }, [layers, fxDraft, fxData, previewCues]);
@@ -1290,7 +1381,12 @@ export default function Editor() {
       }
       const bind = tlToClip(shots, offsets, Math.max(0, tl));
       if (!bind) return flash("ปล่อยนอกช่วงหนัง — ไม่ได้ย้าย");
-      const cur = kind === "text" ? fxDraft.texts[idx] : fxDraft.overlays[idx];
+      const cur =
+        kind === "text"
+          ? fxDraft.texts[idx]
+          : kind === "shape"
+            ? fxDraft.shapes[idx]
+            : fxDraft.overlays[idx];
       const dur =
         mode === "resize"
           ? Math.max(0.2, Math.round(durNew * 100) / 100)
@@ -1311,6 +1407,12 @@ export default function Editor() {
             k === idx ? { ...o, name: bind.name, at: bind.at, dur } : o,
           ),
         });
+      } else if (kind === "shape") {
+        patchFx({
+          shapes: fxDraft.shapes.map((sh, k) =>
+            k === idx ? { ...sh, name: bind.name, at: bind.at, dur } : sh,
+          ),
+        });
       }
     },
     [fxDraft, shots, offsets, layers, total, patchFx, flash],
@@ -1321,6 +1423,16 @@ export default function Editor() {
       if (!fxDraft) return;
       patchFx({
         overlays: fxDraft.overlays.map((o, k) => (k === idx ? { ...o, ...p } : o)),
+      });
+    },
+    [fxDraft, patchFx],
+  );
+
+  const patchShapeAt = useCallback(
+    (idx: number, p: Partial<FxShape>) => {
+      if (!fxDraft) return;
+      patchFx({
+        shapes: fxDraft.shapes.map((sh, k) => (k === idx ? { ...sh, ...p } : sh)),
       });
     },
     [fxDraft, patchFx],
@@ -1339,19 +1451,23 @@ export default function Editor() {
   // ขยับทีละนิดด้วยลูกศร — ค่าที่เห็นบนจอกับใน fx.json เป็นก้อนเดียวกัน
   const nudge = useCallback(
     (dx: number, dy: number) => {
-      if (!focus || (focus.kind !== "text" && focus.kind !== "sticker")) return false;
+      const movable = ["text", "sticker", "shape"];
+      if (!focus || !movable.includes(focus.kind)) return false;
       const cur =
         focus.kind === "sticker"
           ? fxDraft?.overlays[focus.idx]
-          : fxDraft?.texts[focus.idx];
+          : focus.kind === "shape"
+            ? fxDraft?.shapes[focus.idx]
+            : fxDraft?.texts[focus.idx];
       if (!cur) return false;
       const nx = Math.round(Math.min(1, Math.max(0, cur.x + dx)) * 1000) / 1000;
       const ny = Math.round(Math.min(1, Math.max(0, cur.y + dy)) * 1000) / 1000;
       if (focus.kind === "sticker") patchOverlayAt(focus.idx, { x: nx, y: ny });
+      else if (focus.kind === "shape") patchShapeAt(focus.idx, { x: nx, y: ny });
       else patchTextAt(focus.idx, { x: nx, y: ny });
       return true;
     },
-    [focus, fxDraft, patchOverlayAt, patchTextAt],
+    [focus, fxDraft, patchOverlayAt, patchTextAt, patchShapeAt],
   );
 
   const removeLayerItem = useCallback(
@@ -1361,6 +1477,8 @@ export default function Editor() {
       else if (kind === "text") patchFx({ texts: fxDraft.texts.filter((_, k) => k !== idx) });
       else if (kind === "sticker")
         patchFx({ overlays: fxDraft.overlays.filter((_, k) => k !== idx) });
+      else if (kind === "shape")
+        patchFx({ shapes: fxDraft.shapes.filter((_, k) => k !== idx) });
       setFocus(null);
     },
     [fxDraft, patchFx],
@@ -1370,6 +1488,7 @@ export default function Editor() {
   const KIND_TAB: Record<string, Tab> = {
     text: "text",
     sticker: "stickers",
+    shape: "stickers",
     music: "music",
     caption: "text",
     speech: "cc",
@@ -1433,6 +1552,39 @@ export default function Editor() {
       });
       setFocus({ kind: "sticker", idx: fxDraft.overlays.length });
       flash(`วาง ${file} ที่ ${bind.name} — กดบันทึก FX เมื่อจัดเสร็จ`);
+    },
+    [fxDraft, fxData, shots, offsets, layers, patchFx, flash],
+  );
+
+  const addShapeAt = useCallback(
+    (tl: number, kind: string) => {
+      if (!fxDraft || !fxData) return;
+      const bind = tlToClip(shots, offsets, tl);
+      if (!bind) return flash("ตำแหน่งนี้อยู่นอกช่วงหนัง");
+      if (overlapCount(layers.shape, tl, 2.0) >= MAX_STACK) {
+        return flash(`ช่วงนี้มีรูปทรงซ้อนครบ ${MAX_STACK} ชั้นแล้ว`);
+      }
+      patchFx({
+        shapes: [
+          ...fxDraft.shapes,
+          {
+            ...(fxData.defaults.shape as Omit<FxShape, "at" | "dur" | "id" | "name">),
+            kind,
+            // แถบมุมมนเป็นพื้นของชิปตัวเลข ไม่ใช่ของที่ชี้ไปที่อะไร — วางแล้วต้อง
+            // อยู่ใต้ข้อความตั้งแต่แรก ไม่งั้นมันบังสิ่งที่มันมีไว้รองพอดี
+            behind: kind === "rrect",
+            at: bind.at,
+            dur: 2.0,
+            name: bind.name,
+            id: "",
+          },
+        ],
+      });
+      setFocus({ kind: "shape", idx: fxDraft.shapes.length });
+      flash(
+        `วาง${fxData.defaults.shape_kind[kind] ?? kind}ที่ ${bind.name} — ` +
+          "ลากบนจอตัวอย่างเพื่อจัดตำแหน่ง แล้วกดบันทึก",
+      );
     },
     [fxDraft, fxData, shots, offsets, layers, patchFx, flash],
   );
@@ -1789,6 +1941,45 @@ export default function Editor() {
     [flash],
   );
 
+  /** ตั้งโหมดพอดีเฟรมของคลิปหนึ่ง — "" = กลับไปใช้ค่ากลางของเรื่อง
+   *
+   *  ส่งทั้งตารางเสมอด้วยเหตุผลเดียวกับ togglePick: เอนจินเขียนคีย์
+   *  video.vertical_overrides ทับทั้งคีย์ ส่งมาแค่ตัวที่เปลี่ยนแปลว่าตัวอื่นหาย
+   */
+  const setVMode = useCallback(
+    async (c: ClipInfo, mode: string) => {
+      const table: Record<string, string> = {};
+      for (const x of clips) {
+        const v = x.name === c.name ? mode : x.vmode;
+        if (v) table[x.name] = v;
+      }
+      // ตัวที่เพิ่งถูกล้างต้องส่งค่าว่างไปด้วย ไม่ใช่หายไปจากตาราง — เอนจินลบ
+      // บรรทัดทิ้งให้เองเมื่อค่าว่าง (clips.write_keys) แต่ต้องรู้ว่ามีตัวนี้อยู่
+      if (!mode) table[c.name] = "";
+      try {
+        const r = await api.saveClips({ vmodes: table });
+        setClips((prev) =>
+          orderDirty
+            ? prev.map((x) =>
+                x.name === c.name
+                  ? { ...x, vmode: mode, vmode_eff: mode || vmodeDefault }
+                  : x,
+              )
+            : r.clips.clips,
+        );
+        // ชิ้นที่ตัดไว้แล้วถูกตัดใหม่ตอน Export เพราะโหมดฝังอยู่ในกุญแจแคชของชิ้น
+        flash(
+          mode
+            ? `${c.name} → ${vmodes.find((v) => v.value === mode)?.label ?? mode} · กด Export เพื่อตัดใหม่`
+            : `${c.name} กลับไปใช้ค่ากลางของเรื่องแล้ว`,
+        );
+      } catch (e) {
+        flash(e instanceof Error ? e.message : "บันทึกโหมดไม่สำเร็จ");
+      }
+    },
+    [clips, orderDirty, vmodes, vmodeDefault, flash],
+  );
+
   const previewClip = useCallback(
     (c: ClipInfo) => {
       const v = videoRef.current;
@@ -1810,11 +2001,12 @@ export default function Editor() {
       else if (p.type === "bgm") addBgmAt(tl, p.file);
       else if (p.type === "sticker") addStickerAt(tl, p.file);
       else if (p.type === "sticker-sample") addStickerSampleAt(tl, p.file);
+      else if (p.type === "shape") addShapeAt(tl, p.kind);
       else if (p.type === "text-new") addTextAt(tl, p.text);
       else if (p.type === "clip") insertClipAt(tl, p.name);
     },
-    [addMusicAt, addSfxAt, addBgmAt, addStickerAt, addStickerSampleAt, addTextAt,
-     insertClipAt],
+    [addMusicAt, addSfxAt, addBgmAt, addStickerAt, addStickerSampleAt, addShapeAt,
+     addTextAt, insertClipAt],
   );
 
   // ── บันทึก EDL กลับเข้าเอนจิน ──
@@ -1989,6 +2181,10 @@ export default function Editor() {
             onRestore={restoreClip}
             onPurge={purgeClip}
             onTogglePick={togglePick}
+            vmodes={vmodes}
+            vmodeDefault={vmodeDefault}
+            onVMode={setVMode}
+            frame={frame}
             onReorder={reorderClips}
             orderDirty={orderDirty}
             onSaveOrder={saveClipOrder}
@@ -2030,7 +2226,16 @@ export default function Editor() {
             fxs={fxs}
             onPlaceAtPlayhead={(f) => addStickerAt(playhead, f)}
             onPlaceSampleAtPlayhead={(f) => addStickerSampleAt(playhead, f)}
+            onPlaceShapeAtPlayhead={(k) => addShapeAt(playhead, k)}
             focusIdx={focus?.kind === "sticker" ? focus.idx : null}
+            shapeFocusIdx={focus?.kind === "shape" ? focus.idx : null}
+            onPatchShape={patchShapeAt}
+            onRemoveShape={(i) => removeLayerItem("shape", i)}
+            onShapeStageEdit={(i) => {
+              setSel(null);
+              setFocus({ kind: "shape", idx: i });
+              setPosEdit(true);
+            }}
             frame={frame}
             stageEdit={posEdit}
             onStageEdit={(i) => {
@@ -2074,6 +2279,8 @@ export default function Editor() {
           onClearSel={() => setFocus(null)}
           onPatchSticker={patchOverlayAt}
           onPatchText={patchTextAt}
+          onPatchShape={patchShapeAt}
+          clipFx={playheadFx}
         />
         <MusicMixer
           tracks={fxDraft?.music ?? []}
@@ -2103,6 +2310,10 @@ export default function Editor() {
           onRemove={() => sel != null && removeShot(sel)}
           onPlayShot={() => sel != null && play(offsets[sel])}
           onClose={() => setSel(null)}
+          fx={sel != null ? fxOfShot(sel) : null}
+          fxBase={fxData?.defaults.clip ?? null}
+          grade={fxData?.defaults.grade ?? {}}
+          onFx={(p) => sel != null && setShotFx(sel, p)}
         />
       </div>
 

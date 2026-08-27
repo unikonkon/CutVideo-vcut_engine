@@ -76,6 +76,32 @@ export interface ClipInfo {
   picked: boolean;
 }
 
+/** ตัวเลือกหนึ่งตัวของโหมดแนวตั้ง — ข้อความทั้งหมดมาจากเอนจิน (clips.VMODES)
+ *  หน้าเว็บจึงไม่มีรายการของตัวเอง ที่จะหลุดจากของจริงตอนเอนจินเพิ่มโหมดใหม่ */
+export interface VModeOption {
+  value: string;
+  label: string;
+  help: string;
+}
+
+export interface ClipsData {
+  clips: ClipInfo[];
+  rotations: { value: string; label: string }[];
+  vmodes: VModeOption[];
+  /** โหมดแนวตั้งค่ากลางของทั้งเรื่อง — คลิปที่ไม่ได้ตั้งเองใช้ตัวนี้ */
+  vertical_default: string;
+  summary: {
+    total: number;
+    picked: number;
+    vertical: number;
+    horizontal: number;
+    duration: number;
+    custom_order: boolean;
+    order_mode: string;
+    order_reverse: boolean;
+  };
+}
+
 /** ของในถังขยะ — kind "link" คือคลิปที่แค่อ้างอิงไฟล์เดิม ถอดออกไปแค่ตัวลิงก์ */
 export interface TrashItem {
   name: string;
@@ -140,14 +166,20 @@ function post(body: unknown): RequestInit {
 
 export const api = {
   state: () => j<ProjectState>(`${engine}/api/state`),
-  clips: () => j<{ clips: ClipInfo[] }>(`${engine}/api/clips`),
+  clips: () => j<ClipsData>(`${engine}/api/clips`),
   job: (since = 0) => j<JobState>(`${engine}/api/job?since=${since}`),
   runJob: (step: string, force = false) =>
     j<{ ok: boolean }>(`${engine}/api/job`, post({ step, force })),
   stopJob: () => j<{ ok: boolean }>(`${engine}/api/job/stop`, post({})),
   // ส่ง exclude/order เต็มรายการเสมอ — เอนจินเขียนทับทั้งคีย์ ไม่ได้รับเป็นส่วนต่าง
-  saveClips: (payload: { exclude?: string[]; order?: string[] }) =>
-    j<{ ok: boolean; clips: { clips: ClipInfo[] } }>(
+  saveClips: (payload: {
+    exclude?: string[];
+    order?: string[];
+    /** ชื่อคลิป → โหมดแนวตั้ง ("" = ใช้ค่ากลางของเรื่อง) */
+    vmodes?: Record<string, string>;
+    rotations?: Record<string, string>;
+  }) =>
+    j<{ ok: boolean; clips: ClipsData }>(
       `${engine}/api/clips`,
       post(payload),
     ),
@@ -155,7 +187,7 @@ export const api = {
    *  edl.json ให้ด้วย · คลิปที่อ้างอิงไฟล์เดิมจะถอดแค่ตัวลิงก์ ไม่แตะไฟล์ต้นทาง */
   deleteClip: (name: string) =>
     j<{ ok: boolean; deleted: string; kind: "file" | "link"; dropped: number;
-        clips: { clips: ClipInfo[] } }>(
+        clips: ClipsData }>(
       `${engine}/api/clips`,
       post({ delete: name }),
     ),
@@ -307,6 +339,82 @@ export interface FxOverlay {
   name: string;
 }
 
+/** เอฟเฟกต์ของ *ชิ้นหนึ่งในไทม์ไลน์* — ไม่ใช่ของคลิปต้นฉบับ
+ *
+ *  เก็บใน fx.json["clips"] โดยผูกกับกุญแจ `<คลิป>@<เริ่ม>+<ยาว>` ที่เอนจินคิดมา
+ *  ให้ (view.segments[].key) — หน้าเว็บห้ามประกอบกุญแจเอง เพราะกุญแจผูกกับ
+ *  *ช่วงที่ตัด* ไม่ใช่ลำดับ ประกอบคลาดไปหลักมิลลิวินาทีเดียวก็กลายเป็นตั้งค่า
+ *  ให้ชิ้นที่ไม่มีอยู่จริง แล้วเงียบ ไม่มีอะไรฟ้อง
+ */
+export interface FxClip {
+  /** < 1 ช้าลง · > 1 เร็วขึ้น (0.1–8.0) */
+  speed: number;
+  /** 1.0 = เต็มเฟรมตามเดิม (1.0–4.0) — ขยายแล้วครอบกลับ กรอบภาพไม่เปลี่ยน */
+  zoom: number;
+  /** ชื่อโทนสี · "" = ไม่แตะสี */
+  grade: string;
+  mute: boolean;
+  /** ดัง/เบาของชิ้นนี้เทียบกับที่ขั้น 3 ปรับมาแล้ว (−40…+12) */
+  vol_db: number;
+}
+
+/** ชิ้นในไทม์ไลน์ + เอฟเฟกต์ที่ตั้งไว้ — มาจาก view.segments ของเอนจิน */
+export interface FxSegment {
+  name: string;
+  kind: Kind;
+  start: number;
+  dur: number;
+  speed: number;
+  exact_dur: number;
+  /** วินาทีที่ชิ้นนี้เริ่มในหนังของขั้น 5 (หลังคิดความเร็วแล้ว) */
+  at: number;
+  /** ความยาวจริงหลังใส่เอฟเฟกต์ */
+  len: number;
+  key: string;
+  /** ชิ้นนี้ถูกแต่งอะไรไหม — false = ใช้ไฟล์ของขั้น 3 ตรง ๆ ไม่ต้อง render */
+  fx: boolean;
+  effects: FxClip;
+}
+
+/** รูปทรงเวกเตอร์หนึ่งชิ้น — libass วาดเองด้วยโหมด \p ไม่ต้องมีไฟล์ภาพ */
+export interface FxShape {
+  /** arrow | bar | dot | rrect */
+  kind: string;
+  x: number;
+  y: number;
+  /** พิกเซลของหนังจริง */
+  size: number;
+  /** ความหนาเทียบกับ size (0.03–0.9) */
+  thick: number;
+  angle: number;
+  color: string;
+  outline: string;
+  border: number;
+  anim: string;
+  in: number;
+  out: number;
+  /** วาดไว้ข้างหลังข้อความแทนที่จะทับ — แถบมุมมนที่รองตัวเลขต้องติ๊กตัวนี้ */
+  behind: boolean;
+  at: number;
+  dur: number;
+  id: string;
+  name: string;
+}
+
+/** รูปทรงพร้อมเวลาในหนัง + เส้นทางที่เอนจินคำนวณมาแล้ว
+ *
+ *  `path` เป็นพิกัดสัมบูรณ์ยึด (0,0) เป็นกึ่งกลางรูป — ใช้กับ SVG ได้ตรง ๆ
+ *  เพราะโหมด \p ของ libass กับ path ของ SVG นับพิกัดเหมือนกัน  ที่ให้เอนจิน
+ *  คิดรูปให้ ไม่ใช่ให้เบราว์เซอร์คิดเอง เพราะวันหนึ่งลูกศรในพรีวิวจะคนละทรง
+ *  กับในไฟล์ แล้วคนจะเชื่อพรีวิวจนกว่าจะ render เสร็จ
+ */
+export interface FxShapeCue extends FxShape {
+  path: string;
+  a: number | null;
+  b: number | null;
+  orphan?: boolean;
+}
+
 export interface JourneyStop {
   label: string;
   dist: number;
@@ -329,12 +437,13 @@ export interface FxJourney {
 export interface FxData {
   fx: {
     version: number;
-    clips: Record<string, unknown>;
+    clips: Record<string, FxClip>;
     overlays: FxOverlay[];
     music: MusicTrack[];
     journey: FxJourney;
     style: Record<string, unknown>;
     texts: FxTextItem[];
+    shapes: FxShape[];
     [k: string]: unknown;
   };
   defaults: {
@@ -345,9 +454,24 @@ export interface FxData {
     journey: FxJourney;
     stop: JourneyStop;
     style: Record<string, unknown>;
+    /** ค่าตั้งต้นของเอฟเฟกต์รายชิ้น — ทุกตัวแปลว่า "ไม่แตะ" */
+    clip: FxClip;
+    /** ชื่อโทนสี → คำอธิบายไทย ("" = ไม่แตะสี) */
+    grade: Record<string, string>;
+    shape: Omit<FxShape, "at" | "dur" | "id" | "name">;
+    /** arrow → "ลูกศร" ฯลฯ */
+    shape_kind: Record<string, string>;
     [k: string]: unknown;
   };
-  view: { ready: boolean; total: number; cues: unknown[] };
+  view: {
+    ready: boolean;
+    total: number;
+    cues: unknown[];
+    shapes?: FxShapeCue[];
+    segments?: FxSegment[];
+    /** กี่ชิ้นในไทม์ไลน์ที่ถูกแต่ง — ชิ้นพวกนี้ต้องเข้ารหัสภาพเพิ่มหนึ่งรอบ */
+    touched?: number;
+  };
   overlay: {
     assets: { file: string; kind: string; w: number; h: number; bytes: number }[];
     cues: unknown[];
@@ -475,8 +599,19 @@ export interface SetupData {
   project: { path: string; extends: string; raw: string; chain: string[] };
   projects: string[];
   presets: string[];
+  /** สูตรสำเร็จ + ค่าที่จะเขียนจริง — ส่งค่ากลับทาง saveSetup ตัวเดิม
+   *  `skipped` = คีย์ใน preset ที่ฟอร์มตั้งไม่ได้ ต้องใช้ `-c <preset>` จากเทอร์มินัล */
+  recipes?: SetupRecipe[];
   work: string;
   source_ok: boolean;
+}
+
+export interface SetupRecipe {
+  preset: string;
+  label: string;
+  hint: string;
+  values: Record<string, unknown>;
+  skipped: string[];
 }
 
 export const api2 = {

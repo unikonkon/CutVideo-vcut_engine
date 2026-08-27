@@ -6,13 +6,20 @@
 import type {
   CaptionCue,
   FxOverlay,
+  FxShape,
   FxTextItem,
   MusicTrack,
   Shot,
   TranscriptData,
 } from "./api";
 
-export type LayerKind = "text" | "sticker" | "music" | "caption" | "speech";
+export type LayerKind =
+  | "text"
+  | "sticker"
+  | "shape"
+  | "music"
+  | "caption"
+  | "speech";
 
 export interface LayerBlock {
   kind: LayerKind;
@@ -88,6 +95,27 @@ export function stickerBlocks(
       tl: tl ?? 0,
       dur: Math.max(o.dur, 0.2),
       label: o.file || "(ไม่มีไฟล์)",
+      orphan: tl == null,
+    };
+  });
+}
+
+/** รูปทรงบนไทม์ไลน์ — ผูก (คลิป, วินาทีในคลิป) เหมือนข้อความกับภาพซ้อนเป๊ะ
+ *  จึงใช้ clipToTl ตัวเดียวกัน ไม่ต้องมีตัวคำนวณชุดที่สอง */
+export function shapeBlocks(
+  shapes: FxShape[],
+  shots: Shot[],
+  offsets: number[],
+  kindLabel: Record<string, string> = {},
+): LayerBlock[] {
+  return shapes.map((sh, idx) => {
+    const tl = clipToTl(shots, offsets, sh.name, sh.at);
+    return {
+      kind: "shape" as const,
+      idx,
+      tl: tl ?? 0,
+      dur: Math.max(sh.dur, 0.2),
+      label: kindLabel[sh.kind] || sh.kind,
       orphan: tl == null,
     };
   });
@@ -184,6 +212,8 @@ export type DropPayload =
   // เป็นของเพลงคลอ ไม่ใช่ของเสียงสั้น — ดู addBgmAt
   | { type: "bgm"; file: string }
   | { type: "sticker"; file: string }
+  // รูปทรงไม่มีไฟล์ให้อ้าง — libass วาดเอง ชนิดจึงเป็นข้อมูลทั้งหมดที่ต้องส่ง
+  | { type: "shape"; kind: string }
   | { type: "sticker-sample"; file: string }
   | { type: "text-new"; text?: string }
   // คลิปจากคลัง — ต่างจากชนิดอื่นตรงที่ไม่ได้ไปนอนบนชั้นแต่งหนัง แต่แทรกเป็นชิ้น

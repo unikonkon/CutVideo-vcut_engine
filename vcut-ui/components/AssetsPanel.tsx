@@ -17,6 +17,7 @@ import {
   Link2,
   Loader2,
   Plus,
+  Proportions,
   RotateCcw,
   Rows3,
   Save,
@@ -28,10 +29,12 @@ import {
 } from "lucide-react";
 import {
   checkClip,
+  engine,
   thumbUrl,
   uploadClip,
   type ClipInfo,
   type TrashItem,
+  type VModeOption,
 } from "@/lib/api";
 import { DND_MIME } from "@/lib/layers";
 import { dur } from "@/lib/time";
@@ -120,6 +123,132 @@ const dateShort = (sec: number) =>
       })
     : "—";
 
+/** เลือกโหมดพอดีเฟรมของคลิปหนึ่ง — ตัวอย่างสามช่องเป็นวิดีโอจริงจากเอนจิน
+ *
+ *  **ทำไมเป็นวิดีโอ ไม่ใช่ภาพนิ่งที่ CSS จำลองเอา**
+ *
+ *  เอนจินมี /preview/<คลิป>/<โหมด> ที่ตัดสามวินาทีกลางคลิปด้วย build_vfilter
+ *  *ตัวเดียวกับตอน render จริง* แล้วแคชไว้ — ที่เห็นจึงเป็นสิ่งที่จะได้จริง
+ *  รวมทั้งความแรงของเบลอกับความสว่างที่ลดลงของพื้นหลัง ซึ่งจำลองด้วย CSS ไม่ได้
+ *  และเป็นตัวตัดสินว่าจะเลือกขอบเบลอหรือขอบดำเกือบทุกครั้ง
+ *
+ *  **ทำไมเป็นกล่องลอยกลางจอ ไม่ใช่ป๊อปโอเวอร์ที่เกาะการ์ด**
+ *
+ *  แผงคลังคลิปเลื่อนได้ (overflow) ซึ่งตัดทุกอย่างที่ล้นออกนอกกรอบ — ป๊อปโอเวอร์
+ *  ที่เกาะการ์ดใบซ้ายสุดจึงถูกเฉือนหายไปครึ่งใบ  และตัวอย่างสามช่องของหนังแนวตั้ง
+ *  ต้องการที่กว้างกว่าแผงอยู่แล้ว
+ */
+function VModePicker({
+  clip,
+  modes,
+  fallback,
+  frameAR,
+  onPick,
+  onClose,
+}: {
+  clip: ClipInfo;
+  modes: VModeOption[];
+  /** โหมดที่ใช้อยู่เมื่อคลิปนี้ไม่ได้ตั้งเอง */
+  fallback: string;
+  frameAR: number;
+  onPick: (mode: string) => void;
+  onClose: () => void;
+}) {
+  // เอนจินตัดตัวอย่างตอนถูกขอครั้งแรก (สามวินาที ผ่านฟิลเตอร์เต็มชุด) ซึ่งกินเวลา
+  // หลายวินาที — ถ้าไม่บอกอะไรเลย สามช่องจะเป็นจอดำนิ่ง ๆ ที่อ่านว่า "พัง"
+  const [ready, setReady] = useState<Record<string, boolean>>({});
+  // สูง 200px คือที่ที่หนังแนวตั้งต้องการ ส่วนแนวนอนจะเตี้ยกว่านั้นเอง
+  const boxH = 200;
+
+  return (
+    <div
+      // z สูงกว่าแผงมิกเซอร์ (z-60) แต่ต่ำกว่าชั้นทูลทิป (z-200) — แผงหลักของหน้า
+      // ซ้อนกันอยู่หลายชั้น กล่องที่ z ต่ำกว่านั้นจะไปโผล่ *ใต้* จอตัวอย่าง
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-full w-auto overflow-y-auto rounded-xl border border-line bg-panel p-3 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-1 flex items-center gap-3">
+          <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink">
+            {clip.name}
+            <span className="ml-1.5 font-mono text-[11px] text-faint">
+              {clip.w}×{clip.h}
+            </span>
+          </span>
+          <button onClick={onClose} className="rounded p-0.5 text-muted hover:text-ink">
+            <X size={13} />
+          </button>
+        </div>
+        <p className="mb-2.5 text-[11px] leading-4 text-muted">
+          คลิปนี้สัดส่วนไม่ตรงผืนหนัง — เลือกว่าจะเอาส่วนที่ไม่พอดีไปไว้ตรงไหน
+          <span className="text-faint"> · ตัวอย่างตัดด้วยฟิลเตอร์ชุดเดียวกับตอนสร้างไฟล์จริง</span>
+        </p>
+        <div className="flex gap-2">
+          {modes.map((m) => {
+            const on = clip.vmode === m.value;
+            return (
+              <button
+                key={m.value}
+                onClick={() => {
+                  onPick(m.value);
+                  onClose();
+                }}
+                title={m.help}
+                className={`flex w-52 flex-col gap-1.5 rounded-lg border p-2 text-left ${
+                  on ? "border-accent bg-accent/10" : "border-line hover:bg-panel-2"
+                }`}
+              >
+                <div
+                  className="relative self-center overflow-hidden rounded bg-black"
+                  style={{ height: boxH, width: boxH * frameAR }}
+                >
+                  <video
+                    src={`${engine}/preview/${clip.name}/${m.value}`}
+                    muted
+                    loop
+                    autoPlay
+                    playsInline
+                    preload="auto"
+                    onLoadedData={() => setReady((r) => ({ ...r, [m.value]: true }))}
+                    className="h-full w-full object-contain"
+                  />
+                  {!ready[m.value] && (
+                    <span className="absolute inset-0 flex items-center justify-center gap-1.5 text-[10.5px] text-muted">
+                      <Loader2 size={12} className="animate-spin" /> กำลังทำตัวอย่าง…
+                    </span>
+                  )}
+                </div>
+                <span className="flex items-center gap-1 text-[11.5px] text-ink">
+                  {m.label}
+                  {on && <Check size={12} className="text-accent" />}
+                  {!clip.vmode && m.value === fallback && (
+                    <span className="text-[10px] text-faint">· ค่ากลาง</span>
+                  )}
+                </span>
+                <span className="text-[10px] leading-3.5 text-faint">{m.help}</span>
+              </button>
+            );
+          })}
+        </div>
+        {clip.vmode && (
+          <button
+            onClick={() => {
+              onPick("");
+              onClose();
+            }}
+            className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg py-1.5 text-[11.5px] text-muted hover:bg-panel-2 hover:text-ink"
+          >
+            <RotateCcw size={12} /> กลับไปใช้ค่ากลางของเรื่อง
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AssetsPanel({
   clips,
   usage,
@@ -132,6 +261,10 @@ export default function AssetsPanel({
   onRestore,
   onPurge,
   onTogglePick,
+  vmodes,
+  vmodeDefault,
+  onVMode,
+  frame,
   onReorder,
   orderDirty,
   onSaveOrder,
@@ -150,6 +283,11 @@ export default function AssetsPanel({
   onRestore: (name: string) => void;
   onPurge: (name?: string) => void;
   onTogglePick: (clip: ClipInfo) => void;
+  vmodes: VModeOption[];
+  vmodeDefault: string;
+  onVMode: (clip: ClipInfo, mode: string) => void;
+  /** ขนาดผืนหนัง — ใช้ตัดสินว่าคลิปไหน "ไม่พอดี" จนต้องเลือกโหมด */
+  frame: { w: number; h: number } | null;
   onReorder: (from: number, to: number) => void;
   orderDirty: boolean;
   onSaveOrder: () => void;
@@ -170,6 +308,9 @@ export default function AssetsPanel({
   const [barOpen, setBarOpen] = useState(false);
   const [arranging, setArranging] = useState(false);
   const [askExit, setAskExit] = useState(false);
+  const [vmodeFor, setVmodeFor] = useState<string | null>(null);
+  // สัดส่วนของผืนหนัง — คลิปที่ต่างจากนี้คือคลิปที่ต้องเลือกว่าจะเติม/ครอปตรงไหน
+  const frameAR = (frame?.w || 1920) / (frame?.h || 1080);
   const [look, setLook] = usePref<Look>(
     KEY_LOOK,
     "small",
@@ -378,6 +519,20 @@ export default function AssetsPanel({
           : "\nคลิก = ดูตัวอย่าง · ลากไปไทม์ไลน์ = แทรกตรงจุดที่ปล่อย"),
     };
 
+    // "พอดี" = สัดส่วนต่างจากผืนหนังไม่ถึง 1% — คลิปที่พอดีอยู่แล้วไม่ต้องเลือก
+    // อะไร ทั้งสามโหมดให้ภาพเดียวกันเป๊ะ ปุ่มจึงไม่ควรโผล่มากินที่
+    const fits = Math.abs(c.w / c.h - frameAR) / frameAR < 0.01;
+    const picker = vmodeFor === c.name && (
+      <VModePicker
+        clip={c}
+        modes={vmodes}
+        fallback={vmodeDefault}
+        frameAR={frameAR}
+        onPick={(m) => onVMode(c, m)}
+        onClose={() => setVmodeFor(null)}
+      />
+    );
+
     const grip = arranging && (
       <div
         className={
@@ -408,6 +563,30 @@ export default function AssetsPanel({
         >
           <Plus size={13} />
         </button>
+        {!fits && vmodes.length > 0 && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setVmodeFor(vmodeFor === c.name ? null : c.name);
+            }}
+            title={
+              `สัดส่วนไม่ตรงผืนหนัง — ตอนนี้ใช้ "` +
+              `${vmodes.find((m) => m.value === c.vmode_eff)?.label ?? c.vmode_eff}"` +
+              (c.vmode ? " (ตั้งเอง)" : " (ค่ากลางของเรื่อง)")
+            }
+            className={`flex h-6 w-6 items-center justify-center rounded-md ${
+              row
+                ? c.vmode
+                  ? "text-accent hover:bg-panel-3"
+                  : "text-muted hover:bg-panel-3 hover:text-ink"
+                : c.vmode
+                  ? "bg-accent/90 text-white"
+                  : "bg-black/70 text-white hover:bg-panel-3"
+            }`}
+          >
+            <Proportions size={13} />
+          </button>
+        )}
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -515,6 +694,7 @@ export default function AssetsPanel({
           </div>
           {tools}
           {grip}
+          {picker}
           {confirm}
         </div>
       );
@@ -558,6 +738,7 @@ export default function AssetsPanel({
           )}
           {tools}
           {grip}
+          {picker}
         </div>
         {grid?.label ? (
           <div

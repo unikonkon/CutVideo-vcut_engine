@@ -534,6 +534,10 @@ def build_setup(ctx):
                     "chain": [Path(x).name for x in ctx.get("_meta.config_files", [])]},
         "projects": settings.project_files(),
         "presets": settings.preset_names(),
+        # สูตรสำเร็จ + ค่าที่มันจะเขียนจริง — ปุ่มในหน้าเว็บส่งค่าชุดนี้กลับมาทาง
+        # /api/setup ตัวเดิม ไม่ต้องมีปลายทางใหม่ และผ่านด่านตรวจชุดเดียวกับที่
+        # คนกรอกฟอร์มเองต้องผ่าน
+        "recipes": settings.recipe_view(),
         "work": str(ctx.work),
         "source_ok": ctx.source.is_dir(),
     }

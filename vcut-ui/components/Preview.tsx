@@ -24,9 +24,13 @@ import { LAYOUT_GROUPS, ratioLabel } from "@/lib/layouts";
 import {
   assetUrl,
   type CaptionCue,
+  type FxClip,
   type FxOverlay,
+  type FxShape,
   type FxTextItem,
 } from "@/lib/api";
+import { GRADE_STEPS, gradeFilter, gradeFilterId } from "@/lib/grade";
+import { assPathToSvg, shapePath } from "@/lib/shapes";
 import { tc } from "@/lib/time";
 
 const FITS = [
@@ -42,10 +46,11 @@ const REF_H = 1080;
 export interface OverlayData {
   texts: { item: FxTextItem; tl: number; idx: number }[];
   stickers: { item: FxOverlay; tl: number; kind: string; idx: number }[];
+  shapes: { item: FxShape; tl: number; idx: number }[];
   cues: CaptionCue[];
 }
 
-export type StageKind = "text" | "sticker";
+export type StageKind = "text" | "sticker" | "shape";
 type DragMode = "move" | "resize" | "rotate";
 
 /** สิ่งที่จำไว้ตอนเริ่มลาก — ทุกก้าวคิดจากค่าตั้งต้นนี้ ไม่ใช่สะสมทีละ delta
@@ -121,7 +126,7 @@ function TextOv({
   refH: number;
   edit: boolean;
   sel: boolean;
-  onDown: (mode: DragMode, e: ReactPointerEvent<HTMLElement>) => void;
+  onDown: (mode: DragMode, e: ReactPointerEvent<Element>) => void;
 }) {
   const s = H / refH;
   const p = ph - tl;
@@ -191,6 +196,125 @@ function TextOv({
   );
 }
 
+/** ประกาศฟิลเตอร์โทนสีทั้งชุดครั้งเดียวต่อหน้า — <svg> ขนาดศูนย์ที่ไม่กินที่
+ *  และไม่รับคลิก มีไว้ให้ url(#…) ของ CSS filter อ้างถึงได้เท่านั้น */
+function GradeDefs() {
+  return (
+    <svg aria-hidden width={0} height={0} style={{ position: "absolute" }}>
+      <defs>
+        {Object.entries(GRADE_STEPS).map(([name, steps]) => (
+          // sRGB ไม่ใช่ linearRGB (ค่าตั้งต้นของ SVG) — ffmpeg คิดบนค่าที่เก็บ
+          // ในไฟล์ตรง ๆ ปล่อยให้เบราว์เซอร์แปลงเป็นเชิงเส้นก่อนจะได้คนละภาพ
+          <filter key={name} id={gradeFilterId(name)} colorInterpolationFilters="sRGB">
+            {steps.map((st, i) =>
+              st.matrix ? (
+                <feColorMatrix key={i} type="matrix" values={st.matrix.join(" ")} />
+              ) : st.saturate !== undefined ? (
+                <feColorMatrix key={i} type="saturate" values={String(st.saturate)} />
+              ) : (
+                <feComponentTransfer key={i}>
+                  <feFuncR type="gamma" exponent={st.gamma} />
+                  <feFuncG type="gamma" exponent={st.gamma} />
+                  <feFuncB type="gamma" exponent={st.gamma} />
+                </feComponentTransfer>
+              ),
+            )}
+          </filter>
+        ))}
+      </defs>
+    </svg>
+  );
+}
+
+/** รูปทรงทั้งชั้นในผืนเดียว — vieBox เป็นพิกเซลของหนังจริง จึงวางด้วยตัวเลขชุด
+ *  เดียวกับที่เอนจินเขียนลง ASS ไม่ต้องแปลงหน่วยที่ไหนเลย
+ *
+ *  แยกเป็นสอง <svg> ตาม `behind` แทนที่จะเรียงลำดับใน svg เดียว เพราะชั้นที่ต้อง
+ *  แทรกระหว่างกลางคือ *ข้อความ* ซึ่งเป็น DOM คนละก้อน — แถบมุมมนที่ทำหน้าที่เป็น
+ *  พื้นของชิปตัวเลขต้องอยู่ใต้ตัวเลข ไม่งั้นมันบังสิ่งที่มันมีไว้รองพอดี
+ */
+function ShapeLayer({
+  items,
+  ph,
+  fw,
+  fh,
+  W,
+  H,
+  edit,
+  focusIdx,
+  onDown,
+}: {
+  items: { item: FxShape; tl: number; idx: number }[];
+  ph: number;
+  fw: number;
+  fh: number;
+  W: number;
+  H: number;
+  edit: boolean;
+  focusIdx: number | null;
+  onDown: (idx: number, mode: DragMode, e: ReactPointerEvent<Element>) => void;
+}) {
+  if (!items.length) return null;
+  return (
+    <svg
+      viewBox={`0 0 ${fw} ${fh}`}
+      width={W}
+      height={H}
+      className="absolute inset-0"
+      style={{ pointerEvents: "none", overflow: "visible" }}
+    >
+      {items.map(({ item: sh, tl, idx }) => {
+        const p = ph - tl;
+        const q = tl + sh.dur - ph;
+        const fade = sh.anim === "none" ? 1 : fadeOpacity(p, q, sh.in, sh.out);
+        // pop = ย่อ→ใหญ่เกิน→พอดี · ตัวเลขชุดเดียวกับที่ fxtext.anim_tags ใช้
+        const pop =
+          sh.anim === "pop" && sh.in > 0 && p < sh.in
+            ? 0.72 + 0.38 * Math.min(1, p / sh.in) -
+              0.1 * Math.max(0, 1 - Math.abs(p / sh.in - 0.75) * 4)
+            : 1;
+        // \frz หมุนทวนเข็ม · rotate() ของ SVG หมุนตามเข็ม จึงต้องกลับเครื่องหมาย
+        const tf =
+          `translate(${sh.x * fw} ${sh.y * fh}) rotate(${-(sh.angle || 0)})` +
+          (pop === 1 ? "" : ` scale(${pop})`);
+        return (
+          <g
+            key={idx}
+            transform={tf}
+            // ชิ้นที่เลือกอยู่ต้องเห็นเสมอ ไม่ใช่แค่ตอนเปิดโหมดแก้ตำแหน่ง — วางรูป
+            // ที่หัวเล่นพอดีแปลว่า p=0 ซึ่งเป็นวินาทีแรกของการเฟดเข้า ความจาง
+            // จึงเป็นศูนย์เป๊ะ  ถ้าไม่ยกพื้นให้ คนกดวางแล้วจอไม่มีอะไรเปลี่ยนเลย
+            // แล้วจะกดซ้ำอีกหลายครั้งก่อนจะรู้ว่ามันวางไปแล้วทุกครั้ง
+            opacity={edit || focusIdx === idx ? Math.max(fade, 0.4) : fade}
+            style={{ pointerEvents: edit ? "auto" : "none", cursor: edit ? "move" : "default" }}
+            onPointerDown={(e) => edit && onDown(idx, "move", e)}
+          >
+            <path
+              d={assPathToSvg(shapePath(sh.kind, sh.size, sh.thick))}
+              fill={sh.color}
+              stroke={sh.border > 0 ? sh.outline : "none"}
+              // \bord วาดขอบ *นอก* รูป ส่วน stroke ของ SVG คร่อมเส้นขอบครึ่ง-ครึ่ง
+              // — คูณสองแล้วให้ fill ทับทีหลัง (paint-order) ได้ขอบนอกหนาเท่าที่สั่ง
+              strokeWidth={sh.border * 2}
+              paintOrder="stroke"
+              strokeLinejoin="round"
+            />
+            {focusIdx === idx && (
+              <path
+                d={assPathToSvg(shapePath(sh.kind, sh.size, sh.thick))}
+                fill="none"
+                stroke="var(--accent)"
+                strokeWidth={Math.max(2, fw / 500)}
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 function StickerOv({
   o,
   kind,
@@ -210,7 +334,7 @@ function StickerOv({
   H: number;
   edit: boolean;
   sel: boolean;
-  onDown: (mode: DragMode, e: ReactPointerEvent<HTMLElement>) => void;
+  onDown: (mode: DragMode, e: ReactPointerEvent<Element>) => void;
 }) {
   const p = ph - tl;
   const q = tl + o.dur - ph;
@@ -361,6 +485,8 @@ export default function Preview({
   onClearSel,
   onPatchSticker,
   onPatchText,
+  onPatchShape,
+  clipFx,
 }: {
   videoRef: RefObject<HTMLVideoElement | null>;
   stageRef: RefObject<HTMLDivElement | null>;
@@ -379,6 +505,9 @@ export default function Preview({
   onClearSel: () => void;
   onPatchSticker: (idx: number, p: Partial<FxOverlay>) => void;
   onPatchText: (idx: number, p: Partial<FxTextItem>) => void;
+  onPatchShape: (idx: number, p: Partial<FxShape>) => void;
+  /** เอฟเฟกต์ของช็อตที่เส้นหัวเล่นอยู่ — null = ยังไม่รู้ (ยังไม่ได้ตัดชิ้น) */
+  clipFx: FxClip | null;
 }) {
   const frameRef = useRef<HTMLDivElement>(null);
   const drag = useRef<Drag | null>(null);
@@ -425,19 +554,27 @@ export default function Preview({
   const activeStickers = overlay.stickers.filter(
     ({ item, tl }) => ph >= tl && ph < tl + item.dur,
   );
+  const activeShapes = overlay.shapes.filter(
+    ({ item, tl }) => ph >= tl && ph < tl + item.dur,
+  );
   const activeCue = overlay.cues.find((c) => ph >= c.a && ph < c.b) ?? null;
 
   // ── ลาก/ย่อขยาย/หมุน บนจอตัวอย่าง ──
   // ทุกอย่างคิดเป็น "สัดส่วนของเฟรม" ตั้งแต่ต้น ค่าที่ได้จึงเป็นตัวเลขชุดเดียว
   // กับที่ ffmpeg เอาไปใช้ตอน render — ย้ายบนจอเล็กแล้วออกมาตรงกันที่ 4K
   const startDrag = useCallback(
-    (kind: StageKind, idx: number, mode: DragMode, e: ReactPointerEvent<HTMLElement>) => {
-      const box = e.currentTarget.closest("[data-ov]") as HTMLElement | null;
-      const el = box ?? e.currentTarget;
+    (kind: StageKind, idx: number, mode: DragMode, e: ReactPointerEvent<Element>) => {
+      // รูปทรงเป็น <g> ของ SVG ซึ่งไม่มี offsetWidth/Height — ค่าที่จำไว้ตอนเริ่ม
+      // ลากใช้แค่ตอนย่อขยาย ซึ่งเปิดให้เฉพาะภาพซ้อน (ดูเหตุผลที่ onStageMove)
+      // ศูนย์จึงไม่ทำให้อะไรพัง และไม่ต้องแยกทางเดินสองสายให้ตัวจับลาก
+      const box = e.currentTarget.closest("[data-ov]");
+      const el = (box ?? e.currentTarget) as Partial<HTMLElement>;
       const item =
         kind === "sticker"
           ? overlay.stickers.find((x) => x.idx === idx)?.item
-          : overlay.texts.find((x) => x.idx === idx)?.item;
+          : kind === "shape"
+            ? overlay.shapes.find((x) => x.idx === idx)?.item
+            : overlay.texts.find((x) => x.idx === idx)?.item;
       if (!item) return;
       e.preventDefault();
       e.stopPropagation();
@@ -458,8 +595,8 @@ export default function Preview({
         y0: item.y,
         w0: kind === "sticker" ? (item as FxOverlay).width : 0,
         a0: item.angle || 0,
-        ew: el.offsetWidth,
-        eh: el.offsetHeight,
+        ew: el.offsetWidth ?? 0,
+        eh: el.offsetHeight ?? 0,
       };
     },
     [overlay, onSelect],
@@ -470,7 +607,16 @@ export default function Preview({
       const d = drag.current;
       const r = frameRef.current?.getBoundingClientRect();
       if (!d || !r || W <= 0) return;
-      const patch = d.kind === "sticker" ? onPatchSticker : onPatchText;
+      // รูปทรงย้ายกับหมุนได้บนเวที แต่ *ย่อขยายไม่ได้* — ขนาดของมันเป็นพิกเซล
+      // ของหนังจริง (ไม่ใช่สัดส่วนจอแบบภาพซ้อน) ลากมุมแล้วเลขที่ได้จะขึ้นกับว่า
+      // จอตัวอย่างย่อไว้เท่าไร ซึ่งไม่ใช่สิ่งที่ใครคาดจากปุ่มลาก · ตั้งที่ช่อง
+      // "ขนาด" ในแผงแทน ที่นั่นเห็นตัวเลขจริง
+      const patch =
+        d.kind === "sticker"
+          ? onPatchSticker
+          : d.kind === "shape"
+            ? onPatchShape
+            : onPatchText;
 
       if (d.mode === "move") {
         let nx = d.x0 + (e.clientX - d.px) / W;
@@ -549,7 +695,7 @@ export default function Preview({
         setReadout(`หมุน ${(Math.round(ang * 10) / 10).toFixed(1)}°`);
       }
     },
-    [W, H, onPatchSticker, onPatchText],
+    [W, H, onPatchSticker, onPatchText, onPatchShape],
   );
 
   const endDrag = useCallback(() => {
@@ -561,6 +707,31 @@ export default function Preview({
   useEffect(() => {
     if (!edit) endDrag();
   }, [edit, endDrag]);
+
+  // ── เอฟเฟกต์รายชิ้นที่ต้องสั่งตัวเล่น ไม่ใช่แค่ทาสีทับ ──
+  //
+  // **ความเร็วปลอดภัยกับเส้นหัวเล่น** — playbackRate เปลี่ยนแค่ว่าเวลาในสื่อ
+  // เดินเร็วแค่ไหนเทียบกับเวลาจริง ส่วน currentTime ยังนับเป็นวินาทีของสื่อเหมือน
+  // เดิม  ตัวที่คำนวณเส้นหัวเล่น (page.elapsed) อ่าน currentTime ตรง ๆ จึงยัง
+  // ตรงกับไทม์ไลน์ของขั้น 3 ทุกโหมด สโลว์โมจึงพรีวิวได้โดยไม่มีอะไรเลื่อน
+  //
+  // สิ่งที่ *ไม่* ตรงคือความยาวรวม: ไทม์ไลน์ยังยาวเท่าขั้น 3 ส่วนไฟล์ของขั้น 5
+  // จะยาวกว่าตามความเร็วที่ตั้ง — เอนจินเองก็เก็บสองแผน (render.json กับ
+  // fx-render.json) ด้วยเหตุผลเดียวกันเป๊ะ แผงคุณสมบัติจึงบอกความยาวใหม่ไว้ให้
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const sp = clipFx?.speed ?? 1;
+    // ตัวเล่นรับ 0.0625–16 เท่านั้น นอกช่วงนั้นบางเบราว์เซอร์โยน error ทิ้งทั้ง
+    // การเล่น — หนีบไว้ดีกว่าจอค้างโดยไม่มีอะไรบอก (ช่วงของเอนจินคือ 0.1–8 อยู่แล้ว)
+    v.playbackRate = Math.min(16, Math.max(0.0625, sp));
+    v.muted = Boolean(clipFx?.mute);
+    // vol_db → อัตราส่วนความดัง · เกิน 0 dB ตัวเล่นทำไม่ได้ (เพดานคือ 1.0)
+    // ตัวจริงทำได้เพราะ ffmpeg มีที่ว่างเหนือระดับที่ปรับมา — พรีวิวจึงได้แค่
+    // "ไม่ดังขึ้น" ซึ่งยังบอกทิศทางถูก ต่างจากการทำเสียงแตกให้ฟัง
+    const db = clipFx?.vol_db ?? 0;
+    v.volume = Math.min(1, Math.pow(10, Math.min(0, db) / 20));
+  }, [videoRef, clipFx?.speed, clipFx?.mute, clipFx?.vol_db]);
 
   return (
     <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-line bg-panel">
@@ -584,12 +755,32 @@ export default function Preview({
             // currentTime ให้ไปโชว์เฟรมนั้นค้างไว้ ถ้าไม่โหลดจะได้จอดำ
             preload="auto"
             className="h-full w-full"
-            style={{ objectFit: fit.v }}
+            style={{
+              objectFit: fit.v,
+              // ซูมของเอนจินคือ "ขยายแล้วครอบกลับให้เท่าเดิม" — กรอบไม่เปลี่ยน
+              // ภาพโตขึ้นรอบจุดกึ่งกลาง  scale() รอบ center ให้ผลเดียวกันเป๊ะ
+              // (กรอบผืนหนังตั้ง overflow-hidden ไว้แล้ว จึงครอบให้เอง)
+              transform:
+                clipFx && clipFx.zoom > 1 ? `scale(${clipFx.zoom})` : undefined,
+              filter: gradeFilter(clipFx?.grade) || undefined,
+            }}
             onClick={() => (edit ? onClearSel() : onToggle())}
           />
+          <GradeDefs />
           {/* ชั้นซ้อนสด — ตัวเลขชุดเดียวกับที่ ffmpeg จะเผาใน render ขั้น 5 */}
           {showOv && W > 0 && (
             <div className="pointer-events-none absolute inset-0 overflow-hidden">
+              <ShapeLayer
+                items={activeShapes.filter((x) => x.item.behind)}
+                ph={ph}
+                fw={fw}
+                fh={fh}
+                W={W}
+                H={H}
+                edit={edit}
+                focusIdx={focus?.kind === "shape" ? focus.idx : null}
+                onDown={(idx, m, e) => startDrag("shape", idx, m, e)}
+              />
               {activeTexts.map(({ item, tl, idx }) => (
                 <TextOv
                   key={`t${idx}`}
@@ -618,6 +809,17 @@ export default function Preview({
                   onDown={(m, e) => startDrag("sticker", idx, m, e)}
                 />
               ))}
+              <ShapeLayer
+                items={activeShapes.filter((x) => !x.item.behind)}
+                ph={ph}
+                fw={fw}
+                fh={fh}
+                W={W}
+                H={H}
+                edit={edit}
+                focusIdx={focus?.kind === "shape" ? focus.idx : null}
+                onDown={(idx, m, e) => startDrag("shape", idx, m, e)}
+              />
               {activeCue && <CueOv c={activeCue} W={W} H={H} refH={refH} />}
             </div>
           )}

@@ -31,13 +31,16 @@ ROTATIONS = [
     ("transpose=2", "หมุนซ้าย 90°"),
     ("transpose=1,transpose=1", "กลับหัว 180°"),
 ]
+# คำอธิบายเขียนแบบไม่ผูกทิศ เพราะผืนหนังเป็นแนวตั้งก็ได้ (โปรเจกต์ TikTok/Reels)
+# — ตอนนั้นที่ว่างไปอยู่ *บน-ล่าง* ไม่ใช่สองข้าง และ crop ตัด *สองข้าง* ไม่ใช่
+# หัว-เท้า  ข้อความเดิมบอกทิศไว้ตายตัวจึงกลายเป็นคำอธิบายที่ผิดทันทีที่เปลี่ยนผืน
 VMODES = [
-    ("blur_pad", "เต็มความสูง ด้านข้างเบลอ",
-     "ไม่ย่อภาพ เห็นรายละเอียดเต็ม ๆ ที่ว่างสองข้างเติมด้วยภาพเดียวกันที่เบลอไว้"),
-    ("pillarbox", "ย่อทั้งภาพ แถบดำสองข้าง",
-     "เห็นครบทั้งเฟรมเหมือนต้นฉบับ แต่ภาพเล็กลงเพราะต้องย่อให้พอดีความสูง"),
+    ("blur_pad", "เต็มเฟรม ขอบเบลอ",
+     "ไม่ครอปอะไรทิ้ง เห็นภาพครบทั้งเฟรม ที่ว่างรอบ ๆ เติมด้วยภาพเดียวกันที่เบลอไว้"),
+    ("pillarbox", "เต็มเฟรม ขอบดำ",
+     "เห็นครบเหมือนต้นฉบับเหมือนกัน แต่ที่ว่างเป็นสีดำ ภาพจึงดูเล็กกว่าแบบขอบเบลอ"),
     ("crop", "ครอปเต็มจอ",
-     "เต็มจอ 16:9 ไม่มีที่ว่าง แต่หัวกับเท้าโดนตัดทิ้ง"),
+     "เต็มจอ ไม่มีที่ว่างเลย แลกกับขอบที่ล้นออกนอกผืนถูกตัดทิ้ง"),
 ]
 ROT_OK = {v for v, _ in ROTATIONS}
 VMODE_OK = {v for v, _, _ in VMODES}
@@ -197,7 +200,18 @@ def save(ctx, rel, payload):
     if not known:
         return None, "ยังไม่มี manifest — อ่านคลิปทั้งโฟลเดอร์ก่อน"
 
-    excl = sorted(n for n in (payload.get("exclude") or []) if n in known)
+    # **คีย์ที่ไม่ได้ส่งมา = ไม่แตะ ไม่ใช่ "ตั้งเป็นค่าว่าง"**
+    #
+    # เดิม exclude อ่านด้วย `payload.get("exclude") or []` แล้วเขียนลงไฟล์เสมอ
+    # ซึ่งแปลว่าคำขอที่มาแก้ *เรื่องอื่น* (เช่นตั้งโหมดพอดีเฟรมของคลิปเดียว) ลบ
+    # รายการ "คลิปที่พักไว้" ทิ้งทั้งชุดโดยไม่มีอะไรบอก — คลิปที่คัดออกไว้ 9 ตัว
+    # กลับเข้าหนังหมดในคำขอที่ผู้ใช้คิดว่าแค่เปลี่ยนโหมดภาพของคลิปเดียว
+    #
+    # order ทำถูกอยู่แล้ว (เช็ก is not None) ตรงนี้แค่ทำให้เหมือนกัน  ผู้เรียกที่
+    # ตั้งใจล้างรายการยังทำได้ตามเดิมด้วยการส่ง [] มาตรง ๆ
+    excl = None
+    if payload.get("exclude") is not None:
+        excl = sorted(n for n in payload["exclude"] if n in known)
     rots = {k: str(v or "") for k, v in (payload.get("rotations") or {}).items()
             if k in known}
     vmodes = {k: str(v or "") for k, v in (payload.get("vmodes") or {}).items()
@@ -209,7 +223,7 @@ def save(ctx, rel, payload):
     if bad_v:
         return None, f"โหมดแนวตั้งไม่ถูกต้อง: {', '.join(bad_v)}"
 
-    values = {"scan.exclude": excl}
+    values = {} if excl is None else {"scan.exclude": excl}
     for tbl, vals in (("scan.rotation_overrides", rots),
                       ("video.vertical_overrides", vmodes)):
         for name, v in vals.items():
@@ -225,7 +239,7 @@ def save(ctx, rel, payload):
     path, err = write_keys(rel, values)
     if err:
         return None, err
-    return {"path": path, "excluded": len(excl),
+    return {"path": path, "excluded": len(excl) if excl is not None else None,
             "rotated": sum(1 for v in rots.values() if v),
             "vmodes": sum(1 for v in vmodes.values() if v),
             "reordered": bool(values.get("scan.order"))}, None

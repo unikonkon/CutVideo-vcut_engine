@@ -10,6 +10,7 @@ TOML มาก: [talk] กับ [encode] อยู่ห่างกันแ�
 import os
 import re
 import threading
+import tomllib
 from pathlib import Path
 
 from . import config, fx
@@ -347,12 +348,22 @@ FIELDS = [
       help="สูงขึ้น = เสียงสม่ำเสมอขึ้นแต่ไดนามิกแคบลง · 0 = ไม่ให้ limiter ทำงานเลย"),
     F("audio.compressor", "ใส่ compressor", "bool", "render", "render"),
     F("audio.denoise", "ลดเสียงซ่า", "bool", "render", "render"),
+    # tier เป็น free ไม่ใช่ render — loudnorm ตัวนี้อยู่ในสายตอน *ต่อไฟล์*
+    # (assemble.run) ไม่ได้อยู่ในชิ้น เปลี่ยนแล้วจึงต่อใหม่พอ ไม่ต้องตัดใหม่ทุกชิ้น
+    F("audio.master_lufs", "ความดังรวมทั้งเรื่อง", "float", "free", "assemble",
+      min=-70, max=0, step=0.5, unit="LUFS",
+      help="0 = ไม่ปรับ (หนังยาวใช้ค่านี้) · โซเชียลปรับเข้าหา −14 LUFS อยู่แล้ว "
+           "ส่งไปดังกว่านั้นก็ถูกกดลง ส่งไปเบากว่านั้นก็ไม่ถูกดันขึ้น"),
 
     # ── encode (แพงสุด) ──
     F("encode.vcodec", "ตัวเข้ารหัสภาพ", "select", "render", "render",
       options=["h264_videotoolbox", "libx264", "hevc_videotoolbox"],
       help="videotoolbox = ฮาร์ดแวร์ M3 เร็วกว่ามาก · libx264 = คุณภาพดีกว่าที่บิตเรตเท่ากัน"),
     F("encode.bitrate", "บิตเรตภาพ", "str", "render", "render"),
+    # สามตัวนี้ต้องขยับพร้อมกัน — ตั้ง bitrate ลงมาแล้วปล่อย maxrate ไว้ที่ 26M
+    # แปลว่าเพดานยังเท่าเดิม ไฟล์จึงไม่เล็กลงอย่างที่ตั้งใจในฉากที่ภาพเคลื่อนเยอะ
+    F("encode.maxrate", "เพดานบิตเรต", "str", "render", "render"),
+    F("encode.bufsize", "บัฟเฟอร์บิตเรต", "str", "render", "render"),
     F("render.workers", "render พร้อมกันกี่ชิ้น", "int", "free", "render",
       min=1, max=8, step=1, help="ไม่มีผลต่อผลลัพธ์ — M3: videotoolbox เป็นคอขวดอยู่แล้ว"),
     F("render.concat_mode", "วิธีต่อไฟล์", "select", "free", "assemble",
@@ -660,6 +671,59 @@ def project_files():
 
 def preset_names():
     return sorted(p.stem for p in config.PRESET_DIR.glob("*.toml"))
+
+
+# ── สูตรสำเร็จที่หน้าเว็บกดใช้ได้ในคลิกเดียว ──
+#
+# **ค่าอยู่ในไฟล์ preset ไม่ใช่ในตารางตรงนี้** — ปุ่มในหน้าเว็บกับ `-c <ชื่อ>`
+# บนเทอร์มินัลจึงตั้งค่าชุดเดียวกันเสมอ  เขียนค่าซ้ำไว้ที่นี่อีกชุดแล้ววันหนึ่ง
+# สองทางจะให้ผลไม่เหมือนกัน โดยไม่มีอะไรฟ้องจนกว่าจะนั่งเทียบไฟล์ทีละบรรทัด
+#
+# ที่นี่มีแค่ "preset ไหนควรมีปุ่ม" กับ "ปุ่มเขียนว่าอะไร" ซึ่งเป็นเรื่องของหน้าเว็บจริง ๆ
+RECIPES = [
+    {"preset": "vertical-short",
+     "label": "หนังแนวตั้ง · TikTok / Reels / Shorts",
+     "hint": "ผืน 1080×1920 · ตัดชิด · ช็อตสั้น 1.2 วิ · ยาว 45 วิ · −14 LUFS"},
+]
+
+
+def recipe_view():
+    """สูตรสำเร็จ + ค่าที่มันจะเขียนลงไฟล์โปรเจกต์จริง ๆ
+
+    กรองด้วย FIELD_BY_KEY ตัวเดียวกับที่ save_project ใช้ ปุ่มจึงไม่มีทางโชว์
+    ค่าที่กดแล้วถูกทิ้งเงียบ ๆ — คีย์ใน preset ที่ฟอร์มไม่รู้จักถูกนับแยกไว้ให้
+    หน้าเว็บบอกได้ว่า "สูตรนี้มีอีก N ค่าที่ต้องใช้ -c จากเทอร์มินัล"
+    """
+    out = []
+    for r in RECIPES:
+        p = config.PRESET_DIR / f"{r['preset']}.toml"
+        if not p.exists():
+            continue
+        try:
+            with p.open("rb") as f:
+                tree = tomllib.load(f)
+        except (OSError, ValueError):
+            continue
+        flat = {}
+        _flatten(tree, "", flat)
+        # ชื่อโปรเจกต์เป็นของไฟล์โปรเจกต์ ไม่ใช่ของสูตร — กดใช้สูตรแล้วโปรเจกต์
+        # ที่ตั้งชื่อไว้ว่า "ภูสอยดาว" กลายเป็น "vertical-short" นั้นไม่ใช่สิ่งที่ใครขอ
+        flat.pop("project.name", None)
+        values = {k: v for k, v in flat.items() if k in FIELD_BY_KEY}
+        out.append({**r, "values": values,
+                    "skipped": sorted(set(flat) - set(values))})
+    return out
+
+
+def _flatten(node, prefix, out):
+    """TOML ที่ซ้อนกัน → คีย์แบบจุด · ตารางที่คีย์เป็นชื่อคลิป (rotation_overrides
+    ฯลฯ) ถูกเก็บทั้งก้อน เพราะ FIELDS มองมันเป็นค่าเดียวชนิด clips"""
+    for k, v in node.items():
+        dotted = f"{prefix}{k}"
+        if isinstance(v, dict) and dotted not in FIELD_BY_KEY:
+            _flatten(v, f"{dotted}.", out)
+        else:
+            out[dotted] = v
 
 
 def read_raw(path):

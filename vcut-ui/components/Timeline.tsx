@@ -11,6 +11,7 @@ import {
   Music,
   Redo2,
   Scissors,
+  Shapes,
   Smile,
   Trash2,
   Type,
@@ -49,6 +50,7 @@ const LANES: {
 }[] = [
   { kind: "text", label: "ข้อความ (ขั้น 5)", icon: Type, h: 26, color: "#10b981" },
   { kind: "sticker", label: "สติกเกอร์/ภาพซ้อน", icon: Smile, h: 26, color: "#ec4899" },
+  { kind: "shape", label: "รูปทรง (ลูกศร/แถบ/จุด)", icon: Shapes, h: 26, color: "#f97316" },
   { kind: "caption", label: "ซับอัตโนมัติ", icon: Captions, h: 20, color: "#64748b", readonly: true },
 ];
 const LANES_BELOW: typeof LANES = [
@@ -299,7 +301,7 @@ export default function Timeline({
   const ROW_H = 24;
   const stack = useMemo(() => {
     const out = new Map<LayerKind, { rowOf: Map<number, number>; rows: number }>();
-    for (const k of ["text", "sticker"] as LayerKind[]) {
+    for (const k of ["text", "sticker", "shape"] as LayerKind[]) {
       const { row, rows } = assignRows(layers[k]);
       out.set(k, { rowOf: row, rows });
     }

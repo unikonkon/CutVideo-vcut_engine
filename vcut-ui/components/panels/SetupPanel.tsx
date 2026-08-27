@@ -1,8 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Settings } from "lucide-react";
-import { api2, type SetupData, type SetupField } from "@/lib/api";
+import { Settings, Sparkles, Wand2 } from "lucide-react";
+import {
+  api2,
+  type SetupData,
+  type SetupField,
+  type SetupRecipe,
+} from "@/lib/api";
 import {
   Field,
   NInput,
@@ -91,6 +96,7 @@ export default function SetupPanel({
   const [data, setData] = useState<SetupData | null>(null);
   const [changed, setChanged] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
+  const [applying, setApplying] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -137,6 +143,33 @@ export default function SetupPanel({
     .map((k) => data.fields.find((f) => f.key === k)?.tier ?? "free")
     .sort((a, b) => (data.tiers[b]?.rank ?? 0) - (data.tiers[a]?.rank ?? 0))[0];
 
+  /** กดสูตรสำเร็จ — เขียนค่าทั้งชุดลงไฟล์โปรเจกต์ผ่านทางเดียวกับที่กรอกฟอร์มเอง
+   *
+   *  ไม่ใช่แค่ใส่ค่าค้างไว้ในฟอร์มให้กดบันทึกอีกที เพราะสูตรหนึ่งแตะ 22 ค่า —
+   *  เห็นทุกช่องขึ้นจุด "แก้แล้ว" พร้อมกันแล้วอ่านไม่ออกว่าอะไรเปลี่ยนบ้างอยู่ดี
+   *  ลงไฟล์ไปเลยแล้วโหลดค่ากลับมาโชว์ ตรงไปตรงมากว่า และย้อนได้ด้วยประวัติของ
+   *  เอนจิน (แท็บรีเซ็ต) เหมือนการบันทึกครั้งอื่น
+   */
+  const applyRecipe = async (r: SetupRecipe) => {
+    if (!data?.project.path) {
+      return flash("ยังไม่มีไฟล์โปรเจกต์ให้บันทึก — สร้างผ่าน viewer เดิมก่อน");
+    }
+    setApplying(r.preset);
+    try {
+      const res = await api2.saveSetup(data.project.path, r.values);
+      setData(res.setup);
+      setChanged({});
+      flash(
+        `ใช้สูตร "${r.label}" แล้ว — ตั้ง ${Object.keys(r.values).length} ค่า` +
+          " · กด ③ รวมเป็นหนัง แล้ว Export ใหม่",
+      );
+    } catch (e) {
+      flash(e instanceof Error ? e.message : "ใช้สูตรไม่สำเร็จ");
+    } finally {
+      setApplying("");
+    }
+  };
+
   const save = async () => {
     if (!data.project.path) {
       return flash("ยังไม่มีไฟล์โปรเจกต์ให้บันทึก — สร้างผ่าน viewer เดิมก่อน");
@@ -179,6 +212,44 @@ export default function SetupPanel({
         />
       }
     >
+      {(data.recipes ?? []).length > 0 && (
+        <Section title="สูตรสำเร็จ">
+          {(data.recipes ?? []).map((r) => (
+            <div
+              key={r.preset}
+              className="flex flex-col gap-1.5 rounded-lg border border-line bg-panel-2 p-2.5"
+            >
+              <div className="flex items-center gap-2">
+                <Sparkles size={13} className="shrink-0 text-accent" />
+                <span className="min-w-0 flex-1 text-[12px] text-ink">{r.label}</span>
+                <button
+                  disabled={!!applying || dirty}
+                  onClick={() => applyRecipe(r)}
+                  title={
+                    dirty
+                      ? "มีค่าที่แก้ค้างอยู่ — บันทึกหรือย้อนกลับก่อน แล้วค่อยกดสูตร"
+                      : `เขียน ${Object.keys(r.values).length} ค่าลงไฟล์โปรเจกต์ทันที`
+                  }
+                  className="flex shrink-0 items-center gap-1 rounded-lg bg-accent px-2 py-1 text-[11.5px] font-medium text-white disabled:opacity-40"
+                >
+                  <Wand2 size={12} />
+                  {applying === r.preset ? "กำลังตั้ง…" : "ใช้สูตรนี้"}
+                </button>
+              </div>
+              <div className="text-[10.5px] leading-4 text-muted">{r.hint}</div>
+              {/* คีย์ที่ฟอร์มตั้งไม่ได้ — บอกไว้ดีกว่าให้เข้าใจว่าปุ่มตั้งครบแล้ว
+                  ทั้งที่ยังขาด (ปกติว่าง · โผล่เมื่อ preset มีคีย์นอกฟอร์ม) */}
+              {r.skipped.length > 0 && (
+                <div className="text-[10.5px] leading-4 text-warn">
+                  อีก {r.skipped.length} ค่าฟอร์มนี้ตั้งไม่ได้ ({r.skipped.join(", ")})
+                  — ใช้ <code className="font-mono">./vcut run -c {r.preset}</code> จากเทอร์มินัลถ้าต้องการครบ
+                </div>
+              )}
+            </div>
+          ))}
+        </Section>
+      )}
+
       {groups.map(([stage, fields]) => (
         <Section key={stage} title={STAGE_LABEL[stage] ?? stage}>
           <div className="grid grid-cols-2 gap-x-3 gap-y-2">

@@ -1,15 +1,26 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Check, Film, ImagePlus, MapPin, Move, Smile, Trash2 } from "lucide-react";
+import {
+  Check,
+  Film,
+  ImagePlus,
+  Layers,
+  MapPin,
+  Move,
+  Smile,
+  Trash2,
+} from "lucide-react";
 import {
   api2,
   assetUrl,
   fileToBase64,
   type FxOverlay,
+  type FxShape,
   type JourneyStop,
 } from "@/lib/api";
 import { DND_MIME } from "@/lib/layers";
+import { assPathToSvg, shapePath } from "@/lib/shapes";
 import { STICKER_CATS, STICKER_LIST, stickerUrl } from "@/lib/stickers";
 import { dur } from "@/lib/time";
 import {
@@ -54,11 +65,39 @@ const ALIGN_COLS = [
   { x: "right", label: "ขวา" },
 ] as const;
 
+/** ภาพตัวอย่างของรูปทรงหนึ่งชิ้น — วาดจากเส้นทางเดียวกับที่จะออกมาในไฟล์
+ *  viewBox กว้างกว่าตัวรูป 12% เผื่อขอบไม่ให้ถูกตัด (stroke ล้นออกนอกรูป) */
+function ShapeIcon({
+  kind,
+  size = 160,
+  thick = 0.28,
+  color = "currentColor",
+  px = 34,
+}: {
+  kind: string;
+  size?: number;
+  thick?: number;
+  color?: string;
+  px?: number;
+}) {
+  const r = size * 0.56;
+  return (
+    <svg width={px} height={px} viewBox={`${-r} ${-r} ${r * 2} ${r * 2}`}>
+      <path d={assPathToSvg(shapePath(kind, size, thick))} fill={color} />
+    </svg>
+  );
+}
+
 export default function StickerPanel({
   fxs,
   onPlaceAtPlayhead,
   onPlaceSampleAtPlayhead,
+  onPlaceShapeAtPlayhead,
   focusIdx,
+  shapeFocusIdx,
+  onPatchShape,
+  onRemoveShape,
+  onShapeStageEdit,
   frame,
   stageEdit,
   onStageEdit,
@@ -67,7 +106,12 @@ export default function StickerPanel({
   fxs: FxStore;
   onPlaceAtPlayhead: (file: string) => void;
   onPlaceSampleAtPlayhead: (file: string) => void;
+  onPlaceShapeAtPlayhead: (kind: string) => void;
   focusIdx: number | null;
+  shapeFocusIdx: number | null;
+  onPatchShape: (idx: number, p: Partial<FxShape>) => void;
+  onRemoveShape: (idx: number) => void;
+  onShapeStageEdit: (idx: number) => void;
   frame: { w: number; h: number } | null;
   stageEdit: boolean;
   onStageEdit: (idx: number) => void;
@@ -105,6 +149,16 @@ export default function StickerPanel({
 
   const patch = (i: number, p: Partial<FxOverlay>) =>
     fxs.patch({ overlays: overlays.map((o, k) => (k === i ? { ...o, ...p } : o)) });
+
+  // รูปทรงเวกเตอร์ — libass วาดเอง ไม่มีไฟล์ภาพเข้ามาเกี่ยว จึงอยู่แท็บเดียวกับ
+  // ภาพซ้อนเพราะเป็น "ของที่วางทับภาพ" เหมือนกัน แต่ไม่มีคลังไฟล์เป็นของตัวเอง
+  const shapes = draft.shapes;
+  const shapeKinds = (data.defaults.shape_kind ?? {}) as Record<string, string>;
+  // รูปทรงใช้แอนิเมชันชุดเต็มของข้อความ (มี pop) ต่างจากภาพซ้อนที่ไม่มี — มันวาด
+  // ด้วย \\fscx/\\fscy ได้ฟรี ไม่ต้องปรับขนาดภาพใหม่ทุกเฟรม
+  const shapeAnimOpts = Object.keys(
+    (data.defaults.anim as Record<string, unknown>) ?? { none: 1 },
+  ).map((k) => ({ v: k, label: k }));
 
   // ความสูงของชิ้น คิดเป็นสัดส่วนของความสูงเฟรม (รู้จากสัดส่วนไฟล์จริงในคลัง)
   const frameAR = (frame?.w || 1920) / (frame?.h || 1080);
@@ -376,6 +430,150 @@ export default function StickerPanel({
           ))
         )}
       </Section>
+      <Section title={`รูปทรง (${shapes.length})`}>
+        {/* วาดด้วย libass เอง ไม่มีไฟล์ภาพให้จัดการ — จึงไม่มี "คลัง" แบบภาพซ้อน
+            มีแต่ปุ่มสี่ปุ่มที่กดแล้วเกิดชิ้นใหม่ทันที */}
+        <div className="grid grid-cols-4 gap-1.5">
+          {Object.entries(shapeKinds).map(([k, label]) => (
+            <button
+              key={k}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(
+                  DND_MIME,
+                  JSON.stringify({ type: "shape", kind: k }),
+                );
+                e.dataTransfer.effectAllowed = "copy";
+              }}
+              onClick={() => onPlaceShapeAtPlayhead(k)}
+              title={`${label} — คลิก=วางที่หัวเล่น · ลากลงไทม์ไลน์=วางตรงจุดนั้น`}
+              className="flex cursor-grab flex-col items-center gap-1 rounded-lg border border-line bg-panel-2 py-2 text-muted hover:bg-panel-3 hover:text-ink active:cursor-grabbing"
+            >
+              <ShapeIcon kind={k} />
+              <span className="text-[10.5px]">{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {shapes.length === 0 ? (
+          <Empty>
+            ยังไม่มีรูปทรงในหนัง — กดปุ่มด้านบนเพื่อวางที่หัวเล่น
+            <br />
+            ลูกศรกับจุดไว้ชี้ของในภาพ · แถบมุมมนไว้รองตัวเลข/ป้ายชื่อ
+          </Empty>
+        ) : (
+          shapes.map((sh, i) => (
+            <div
+              key={i}
+              className={`flex flex-col gap-2 rounded-lg border p-2 ${
+                shapeFocusIdx === i
+                  ? "border-accent bg-panel-2"
+                  : "border-line bg-panel-2"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span style={{ color: sh.color }}>
+                  <ShapeIcon kind={sh.kind} thick={sh.thick} px={26} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[12px] text-ink">
+                    {shapeKinds[sh.kind] ?? sh.kind}
+                  </div>
+                  <div className="truncate text-[10.5px] text-faint">
+                    {sh.name || "(ไม่ผูกคลิป)"} @{dur(sh.at)} · {sh.dur.toFixed(1)} วิ
+                  </div>
+                </div>
+                <button
+                  onClick={() => onShapeStageEdit(i)}
+                  title="แก้ตำแหน่งด้วยการลากบนจอตัวอย่าง"
+                  className={`rounded-md p-1.5 ${
+                    stageEdit && shapeFocusIdx === i
+                      ? "bg-accent/20 text-accent"
+                      : "text-muted hover:bg-panel-3 hover:text-ink"
+                  }`}
+                >
+                  <Move size={13} />
+                </button>
+                <button
+                  onClick={() => onRemoveShape(i)}
+                  className="rounded-md p-1.5 text-muted hover:text-danger"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5">
+                <Field label="ทรง">
+                  <Sel
+                    value={sh.kind}
+                    onChange={(v) => onPatchShape(i, { kind: v })}
+                    options={Object.entries(shapeKinds).map(([v, label]) => ({ v, label }))}
+                  />
+                </Field>
+                <Field label="ขนาด (พิกเซลของหนัง)">
+                  <NInput
+                    value={sh.size}
+                    step={4}
+                    min={4}
+                    max={2000}
+                    onChange={(v) => onPatchShape(i, { size: Math.round(v) })}
+                  />
+                </Field>
+                <Field label="ความหนา (เทียบขนาด)">
+                  <NInput
+                    value={sh.thick}
+                    step={0.02}
+                    min={0.03}
+                    max={0.9}
+                    onChange={(v) => onPatchShape(i, { thick: v })}
+                  />
+                </Field>
+                <Field label="หมุน (องศา ทวนเข็ม)">
+                  <NInput
+                    value={sh.angle}
+                    step={5}
+                    min={-360}
+                    max={360}
+                    onChange={(v) => onPatchShape(i, { angle: v })}
+                  />
+                </Field>
+                <Field label="สี">
+                  <CInput value={sh.color} onChange={(v) => onPatchShape(i, { color: v })} />
+                </Field>
+                <Field label="สีขอบ">
+                  <CInput value={sh.outline} onChange={(v) => onPatchShape(i, { outline: v })} />
+                </Field>
+                <Field label="ขอบหนา">
+                  <NInput
+                    value={sh.border}
+                    step={0.5}
+                    min={0}
+                    max={40}
+                    onChange={(v) => onPatchShape(i, { border: v })}
+                  />
+                </Field>
+                <Field label="แอนิเมชัน">
+                  <Sel
+                    value={sh.anim}
+                    onChange={(v) => onPatchShape(i, { anim: v })}
+                    options={shapeAnimOpts}
+                  />
+                </Field>
+              </div>
+
+              <button
+                onClick={() => onPatchShape(i, { behind: !sh.behind })}
+                title="วางไว้ใต้ข้อความแทนที่จะทับ — แถบที่ทำหน้าที่เป็นพื้นของตัวเลขต้องเปิดตัวนี้"
+                className="flex items-center gap-1.5 self-start rounded-md px-1.5 py-1 text-[11.5px] text-muted hover:bg-panel-3 hover:text-ink"
+              >
+                <Layers size={12} className={sh.behind ? "text-accent" : undefined} />
+                {sh.behind ? "อยู่ใต้ข้อความ" : "อยู่บนสุด"}
+              </button>
+            </div>
+          ))
+        )}
+      </Section>
+
       <Section
         title={`แผนที่เส้นทาง (${stops.length} หมุด)`}
         right={

@@ -1,7 +1,9 @@
 import type {
   CaptionsData,
+  FxClip,
   FxData,
   FxOverlay,
+  FxShape,
   FxTextItem,
   MusicTrack,
 } from "@/lib/api";
@@ -16,6 +18,9 @@ export interface FxStore {
     journey: Record<string, unknown>;
     /** สวิตช์ซับอัตโนมัติของขั้น 5 เอง (อ่าน transcript ตรง ๆ ไม่ผ่าน captions.json) */
     auto_sub: { enabled: boolean };
+    /** เอฟเฟกต์รายชิ้น — กุญแจมาจาก view.segments[].key ของเอนจิน ห้ามประกอบเอง */
+    clips: Record<string, FxClip>;
+    shapes: FxShape[];
   } | null;
   patch: (part: {
     music?: MusicTrack[];
@@ -23,6 +28,8 @@ export interface FxStore {
     overlays?: FxOverlay[];
     journey?: Record<string, unknown>;
     auto_sub?: { enabled: boolean };
+    clips?: Record<string, FxClip>;
+    shapes?: FxShape[];
   }) => void;
   save: () => void;
   revert: () => void;
