@@ -18,15 +18,17 @@ import {
   Users,
 } from "lucide-react";
 import { type FxPreset, type FxTextItem } from "@/lib/api";
-import { DND_MIME } from "@/lib/layers";
+import { DND_MIME, type LayerBlock } from "@/lib/layers";
+import { lookOf, uniqueName as freeName } from "@/lib/presets";
 import { resolveLook } from "@/lib/textfx";
-import { dur } from "@/lib/time";
+import { dur, durMs } from "@/lib/time";
 import {
   CInput,
   Empty,
   Field,
   NInput,
   Panel,
+  PosPad,
   SaveBar,
   Section,
   Sel,
@@ -35,26 +37,6 @@ import {
   Toggle,
 } from "@/components/ui";
 import type { CapStore, FxStore, SpeechLine } from "./types";
-
-// จุดจัดตำแหน่ง 3×3 ของข้อความ — ตั้ง align (จุดยึดแบบ ass) คู่กับ x/y เสมอ
-// ข้อความจึงกอดมุมได้พอดีโดยไม่ต้องรู้ว่ากล่องกว้างเท่าไร (ต่างจากภาพซ้อนที่รู้ขนาด)
-const SPOTS: { align: number; x: number; y: number; label: string }[][] = [
-  [
-    { align: 7, x: 0.05, y: 0.05, label: "บนซ้าย" },
-    { align: 8, x: 0.5, y: 0.05, label: "บนกลาง" },
-    { align: 9, x: 0.95, y: 0.05, label: "บนขวา" },
-  ],
-  [
-    { align: 4, x: 0.05, y: 0.5, label: "กลางซ้าย" },
-    { align: 5, x: 0.5, y: 0.5, label: "กลางจอ" },
-    { align: 6, x: 0.95, y: 0.5, label: "กลางขวา" },
-  ],
-  [
-    { align: 1, x: 0.05, y: 0.95, label: "ล่างซ้าย" },
-    { align: 2, x: 0.5, y: 0.95, label: "ล่างกลาง" },
-    { align: 3, x: 0.95, y: 0.95, label: "ล่างขวา" },
-  ],
-];
 
 const ALIGNS = [
   { v: "2", label: "ล่าง-กลาง" },
@@ -83,14 +65,6 @@ const GRID: Record<number, string> = {
   6: "grid-cols-6",
 };
 const colsOf = (w: number) => (w >= 820 ? 6 : w >= 620 ? 4 : w >= 470 ? 3 : 2);
-
-/** เอาเฉพาะช่องหน้าตาออกมาจากข้อความหรือชุด — ใช้ทั้งตอนสร้างชุดจากชิ้น
- *  ตอนรวมชุดลงชิ้น และตอนปลดชิ้นออกจากชุด จึงต้องเป็นตัวเดียวกันทั้งสามที่ */
-function lookOf(src: Partial<FxPreset>, keys: (keyof FxPreset)[]) {
-  const out: Partial<FxPreset> = {};
-  for (const k of keys) if (src[k] !== undefined) (out as Record<string, unknown>)[k] = src[k];
-  return out;
-}
 
 /** ช่องหน้าตาทั้งชุด — ชุดสไตล์กับข้อความรายชิ้นใช้ฟอร์มเดียวกัน
  *
@@ -228,6 +202,8 @@ export default function TextPanel({
   stageEdit,
   onStageEdit,
   onGotoSpeech,
+  onMakePreset,
+  blocks,
   flash,
 }: {
   fxs: FxStore;
@@ -240,6 +216,12 @@ export default function TextPanel({
   stageEdit: boolean;
   onStageEdit: (idx: number) => void;
   onGotoSpeech: () => void;
+  /** สร้างชุดสไตล์จากข้อความชิ้นนั้น — อยู่ที่ page เพราะการ์ดลอยก็กดปุ่มนี้ได้
+   *  (ประกอบชุดคนละที่ = วันหนึ่งจะมีปุ่มหนึ่งลอกค่ามาไม่ครบ) */
+  onMakePreset: (idx: number) => void;
+  /** ข้อความแต่ละชิ้นไปโผล่วินาทีที่เท่าไรของหนัง — page คิดมาให้แล้ว
+   *  ผูกด้วย idx ตัวเดียวกับ draft.texts (ดู layers.textBlocks) */
+  blocks: LayerBlock[];
   flash: (m: string) => void;
 }) {
   const [open, setOpen] = useState<number | null>(null);
@@ -312,11 +294,7 @@ export default function TextPanel({
    *  (ตัวรวมเป็นตัวเดียวกับที่จอตัวอย่างใช้ — ดู lib/textfx.resolveLook) */
   const resolved = (t: FxTextItem) => resolveLook(t, presets, pkeys as string[]);
 
-  const uniqueName = (want: string) => {
-    const base = want.trim() || "ชุดใหม่";
-    if (!byName.has(base)) return base;
-    for (let n = 2; ; n++) if (!byName.has(`${base} ${n}`)) return `${base} ${n}`;
-  };
+  const uniqueName = (want: string) => freeName(want, new Set(byName.keys()));
 
   const setPresets = (ps: FxPreset[]) => fxs.patch({ presets: ps });
 
@@ -345,36 +323,19 @@ export default function TextPanel({
     fxs.patch({
       presets: presets.filter((x) => x.name !== name),
       texts: draft.texts.map((t) =>
-        t.preset === name ? { ...t, ...(p ? lookOf(p, pkeys) : {}), preset: "" } : t,
+        t.preset === name ? { ...t, ...(p ? lookOf(p, pkeys as string[]) : {}), preset: "" } : t,
       ),
     });
     setOpenPreset(null);
     flash(`ลบชุด "${name}" แล้ว — ข้อความที่เคยผูกไว้หน้าตาเหมือนเดิม`);
   };
 
-  const addPreset = (from?: { t: FxTextItem; i: number }) => {
+  const addPreset = () => {
     if (!blankPreset) return;
-    const name = uniqueName(
-      from ? from.t.text.trim().split("\n")[0].slice(0, 20) : "ชุดใหม่",
-    );
-    const row: FxPreset = {
-      ...blankPreset,
-      ...(from ? lookOf(resolved(from.t), pkeys) : {}),
-      name,
-    };
-    fxs.patch({
-      presets: [...presets, row],
-      // สร้างจากชิ้นไหน ผูกชิ้นนั้นให้เลย — สร้างแล้วไม่มีอะไรใช้คือครึ่งงาน
-      ...(from
-        ? {
-            texts: draft.texts.map((t, k) =>
-              k === from.i ? { ...t, preset: name } : t,
-            ),
-          }
-        : {}),
-    });
+    const name = uniqueName("ชุดใหม่");
+    fxs.patch({ presets: [...presets, { ...blankPreset, name }] });
     setOpenPreset(name);
-    flash(from ? `สร้างชุด "${name}" จากชิ้นนี้แล้ว` : `สร้างชุด "${name}" แล้ว`);
+    flash(`สร้างชุด "${name}" แล้ว`);
   };
 
   const applyToAll = (name: string) => {
@@ -385,7 +346,7 @@ export default function TextPanel({
   /** ปลดชิ้นเดียวออกจากชุด โดยเก็บหน้าตาที่เห็นอยู่ไว้ — เหตุผลเดียวกับ removePreset */
   const unlink = (i: number) => {
     const t = draft.texts[i];
-    patch(i, { ...lookOf(resolved(t), pkeys), preset: "" });
+    patch(i, { ...lookOf(resolved(t), pkeys as string[]), preset: "" });
   };
 
   const presetOpts = [
@@ -604,6 +565,7 @@ export default function TextPanel({
               const p = byName.get(t.preset || "");
               const lost = Boolean(t.preset) && !p;
               const view = resolved(t);
+              const blk = blocks.find((b) => b.idx === i);
               return (
                 <div
                   key={i}
@@ -613,6 +575,12 @@ export default function TextPanel({
                 >
                   <button
                     onClick={() => setOpen(open === i ? null : i)}
+                    title={
+                      `${t.text || "(ว่าง)"}\nเกาะคลิป ${t.name} วินาทีที่ ${t.at.toFixed(1)}` +
+                      (blk?.orphan !== false
+                        ? "\nช่วงที่เกาะอยู่ไม่มีในไทม์ไลน์แล้ว — ชิ้นนี้จะไม่ขึ้นในหนัง"
+                        : `\nโผล่นาทีที่ ${durMs(blk.tl)} ของหนัง ยาว ${t.dur.toFixed(2)} วิ`)
+                    }
                     className="flex w-full items-center gap-2 px-2 py-1.5 text-left"
                   >
                     {open === i ? (
@@ -620,6 +588,12 @@ export default function TextPanel({
                     ) : (
                       <ChevronRight size={12} className="shrink-0 text-muted" />
                     )}
+                    {/* เวลาใน *หนัง* ไม่ใช่วินาทีในคลิป — คนหาชิ้นนี้จากที่มันโผล่
+                        บนไทม์ไลน์ ส่วนชื่อคลิปกับวินาทีในคลิปเป็นวิธี *ผูก* ของ
+                        เอนจิน ซึ่งไปอยู่ใน tooltip · ชิ้นกำพร้าไม่มีเวลาในหนังให้บอก */}
+                    <span className="w-11 shrink-0 font-mono text-[10.5px] text-faint">
+                      {blk && !blk.orphan ? durMs(blk.tl) : "—"}
+                    </span>
                     <span className="min-w-0 flex-1 truncate text-[12px] text-ink">
                       {t.text || "(ว่าง)"}
                     </span>
@@ -637,9 +611,11 @@ export default function TextPanel({
                         ไม่มีชุดนี้
                       </span>
                     )}
-                    <span className="shrink-0 font-mono text-[10px] text-faint">
-                      {t.name} @{t.at.toFixed(1)}
-                    </span>
+                    <span
+                      className={`h-2 w-2 shrink-0 rounded-[2px] ${
+                        blk && !blk.orphan ? "bg-ok" : "bg-danger"
+                      }`}
+                    />
                   </button>
                   {open === i && (
                     <div className="flex flex-col gap-2 border-t border-line p-2">
@@ -651,12 +627,6 @@ export default function TextPanel({
                         </Field>
                         <Field label="นาน (วิ)">
                           <NInput value={t.dur} min={0.2} onChange={(v) => patch(i, { dur: v })} />
-                        </Field>
-                        <Field label="X (0-1)">
-                          <NInput value={t.x} step={0.05} min={0} max={1} onChange={(v) => patch(i, { x: v })} />
-                        </Field>
-                        <Field label="Y (0-1)">
-                          <NInput value={t.y} step={0.05} min={0} max={1} onChange={(v) => patch(i, { y: v })} />
                         </Field>
                         <Field label="แอนิเมชัน">
                           <Sel value={t.anim} onChange={(v) => patch(i, { anim: v })} options={animOpts} />
@@ -699,7 +669,7 @@ export default function TextPanel({
                               </button>
                             ) : (
                               <button
-                                onClick={() => addPreset({ t, i })}
+                                onClick={() => onMakePreset(i)}
                                 title="เก็บหน้าตาของชิ้นนี้เป็นชุด แล้วชิ้นอื่นเลือกใช้ได้"
                                 className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-line px-2 text-[11px] text-muted hover:text-ink"
                               >
@@ -790,40 +760,37 @@ export default function TextPanel({
                           <Trash2 size={12} /> ลบ
                         </button>
                       </div>
-                      <div className="flex items-center gap-2.5">
-                        <div className="grid shrink-0 grid-cols-3 gap-0.5 rounded-md border border-line bg-panel p-0.5">
-                          {SPOTS.map((row) =>
-                            row.map((sp) => (
-                              <button
-                                key={sp.align}
-                                onClick={() =>
-                                  patch(i, { align: sp.align, x: sp.x, y: sp.y })
-                                }
-                                title={`จัดไป${sp.label}`}
-                                className={`flex h-4 w-4 items-center justify-center rounded-[3px] hover:bg-panel-3 hover:text-accent ${
-                                  t.align === sp.align ? "text-accent" : "text-faint"
-                                }`}
-                              >
-                                <span className="h-1 w-1 rounded-full bg-current" />
-                              </button>
-                            )),
-                          )}
+                      {/* ── ตำแหน่งบนจอ ──
+                          เดิมเป็นสองคอนโทรลที่ขัดกันเองได้: ช่องตัวเลข X/Y กับ
+                          ตารางจุดยึด 3×3  ตั้ง X/Y เองแล้ว align ค้างที่เดิม
+                          ข้อความจึงยึดคนละมุมกับที่เห็นในช่องตัวเลข  ตอนนี้เหลือ
+                          แผ่นเดียวที่ลากอิสระได้และดูดเข้าจุดยึดพร้อมตั้ง align ให้ */}
+                      <div className="flex items-start gap-2.5">
+                        <div className="w-[124px] shrink-0">
+                          <PosPad
+                            x={t.x}
+                            y={t.y}
+                            align={t.align}
+                            onChange={(v) => patch(i, v)}
+                          />
                         </div>
-                        <button
-                          onClick={() => onStageEdit(i)}
-                          title="เลือกชิ้นนี้แล้วเปิดโหมดแก้ตำแหน่งบนจอตัวอย่าง"
-                          className={`flex shrink-0 items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] ${
-                            stageEdit && focusIdx === i
-                              ? "text-accent"
-                              : "text-muted hover:text-ink"
-                          }`}
-                        >
-                          <Move size={12} /> แก้บนจอ
-                        </button>
-                        <p className="min-w-0 flex-1 text-[10px] leading-4 text-faint">
-                          จุดซ้ายคือจุดยึด — ลากบนจอตัวอย่างจัดละเอียดต่อได้ ·
-                          จุดยึดเป็นของชิ้นนี้เสมอ ไม่ตามชุดสไตล์
-                        </p>
+                        <div className="flex min-w-0 flex-1 flex-col gap-2">
+                          <button
+                            onClick={() => onStageEdit(i)}
+                            title="เลือกชิ้นนี้แล้วเปิดโหมดแก้ตำแหน่งบนจอตัวอย่าง"
+                            className={`flex w-full items-center justify-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] ${
+                              stageEdit && focusIdx === i
+                                ? "text-accent"
+                                : "text-muted hover:text-ink"
+                            }`}
+                          >
+                            <Move size={12} /> แก้บนจอตัวอย่าง
+                          </button>
+                          <p className="text-[10px] leading-4 text-faint">
+                            ลากจุดจัดตำแหน่ง · เข้าใกล้มุมแล้วดูดติดพร้อมตั้งจุดยึดให้ ·
+                            Alt = ไม่ดูด  จุดยึดเป็นของชิ้นนี้เสมอ ไม่ตามชุดสไตล์
+                          </p>
+                        </div>
                       </div>
                     </div>
                   )}

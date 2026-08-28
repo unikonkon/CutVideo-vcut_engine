@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Captions,
   ClipboardCopy,
@@ -10,6 +10,8 @@ import {
   EyeOff,
   Magnet,
   Mic,
+  MoveLeft,
+  MoveRight,
   Music,
   Redo2,
   Scissors,
@@ -32,6 +34,7 @@ import {
 } from "@/lib/layers";
 import { dur, rulerStep } from "@/lib/time";
 import type { BeatData } from "@/lib/api";
+import type { CardAnchor } from "@/components/BlockCard";
 
 const CHAPTER_COLORS = [
   "#3b82f6",
@@ -50,14 +53,16 @@ const LANES: {
   h: number;
   color: string;
   readonly?: boolean;
+  /** ป้ายสั้นบนชิปแถบเครื่องมือ — มีเฉพาะเลนอ่านอย่างเดียวที่มีชิปประจำที่ */
+  chip?: string;
 }[] = [
   { kind: "text", label: "ข้อความ (ขั้น 5)", icon: Type, h: 26, color: "#10b981" },
   { kind: "sticker", label: "สติกเกอร์/ภาพซ้อน", icon: Smile, h: 26, color: "#ec4899" },
   { kind: "shape", label: "รูปทรง (ลูกศร/แถบ/จุด)", icon: Shapes, h: 26, color: "#f97316" },
-  { kind: "caption", label: "ซับอัตโนมัติ", icon: Captions, h: 20, color: "#64748b", readonly: true },
+  { kind: "caption", label: "ซับอัตโนมัติ", icon: Captions, h: 20, color: "#64748b", readonly: true, chip: "ซับ" },
 ];
 const LANES_BELOW: typeof LANES = [
-  { kind: "speech", label: "เสียงพูดในคลิป", icon: Mic, h: 20, color: "#14b8a6", readonly: true },
+  { kind: "speech", label: "เสียงพูดในคลิป", icon: Mic, h: 20, color: "#14b8a6", readonly: true, chip: "เสียงพูด" },
   { kind: "music", label: "เพลง", icon: Music, h: 30, color: "#8b5cf6" },
 ];
 
@@ -267,6 +272,7 @@ export default function Timeline({
   canPasteLayer,
   onCopyLayer,
   onPasteLayer,
+  onAnchor,
   canUndo,
   canRedo,
   onUndo,
@@ -306,12 +312,16 @@ export default function Timeline({
   canPasteLayer: boolean;
   onCopyLayer: () => void;
   onPasteLayer: () => void;
+  /** ที่ที่การ์ดลอยต้องไปชี้ — ไทม์ไลน์คิดให้เพราะเรขาคณิตอยู่ที่นี่ทั้งหมด
+   *  (ดู BlockCard.CardAnchor) · null = ไม่มีบล็อกที่เลือก */
+  onAnchor: (a: CardAnchor | null) => void;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
   onRedo: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const sectionRef = useRef<HTMLElement>(null);
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
   const [dropHint, setDropHint] = useState<number | null>(null);
@@ -366,6 +376,51 @@ export default function Timeline({
 
   const lanesAbove = LANES.filter((l) => vis[l.kind]);
   const lanesBelow = LANES_BELOW.filter((l) => vis[l.kind]);
+
+  /** บอกข้างนอกว่าการ์ดลอยต้องไปชี้ตรงไหน
+   *
+   *  คิดจาก getBoundingClientRect ทุกครั้งที่มีอะไรขยับ ไม่ใช่คำนวณจากตัวเลขที่
+   *  จำไว้ — ความกว้างของแผงซ้ายลากเปลี่ยนได้ตลอด และเลนที่ถูกซ่อน/กางเพิ่มแถว
+   *  ทำให้ระยะเลื่อนไม่ตรงกับที่คิดไว้ทันที
+   */
+  const selBlock = layerSel
+    ? (layers[layerSel.kind] ?? []).find((b) => b.idx === layerSel.idx)
+    : undefined;
+  const selVis = layerSel ? vis[layerSel.kind] : false;
+  const selTl = selBlock?.tl ?? 0;
+  const selDur = selBlock?.dur ?? 0;
+  const selOrphan = selBlock?.orphan ?? false;
+
+  useEffect(() => {
+    if (!selBlock || !selVis || selOrphan) {
+      onAnchor(null);
+      return;
+    }
+    const el = scrollRef.current;
+    const sec = sectionRef.current;
+    if (!el || !sec) return;
+    const tell = () => {
+      const r = el.getBoundingClientRect();
+      const x0 = r.left - el.scrollLeft + 8 + selTl * pxPerSec;
+      const x1 = x0 + selDur * pxPerSec;
+      onAnchor({
+        x: Math.min(Math.max((x0 + x1) / 2, r.left + 8), r.right - 8),
+        top: sec.getBoundingClientRect().top,
+        // เลื่อนจนบล็อกพ้นขอบแล้ว — ซ่อนการ์ด ไม่ใช่ปล่อยให้หางชี้ไปที่ว่าง
+        off: x1 < r.left + 4 || x0 > r.right - 4,
+      });
+    };
+    tell();
+    el.addEventListener("scroll", tell, { passive: true });
+    window.addEventListener("resize", tell);
+    const ro = new ResizeObserver(tell);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", tell);
+      window.removeEventListener("resize", tell);
+      ro.disconnect();
+    };
+  }, [selBlock, selVis, selOrphan, selTl, selDur, pxPerSec, onAnchor]);
 
   // ข้อความ/สติกเกอร์ซ้อนกันได้ (สูงสุด 5) · เพลง/เสียงเอฟเฟกต์ 6 —
   // ชิ้นที่ทับเวลากันแยกแถวให้อัตโนมัติ
@@ -489,7 +544,10 @@ export default function Timeline({
   const hiddenLanes = [...LANES, ...LANES_BELOW].filter((l) => !vis[l.kind]);
 
   return (
-    <section className="flex h-[21rem] shrink-0 flex-col overflow-hidden rounded-xl border border-line bg-panel">
+    <section
+      ref={sectionRef}
+      className="flex h-[21rem] shrink-0 flex-col overflow-hidden rounded-xl border border-line bg-panel"
+    >
       {/* แถบเครื่องมือ */}
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-line px-2">
         <button
@@ -543,6 +601,26 @@ export default function Timeline({
         >
           <ClipboardPaste size={14} />
         </button>
+        {/* สลับกับเพื่อนบ้านทีละช่อง — ลากสลับทำได้อยู่แล้ว แต่บนไทม์ไลน์ 208 ช็อต
+            ที่ซูมออกสุด ช็อตกว้างไม่กี่พิกเซล การเล็งปล่อยให้ตรงช่องทำได้ยากมาก */}
+        <button
+          onClick={() => selected != null && selected > 0 && onReorder(selected, selected - 1)}
+          disabled={selected == null || selected === 0}
+          title="สลับช็อตที่เลือกกับช็อตก่อนหน้า"
+          className="rounded-md p-2 text-muted hover:bg-panel-2 hover:text-ink disabled:opacity-30"
+        >
+          <MoveLeft size={14} />
+        </button>
+        <button
+          onClick={() =>
+            selected != null && selected < shots.length - 1 && onReorder(selected, selected + 1)
+          }
+          disabled={selected == null || selected >= shots.length - 1}
+          title="สลับช็อตที่เลือกกับช็อตถัดไป"
+          className="rounded-md p-2 text-muted hover:bg-panel-2 hover:text-ink disabled:opacity-30"
+        >
+          <MoveRight size={14} />
+        </button>
         <button
           onClick={() => selected != null && onRemove(selected)}
           disabled={selected == null}
@@ -552,9 +630,36 @@ export default function Timeline({
           <Trash2 size={14} />
         </button>
 
-        {hiddenLanes.length > 0 && (
-          <div className="ml-2 flex items-center gap-1">
-            {hiddenLanes.map((l) => {
+        {/* ── สองเลนที่อ่านอย่างเดียว — ชิปมีป้ายชื่อ อยู่บนแถบตลอด ──
+            เดิมเป็นไอคอนเปล่าที่โผล่เฉพาะ *ตอนซ่อนไปแล้ว* ซึ่งแปลว่าคนที่ยังไม่เคย
+            ซ่อนไม่มีทางรู้ว่าซ่อนได้ ทั้งที่ซับกับเสียงพูดคือสองเลนที่เกะกะที่สุด
+            ตอนจัดข้อความ (มันคำนวณมา ลากแก้ไม่ได้ แต่กินความสูงเท่าเลนจริง) */}
+        <div className="ml-2 flex items-center gap-1">
+          {[...LANES, ...LANES_BELOW]
+            .filter((l) => l.readonly)
+            .map((l) => {
+              const Icon = l.icon;
+              const on = vis[l.kind];
+              return (
+                <button
+                  key={l.kind}
+                  onClick={() => onVis(l.kind)}
+                  title={`${on ? "ซ่อน" : "แสดง"}เลเยอร์ ${l.label}`}
+                  className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] ${
+                    on
+                      ? "bg-panel-2 text-muted hover:text-ink"
+                      : "bg-panel-2/60 text-faint hover:text-muted"
+                  }`}
+                >
+                  {on ? <Eye size={11} /> : <EyeOff size={11} />}
+                  <Icon size={11} style={{ color: on ? l.color : undefined }} />
+                  {l.chip}
+                </button>
+              );
+            })}
+          {hiddenLanes
+            .filter((l) => !l.readonly)
+            .map((l) => {
               const Icon = l.icon;
               return (
                 <button
@@ -568,8 +673,7 @@ export default function Timeline({
                 </button>
               );
             })}
-          </div>
-        )}
+        </div>
 
         <div className="mx-auto flex items-center gap-2 rounded-full bg-panel-2 px-3 py-1 text-[11.5px] text-muted">
           {shots.length} ช็อต · {dur(total)}

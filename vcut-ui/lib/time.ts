@@ -28,3 +28,15 @@ export function rulerStep(pxPerSec: number): number {
   for (const s of steps) if (s * pxPerSec >= 70) return s;
   return 1200;
 }
+
+/** 0:45.2 — เหมือน dur แต่มีทศนิยมหนึ่งตำแหน่ง
+ *
+ *  ใช้ตรงที่ต้อง *หาจุดนั้นให้เจอ* ไม่ใช่แค่บอกว่ายาวเท่าไร: รายการข้อความกับหัว
+ *  การ์ดลอย  ข้อความสองชิ้นห่างกันไม่ถึงวินาทีเป็นเรื่องปกติมากในคลิปแนวนี้
+ *  ปัดเป็นวินาทีเต็มแล้วสองชิ้นจะอ่านได้เลขเดียวกัน
+ */
+export function durMs(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) sec = 0;
+  const t = Math.floor(sec * 10) / 10;
+  return `${dur(t)}.${Math.round((t % 1) * 10)}`;
+}

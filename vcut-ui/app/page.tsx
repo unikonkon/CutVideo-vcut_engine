@@ -22,6 +22,7 @@ import {
   type FxClip,
   type FxData,
   type FxOverlay,
+  type FxPreset,
   type FxShape,
   type FxTextItem,
   type MusicTrack,
@@ -47,6 +48,7 @@ import {
   type DropPayload,
   type LayerKind,
 } from "@/lib/layers";
+import { lookOf, nameFromText, uniqueName } from "@/lib/presets";
 import { resolveLook } from "@/lib/textfx";
 import { dur } from "@/lib/time";
 import { BGM_LIST, bgmLabel, bgmUrl } from "@/lib/bgm";
@@ -61,6 +63,7 @@ import MusicMixer from "@/components/MusicMixer";
 import MixerPanel from "@/components/MixerPanel";
 import Properties from "@/components/Properties";
 import Timeline from "@/components/Timeline";
+import BlockCard, { type CardAnchor, type CardItem } from "@/components/BlockCard";
 import JobPanel from "@/components/JobPanel";
 import TextPanel from "@/components/panels/TextPanel";
 import MusicPanel from "@/components/panels/MusicPanel";
@@ -1423,6 +1426,15 @@ export default function Editor() {
     [fxData],
   );
 
+  // ชื่อแอนิเมชันมาจากเอนจิน (fx.ANIM) — คำอธิบายไทยไปอยู่ใน tooltip ของชิป
+  // ส่วนป้ายบนชิปใช้ชื่อคีย์ เพราะคำอธิบายยาวเกินกว่าจะใส่ในชิปกว้าง 60 พิกเซล
+  const animOpts = useMemo(
+    () =>
+      Object.entries((fxData?.defaults.anim as Record<string, string>) ?? { none: "" })
+        .map(([v, title]) => ({ v, label: v, title })),
+    [fxData],
+  );
+
   // ข้อมูลให้ตัวอย่างซ้อนสดใน preview — ตัวเลขชุดเดียวกับที่จะถูกเผาตอน render
   const overlayData = useMemo(() => {
     if (!fxDraft) {
@@ -1667,6 +1679,101 @@ export default function Editor() {
     }
     flash(`วางที่ ${bind.name} ${dur(playhead)} — กดบันทึกเมื่อจัดเสร็จ`);
   }, [fxDraft, clipboard, shots, offsets, layers, total, playhead, patchFx, flash]);
+
+  // ── การ์ดลอยเหนือไทม์ไลน์ ──
+  //
+  // ไทม์ไลน์เป็นคนบอกว่าการ์ดต้องไปชี้ตรงไหน (เรขาคณิตอยู่ที่นั่น) ส่วนที่นี่เป็น
+  // คนถือข้อมูล  ตัวกรองด้านล่างทิ้ง update ที่ค่าไม่ขยับจริง — ตอนเลื่อนไทม์ไลน์
+  // ตัวบอกตำแหน่งยิงทุกเฟรม ถ้าปล่อยผ่านหมดจะ re-render ทั้งหน้า (208 ช็อต) ฟรี
+  const [anchor, setAnchor] = useState<CardAnchor | null>(null);
+  const onAnchor = useCallback((a: CardAnchor | null) => {
+    setAnchor((prev) => {
+      if (!a || !prev) return a === prev ? prev : a;
+      return Math.abs(a.x - prev.x) < 0.5 &&
+        Math.abs(a.top - prev.top) < 0.5 &&
+        a.off === prev.off
+        ? prev
+        : a;
+    });
+  }, []);
+
+  const card: CardItem | null = useMemo(() => {
+    if (!fxDraft || !focus) return null;
+    const { kind, idx } = focus;
+    if (kind === "text" && fxDraft.texts[idx]) return { kind, item: fxDraft.texts[idx] };
+    if (kind === "sticker" && fxDraft.overlays[idx]) return { kind, item: fxDraft.overlays[idx] };
+    if (kind === "shape" && fxDraft.shapes[idx]) return { kind, item: fxDraft.shapes[idx] };
+    if (kind === "music" && fxDraft.music[idx]) return { kind, item: fxDraft.music[idx] };
+    return null; // ซับกับเสียงพูดเป็นของที่คำนวณมา แก้ไม่ได้
+  }, [fxDraft, focus]);
+
+  const patchLayerItem = useCallback(
+    (kind: LayerKind, idx: number, p: Record<string, unknown>) => {
+      if (!fxDraft) return;
+      if (kind === "text") patchTextAt(idx, p as Partial<FxTextItem>);
+      else if (kind === "sticker") patchOverlayAt(idx, p as Partial<FxOverlay>);
+      else if (kind === "shape") patchShapeAt(idx, p as Partial<FxShape>);
+      else if (kind === "music") {
+        patchFx({
+          music: fxDraft.music.map((m, k) => (k === idx ? { ...m, ...p } : m)),
+        });
+      }
+    },
+    [fxDraft, patchTextAt, patchOverlayAt, patchShapeAt, patchFx],
+  );
+
+  /** ไปชิ้นก่อนหน้า/ถัดไป *ตามลำดับบนไทม์ไลน์* ไม่ใช่ลำดับใน array
+   *
+   *  ลำดับใน array คือลำดับที่คนกดสร้าง ซึ่งไม่เกี่ยวกับที่มันไปโผล่ในหนังเลย —
+   *  ปุ่ม "ถัดไป" ที่กระโดดข้ามไปคนละนาทีคือปุ่มที่ใช้ไล่ตรวจงานไม่ได้
+   */
+  const stepLayer = useCallback(
+    (d: -1 | 1) => {
+      if (!focus) return;
+      const order = [...(layers[focus.kind] ?? [])]
+        .filter((b) => !b.orphan)
+        .sort((a, z) => a.tl - z.tl);
+      const at = order.findIndex((b) => b.idx === focus.idx);
+      const next = order[at + d];
+      if (!next) return flash(d < 0 ? "ชิ้นแรกของเลนนี้แล้ว" : "ชิ้นสุดท้ายของเลนนี้แล้ว");
+      setFocus({ kind: focus.kind, idx: next.idx });
+      seek(next.tl);
+    },
+    [focus, layers, seek, flash],
+  );
+
+  /** เก็บหน้าตาของข้อความชิ้นหนึ่งเป็นชุดสไตล์ แล้วผูกชิ้นนั้นกับชุดที่เพิ่งสร้าง
+   *
+   *  อยู่ที่นี่เพราะกดได้จากสองที่ (ฟอร์มในแผง กับการ์ดลอย) — ประกอบชุดคนละที่
+   *  แล้ววันหนึ่งจะมีปุ่มหนึ่งที่ลอกค่ามาไม่ครบโดยที่อีกปุ่มยังถูก
+   *
+   *  ลอกจากค่าที่ *รวมชุดแล้ว* ไม่ใช่ค่าดิบในชิ้น — ชิ้นที่ผูกชุดอื่นอยู่ก่อนแล้ว
+   *  ต้องได้ชุดใหม่ที่หน้าตาเหมือนที่เห็นอยู่ ไม่ใช่ค่าเก่าที่ถูกทับไปนานแล้ว
+   */
+  const makePresetFromText = useCallback(
+    (idx: number) => {
+      if (!fxDraft || !fxData) return;
+      const blank = fxData.defaults.preset as FxPreset | undefined;
+      if (!blank) {
+        return flash("เอนจินที่รันอยู่ยังไม่มีชุดสไตล์ — รีสตาร์ต ./vcut view แล้วลองใหม่");
+      }
+      const t = fxDraft.texts[idx];
+      if (!t) return;
+      const name = uniqueName(
+        nameFromText(t.text),
+        new Set(presets.map((x) => x.name)),
+      );
+      patchFx({
+        presets: [
+          ...presets,
+          { ...blank, ...lookOf(resolveLook(t, presets, presetKeys), presetKeys), name },
+        ],
+        texts: fxDraft.texts.map((x, k) => (k === idx ? { ...x, preset: name } : x)),
+      });
+      flash(`สร้างชุด "${name}" จากชิ้นนี้แล้ว — แก้ที่ชุดในแท็บข้อความเพื่อเปลี่ยนทุกชิ้นที่ผูก`);
+    },
+    [fxDraft, fxData, presets, presetKeys, patchFx, flash],
+  );
 
   const removeLayerItem = useCallback(
     (kind: LayerKind, idx: number) => {
@@ -2420,6 +2527,8 @@ export default function Editor() {
               setPosEdit(true);
             }}
             onGotoSpeech={() => setTab("cc")}
+            onMakePreset={makePresetFromText}
+            blocks={layers.text}
             flash={flash}
           />
         )}
@@ -2576,8 +2685,34 @@ export default function Editor() {
           canPasteLayer={!!clipboard}
           onCopyLayer={copyLayerItem}
           onPasteLayer={pasteLayerItem}
+          onAnchor={onAnchor}
         />
       </div>
+
+      {card && anchor && focus && (
+        <BlockCard
+          sel={card}
+          anchor={anchor}
+          name={card.kind === "music" ? "" : card.item.name}
+          tl={
+            (layers[focus.kind] ?? []).find((b) => b.idx === focus.idx)?.tl ?? 0
+          }
+          animOpts={animOpts}
+          presetOf={
+            card.kind === "text" && presets.some((p) => p.name === card.item.preset)
+              ? card.item.preset
+              : undefined
+          }
+          onPatch={(p) => patchLayerItem(focus.kind, focus.idx, p)}
+          onRemove={() => removeLayerItem(focus.kind, focus.idx)}
+          onClose={() => setFocus(null)}
+          onStep={stepLayer}
+          onOpenPanel={() => selectLayerItem(focus.kind, focus.idx)}
+          onMakePreset={
+            card.kind === "text" ? () => makePresetFromText(focus.idx) : undefined
+          }
+        />
+      )}
 
       {jobOpen && job && (
         <JobPanel

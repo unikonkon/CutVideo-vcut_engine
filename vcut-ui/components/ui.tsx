@@ -404,3 +404,204 @@ export function Fader({
     />
   );
 }
+
+// ── จุดยึด 3×3 ของข้อความ ──
+//
+// align (จุดยึดแบบ ass) ต้องตั้งคู่กับ x/y เสมอ ข้อความจึงกอดมุมได้พอดีโดยไม่ต้อง
+// รู้ว่ากล่องกว้างเท่าไร (ต่างจากภาพซ้อนที่รู้ขนาด)
+export const ANCHORS: { align: number; x: number; y: number; label: string }[] = [
+  { align: 7, x: 0.05, y: 0.05, label: "บนซ้าย" },
+  { align: 8, x: 0.5, y: 0.05, label: "บนกลาง" },
+  { align: 9, x: 0.95, y: 0.05, label: "บนขวา" },
+  { align: 4, x: 0.05, y: 0.5, label: "กลางซ้าย" },
+  { align: 5, x: 0.5, y: 0.5, label: "กลางจอ" },
+  { align: 6, x: 0.95, y: 0.5, label: "กลางขวา" },
+  { align: 1, x: 0.05, y: 0.95, label: "ล่างซ้าย" },
+  { align: 2, x: 0.5, y: 0.95, label: "ล่างกลาง" },
+  { align: 3, x: 0.95, y: 0.95, label: "ล่างขวา" },
+];
+
+// ระยะที่ถือว่า "ตั้งใจไปเกาะจุดยึด" — 7% ของด้าน  กว้างกว่านี้แล้วลากไปวางกลาง
+// ระหว่างสองจุดไม่ได้ แคบกว่านี้แล้วเล็งจุดยึดด้วยเมาส์ไม่ติดสักที
+const SNAP = 0.07;
+
+/** แผ่นลากจุด — ตำแหน่งบนจอของข้อความ/สติกเกอร์/รูปทรง
+ *
+ *  **ตัวเดียวคุมทั้ง x/y และ align** ซึ่งเดิมเป็นสองคอนโทรล (ช่องตัวเลข X/Y กับ
+ *  ตารางจุดยึด 3×3) ที่ขัดกันเองได้ — ตั้ง X/Y เองแล้ว align ยังค้างที่เดิม
+ *  ข้อความจึงยึดคนละมุมกับที่เห็นในช่องตัวเลข
+ *
+ *  ลากอิสระได้ทุกจุด แต่ *ดูดเข้าจุดยึดเมื่อเข้าใกล้* แล้วตั้ง align ให้ด้วย —
+ *  ได้ทั้งวางเป๊ะที่มุมและวางตรงไหนก็ได้จากคอนโทรลเดียว  กด Alt ค้าง = ไม่ดูด
+ */
+export function PosPad({
+  x,
+  y,
+  align,
+  onChange,
+  h = 74,
+}: {
+  x: number;
+  y: number;
+  /** จุดยึดแบบ ass — มีเฉพาะข้อความ  ภาพซ้อนกับรูปทรงรู้ขนาดตัวเองอยู่แล้ว
+   *  จึงยึดกลางรูปเสมอและไม่มีช่องนี้ (ดู fx.OVERLAY / fx.SHAPE) */
+  align?: number;
+  onChange: (p: { x: number; y: number; align?: number }) => void;
+  h?: number;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  const at = (e: { clientX: number; clientY: number; altKey: boolean }) => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r) return null;
+    const px = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    const py = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+    if (!e.altKey) {
+      for (const a of ANCHORS) {
+        if (Math.abs(px - a.x) < SNAP && Math.abs(py - a.y) < SNAP) {
+          // ของที่ไม่มีจุดยึดยังได้ประโยชน์จากการดูด — วางกลางจอ/ชิดมุมให้ตรงเป๊ะ
+          // ได้โดยไม่ต้องเล็ง แค่ไม่มี align ให้ตั้ง
+          return align === undefined
+            ? { x: a.x, y: a.y }
+            : { x: a.x, y: a.y, align: a.align };
+        }
+      }
+    }
+    // ไม่ได้เกาะจุดยึด — เก็บ align เดิมไว้ ไม่ใช่บังคับเป็นกลางจอ เพราะคนที่
+    // ตั้งให้กอดมุมซ้ายแล้วขยับนิดเดียวไม่ได้สั่งให้เปลี่ยนจุดยึด
+    const free = { x: Math.round(px * 1000) / 1000, y: Math.round(py * 1000) / 1000 };
+    return align === undefined ? free : { ...free, align };
+  };
+
+  const start = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const move = (ev: PointerEvent) => {
+      const v = at(ev);
+      if (v) onChange(v);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    const v = at(e);
+    if (v) onChange(v);
+  };
+
+  const spot = align === undefined ? undefined : ANCHORS.find((a) => a.align === align);
+  const onSpot = !!spot && Math.abs(spot.x - x) < 0.001 && Math.abs(spot.y - y) < 0.001;
+  return (
+    <div
+      ref={ref}
+      onPointerDown={start}
+      title={
+        "ลากจุดเพื่อจัดตำแหน่งบนจอ · เข้าใกล้จุดแล้วดูดติด · Alt = ไม่ดูด" +
+        (onSpot ? `\nตอนนี้ยึด${spot!.label}` : "")
+      }
+      className="relative cursor-crosshair touch-none rounded-lg border border-line bg-panel"
+      style={{
+        height: h,
+        backgroundImage:
+          "linear-gradient(var(--border) 1px,transparent 1px)," +
+          "linear-gradient(90deg,var(--border) 1px,transparent 1px)",
+        backgroundSize: "33.34% 33.34%",
+      }}
+    >
+      {ANCHORS.map((a) => (
+        <span
+          key={a.align}
+          className={`pointer-events-none absolute h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full ${
+            onSpot && a.align === align ? "bg-accent" : "bg-line-2"
+          }`}
+          style={{ left: `${a.x * 100}%`, top: `${a.y * 100}%` }}
+        />
+      ))}
+      <span
+        className="pointer-events-none absolute h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-accent shadow-[0_2px_8px_rgba(0,0,0,.6)]"
+        style={{ left: `${x * 100}%`, top: `${y * 100}%` }}
+      />
+    </div>
+  );
+}
+
+/** แถบเลื่อนพร้อมชื่อและค่าที่อ่านออก — ค่าตัวเลขอยู่ขวาเสมอ
+ *  ลากคร่าว ๆ ได้เร็วกว่าพิมพ์ แต่ยังต้องเห็นเลขจริงเพราะมันคือค่าที่ลงไฟล์ */
+export function SliderRow({
+  label,
+  value,
+  min,
+  max,
+  step = 1,
+  onChange,
+  fmt,
+  title,
+  disabled,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  onChange: (v: number) => void;
+  fmt?: (v: number) => string;
+  title?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <label
+      className={`flex flex-col gap-1 ${disabled ? "opacity-45" : ""}`}
+      title={title}
+    >
+      <span className="flex items-baseline justify-between text-[10.5px] text-muted">
+        {label}
+        <span className="font-mono text-[10.5px] text-ink">
+          {fmt ? fmt(value) : value}
+        </span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={Math.min(max, Math.max(min, value))}
+        disabled={disabled}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full cursor-pointer disabled:cursor-not-allowed"
+      />
+    </label>
+  );
+}
+
+/** ชิปเลือกอย่างเดียวจากไม่กี่ตัว — เห็นตัวเลือกทั้งหมดพร้อมกันโดยไม่ต้องกางเมนู
+ *  ใช้เมื่อมีไม่เกิน ~5 ตัว ที่เหลือยังเป็น Sel เหมือนเดิม */
+export function Chips({
+  value,
+  onChange,
+  options,
+  title,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { v: string; label: string; title?: string }[];
+  title?: string;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1" title={title}>
+      {options.map((o) => (
+        <button
+          key={o.v}
+          onClick={() => onChange(o.v)}
+          title={o.title}
+          className={`min-w-[58px] grow basis-0 truncate rounded-lg px-1.5 py-1 text-[11px] transition-colors ${
+            value === o.v
+              ? "bg-accent/20 text-accent shadow-[inset_0_0_0_1px_var(--accent)]"
+              : "bg-panel-2 text-muted hover:text-ink"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
