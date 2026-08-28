@@ -9,11 +9,13 @@ import {
   Pause,
   Play,
   SlidersVertical,
+  Activity,
+  Magnet,
   Trash2,
   Upload,
   Zap,
 } from "lucide-react";
-import { api2, assetUrl, fileToBase64, type MusicTrack } from "@/lib/api";
+import { api2, assetUrl, fileToBase64, type BeatData, type MusicTrack } from "@/lib/api";
 import { BGM_CATS, BGM_LIST, bgmUrl } from "@/lib/bgm";
 import { DND_MIME } from "@/lib/layers";
 import { SFX_CATS, SFX_LIST, sfxUrl } from "@/lib/sfx";
@@ -39,6 +41,12 @@ export default function MusicPanel({
   onAddBgmAtPlayhead,
   onToggleMixer,
   focusIdx,
+  beats,
+  beatBusy,
+  showBeats,
+  onReadBeats,
+  onToggleBeats,
+  onSnapBeats,
   flash,
 }: {
   fxs: FxStore;
@@ -48,6 +56,13 @@ export default function MusicPanel({
   onAddBgmAtPlayhead: (file: string) => void;
   onToggleMixer: () => void;
   focusIdx: number | null;
+  /** ผลอ่านจังหวะจากเอนจิน · null = ยังไม่ได้กดอ่าน */
+  beats: BeatData | null;
+  beatBusy: boolean;
+  showBeats: boolean;
+  onReadBeats: (force?: boolean) => void;
+  onToggleBeats: () => void;
+  onSnapBeats: () => void;
   flash: (m: string) => void;
 }) {
   const [yt, setYt] = useState("");
@@ -299,6 +314,118 @@ export default function MusicPanel({
           เสียงสังเคราะห์ให้เริ่มต้น — ใช้ครั้งแรกระบบจะเพิ่มไฟล์เข้าคลังของโปรเจกต์ให้เอง
           หมวดบรรยากาศวนซ้ำอัตโนมัติ ยืดบล็อกบนไทม์ไลน์ได้ตามใจ (เสียงซ้อนสูงสุด 6 ชั้น)
         </div>
+      </Section>
+
+      <Section title="จังหวะเพลง">
+        <div className="flex gap-1.5">
+          <button
+            onClick={() => onReadBeats(false)}
+            disabled={beatBusy || items.length === 0}
+            title="ให้เอนจินอ่านคลื่นเสียงแล้วหาจังหวะ — เก็บผลไว้ ครั้งต่อไปไม่ต้องอ่านซ้ำ"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-line bg-panel-2 px-2.5 py-1.5 text-[12px] text-ink hover:bg-panel-3 disabled:opacity-40"
+          >
+            <Activity size={12} /> {beatBusy ? "กำลังอ่าน…" : "อ่านจังหวะ"}
+          </button>
+          <button
+            onClick={onToggleBeats}
+            disabled={!beats}
+            title="เปิด/ปิดเส้นจังหวะกับคลื่นเสียงบนไทม์ไลน์"
+            className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] disabled:opacity-40 ${
+              showBeats && beats
+                ? "border-accent bg-accent/15 text-accent"
+                : "border-line bg-panel-2 text-ink hover:bg-panel-3"
+            }`}
+          >
+            {showBeats && beats ? "ซ่อนเส้น" : "โชว์เส้น"}
+          </button>
+        </div>
+
+        {!beats ? (
+          <div className="text-[10.5px] leading-4 text-muted">
+            กด &ldquo;อ่านจังหวะ&rdquo; แล้วไทม์ไลน์จะขึ้นคลื่นเสียงกับเส้นจังหวะ —
+            ดูด้วยตาได้เลยว่าเส้นตรงกับกลองไหม ถ้าไม่ตรงพิมพ์ BPM ทับได้
+          </div>
+        ) : (
+          <>
+            {beats.tracks.map((t, i) => {
+              const m = items.findIndex((x) => x.id === t.id);
+              const weak = t.strength < 0.15;
+              return (
+                <div
+                  key={t.id || i}
+                  className="flex flex-col gap-1.5 rounded-lg border border-line bg-panel-2 p-2"
+                >
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="min-w-0 flex-1 truncate text-[11.5px] text-ink">
+                      {t.file}
+                    </span>
+                    <span className="shrink-0 font-mono text-[11px] text-accent">
+                      {t.bpm ? `${t.bpm.toFixed(1)} BPM` : "จับจังหวะไม่ได้"}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <Field label="BPM (0 = ให้ตรวจเอง)">
+                      <NInput
+                        value={m >= 0 ? (items[m].bpm ?? 0) : 0}
+                        step={0.5}
+                        min={0}
+                        max={beats.range[1]}
+                        onChange={(v) => m >= 0 && patch(m, { bpm: v })}
+                      />
+                    </Field>
+                    <Field label="จังหวะแรกที่วินาที">
+                      <NInput
+                        value={m >= 0 ? (items[m].beat_offset ?? 0) : 0}
+                        step={0.02}
+                        min={0}
+                        max={60}
+                        onChange={(v) => m >= 0 && patch(m, { beat_offset: v })}
+                      />
+                    </Field>
+                  </div>
+                  {/* ตัวเลขทุกตัวข้างล่างนี้บอกสิ่งที่ *วัดได้* ไม่ใช่คำทำนายว่า
+                      BPM ถูกหรือผิด — ตัวตรวจแยกสองอย่างนั้นไม่ได้ (ดู beat.py) */}
+                  <div className="text-[10.5px] leading-4 text-faint">
+                    {t.manual
+                      ? `พิมพ์เอง — ที่ตรวจได้คือ ${t.auto_bpm || "—"} BPM`
+                      : `ตรวจได้เอง · จังหวะแรกที่ ${t.offset.toFixed(2)} วิ`}
+                    {weak && t.bpm ? " · เพลงนี้เครื่องเคาะเบามาก ตรวจพลาดได้ง่าย" : ""}
+                    {t.loop_drift > 0.02 && (
+                      <span className="text-warn">
+                        {" "}
+                        · วนซ้ำแล้วจังหวะขาด {(t.loop_drift * 1000).toFixed(0)} ms
+                        ต่อรอบ (ไฟล์ยาวไม่ลงตัวกับจังหวะ)
+                      </span>
+                    )}
+                    {t.error && <span className="text-danger"> · {t.error}</span>}
+                  </div>
+                </div>
+              );
+            })}
+
+            <button
+              onClick={onSnapBeats}
+              disabled={beatBusy || beats.grid.length === 0}
+              title="ยืด/หดปลายช็อตทีละนิดให้รอยตัดไปตกลงจังหวะ — ย้อนกลับได้"
+              className="flex items-center justify-center gap-1.5 rounded-lg border border-accent bg-accent/15 px-2.5 py-1.5 text-[12px] text-accent hover:bg-accent/25 disabled:opacity-40"
+            >
+              <Magnet size={12} /> ดูดรอยตัดเข้าจังหวะ ({beats.grid.length} เส้น)
+            </button>
+            <div className="text-[10.5px] leading-4 text-muted">
+              ขยับได้ไม่เกิน {beats.limits.talk} วิ สำหรับช็อตพูด และ{" "}
+              {beats.limits.broll} วิ สำหรับช็อตวิว — รอยที่จังหวะอยู่ไกลกว่านั้น
+              ถูกปล่อยไว้เฉย ๆ ไม่ใช่ขยับไปครึ่งทาง ·{" "}
+              <b className="text-ink">ช็อตที่ขอบขยับต้อง render ใหม่</b>
+            </div>
+            <button
+              onClick={() => onReadBeats(true)}
+              disabled={beatBusy}
+              className="self-start text-[10.5px] text-faint hover:text-ink disabled:opacity-40"
+            >
+              อ่านใหม่ทั้งหมด (ไม่ใช้ผลที่เก็บไว้)
+            </button>
+          </>
+        )}
       </Section>
 
       <Section title="แทร็กในหนัง">

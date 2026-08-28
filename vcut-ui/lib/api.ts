@@ -164,8 +164,62 @@ function post(body: unknown): RequestInit {
   };
 }
 
+/** จังหวะของแทร็กเพลงหนึ่งแทร็ก — ทุกตัวเลขคำนวณที่เอนจิน (ดู vcut_engine/beat.py) */
+export interface BeatTrack {
+  id: string;
+  file: string;
+  at: number;
+  dur: number;
+  loop: boolean;
+  /** ที่เอนจินตรวจได้ — 0 = ตรวจไม่ได้ */
+  auto_bpm: number;
+  auto_offset: number;
+  /** ที่ใช้จริง = ค่าที่พิมพ์ทับ ถ้าไม่มีก็ใช้ค่าที่ตรวจได้ */
+  bpm: number;
+  offset: number;
+  /** true = คนพิมพ์ BPM เอง ค่าที่ตรวจได้ถูกเมิน */
+  manual: boolean;
+  /** เพลงนี้มีเครื่องเคาะชัดแค่ไหน — **ไม่ใช่** ความน่าจะเป็นที่ BPM จะถูก
+   *  (แยกสองอย่างนั้นด้วยตัวเลขเดียวไม่ได้ ดูเหตุผลที่ beat.py) */
+  strength: number;
+  file_dur: number;
+  /** คลื่นเสียงย่อ 20 ค่า/วินาที เป็นจำนวนเต็ม 0–100 */
+  peaks: number[];
+  peak_hz: number;
+  /** เพลงที่วนซ้ำแล้วจังหวะขาดตอนกี่วินาที — 0 = ลงตัวพอดี */
+  loop_drift: number;
+  error: string;
+}
+
+export interface BeatData {
+  tracks: BeatTrack[];
+  /** จังหวะทุกเส้นเป็น *วินาทีในหนัง* พร้อมวาดทับไทม์ไลน์ได้เลย */
+  grid: number[];
+  total: number;
+  analysed: number;
+  limits: { talk: number; broll: number; min_dur: number };
+  range: [number, number];
+}
+
+export interface BeatSnapResult {
+  shots: { i: number; start: number; end: number; moved?: number }[];
+  report: { i: number; why: string; need?: number; limit?: number;
+            room?: [number, number] }[];
+  moved: number;
+  beats: number;
+}
+
 export const api = {
   state: () => j<ProjectState>(`${engine}/api/state`),
+  /** จังหวะของทุกแทร็ก + กริดบนไทม์ไลน์ · force = วิเคราะห์ใหม่ ไม่ใช้แคช */
+  beats: (force = false) =>
+    j<BeatData>(`${engine}/api/beats${force ? "?force=1" : ""}`),
+  /** ส่งช็อตที่อยู่บนจอตอนนี้ไปให้เอนจินคำนวณตำแหน่งใหม่ — ไม่ได้บันทึกอะไร
+   *  หน้าเว็บเอาผลไปทาบเองผ่าน mutate() เพื่อให้ย้อนกลับได้ตามปกติ */
+  beatSnap: (
+    shots: { kind: string; start: number; end: number; clip_dur: number }[],
+    limits?: { talk?: number; broll?: number; min_dur?: number },
+  ) => j<BeatSnapResult>(`${engine}/api/beat/snap`, post({ shots, limits })),
   clips: () => j<ClipsData>(`${engine}/api/clips`),
   job: (since = 0) => j<JobState>(`${engine}/api/job?since=${since}`),
   runJob: (step: string, force = false) =>
@@ -295,6 +349,10 @@ export interface MusicTrack {
   dur: number;
   loop: boolean;
   id: string;
+  /** จังหวะที่พิมพ์ทับเอง — 0 = ให้เอนจินตรวจให้ (ดู vcut_engine/beat.py)
+   *  ค่าที่พิมพ์เองชนะค่าที่ตรวจได้เสมอ เพราะตัวตรวจพลาดจริงราว 1 ใน 10 เพลง */
+  bpm: number;
+  beat_offset: number;
 }
 
 export interface FxTextItem {

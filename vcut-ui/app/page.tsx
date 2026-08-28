@@ -15,6 +15,7 @@ import {
   fileToBase64,
   liveUrl,
   segUrl,
+  type BeatData,
   type CaptionsData,
   type ClipInfo,
   type TrashItem,
@@ -285,6 +286,15 @@ export default function Editor() {
     () => shots.filter((s) => !s.seg).length,
     [shots],
   );
+
+  // ── จังหวะเพลง ──
+  //
+  // เก็บทั้งก้อนไว้ที่นี่เพราะมีสองที่ที่ต้องใช้ตัวเลขชุดเดียวกัน: เส้นบนไทม์ไลน์
+  // กับปุ่มดูดรอยตัด  ให้แต่ละที่ไปเรียกเองแปลว่าเส้นที่เห็นกับที่ปุ่มใช้อาจเป็น
+  // คนละรอบการวิเคราะห์
+  const [beats, setBeats] = useState<BeatData | null>(null);
+  const [beatBusy, setBeatBusy] = useState(false);
+  const [showBeats, setShowBeats] = useState(false);
 
   const flash = useCallback((msg: string) => {
     setNotice(msg);
@@ -946,6 +956,38 @@ export default function Editor() {
     [pushHistory],
   );
 
+  const loadBeats = useCallback(
+    async (force = false) => {
+      setBeatBusy(true);
+      try {
+        const b = await api.beats(force);
+        setBeats(b);
+        setShowBeats(true);
+        const noBpm = b.tracks.filter((t) => !t.bpm).length;
+        flash(
+          b.tracks.length === 0
+            ? "ยังไม่มีเพลงในหนัง — วางเพลงลงไทม์ไลน์ก่อน"
+            : `อ่านจังหวะแล้ว ${b.tracks.length} แทร็ก · ${b.grid.length} เส้น` +
+              (noBpm ? ` · ${noBpm} แทร็กจับจังหวะไม่ได้ พิมพ์ BPM เองได้` : ""),
+        );
+        return b;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "";
+        // เอนจินรุ่นก่อนหน้าไม่มีเส้นทางนี้ แล้ว 404 ของเอนจินตอบข้อความกลาง ๆ
+        // ที่อ่านแล้วไม่รู้ว่าต้องทำอะไรต่อ — แปลให้ตรงจุดตรงนี้
+        flash(
+          msg.includes("ไม่รู้จักเส้นทาง") || msg.includes("404")
+            ? "เอนจินที่รันอยู่ยังไม่มีชั้นจังหวะ — รีสตาร์ต ./vcut view แล้วลองใหม่"
+            : msg || "อ่านจังหวะไม่สำเร็จ",
+        );
+        return null;
+      } finally {
+        setBeatBusy(false);
+      }
+    },
+    [flash],
+  );
+
   const patchShot = useCallback(
     (i: number, patch: Partial<Shot>) => {
       mutate((prev) =>
@@ -966,6 +1008,52 @@ export default function Editor() {
     },
     [mutate],
   );
+
+  /**
+   *  ดูดรอยตัดทุกจุดเข้าหาจังหวะ
+   *
+   *  **เอนจินคำนวณ หน้าเว็บแค่ทาบผล** — ตำแหน่งจังหวะกับกฎการขยับอยู่ที่
+   *  vcut_engine/beat.py ที่เดียว (มีด่าน scripts/check_beat.py คุมไว้) ถ้า
+   *  หน้าเว็บคิดเอง จะมีกฎสองชุดที่เพี้ยนจากกันได้ทันที
+   *
+   *  ทาบผ่าน mutate() เหมือนการแก้อื่น ๆ ทุกอย่าง — ปุ่มย้อนกลับจึงย้อนได้
+   *  ทั้งกองในครั้งเดียว ซึ่งสำคัญมากเพราะปุ่มนี้แตะช็อตหลายสิบชิ้นพร้อมกัน
+   */
+  const snapToBeats = useCallback(async () => {
+    if (!shots.length) return flash("ยังไม่มีช็อตในไทม์ไลน์");
+    setBeatBusy(true);
+    try {
+      const r = await api.beatSnap(
+        shots.map((s) => ({
+          kind: s.kind, start: s.start, end: s.end, clip_dur: s.clip_dur,
+        })),
+      );
+      if (!r.beats) return flash("ยังไม่รู้จังหวะของเพลง — กด “อ่านจังหวะ” ก่อน");
+      if (!r.moved) return flash("รอยตัดตรงจังหวะอยู่แล้วทุกจุด — ไม่มีอะไรต้องแก้");
+      const by = new Map(r.shots.map((x) => [x.i, x]));
+      mutate((prev) =>
+        prev.map((sh, i) => {
+          const x = by.get(i);
+          if (!x || x.end === sh.end) return sh;
+          // ขอบขยับ = ไฟล์ segment เดิมใช้ไม่ได้แล้ว ต้องตัดใหม่ (กฎเดียวกับ
+          // patchShot — ที่นี่เขียนซ้ำเพราะ mutate รับตัวแปลงทั้งรายการ)
+          return { ...sh, end: x.end,
+                   dur: Math.round((x.end - sh.start) * 1000) / 1000,
+                   seg: null };
+        }),
+      );
+      const skip = r.report.length;
+      flash(
+        `ดูดเข้าจังหวะ ${r.moved} รอย` +
+          (skip ? ` · ข้าม ${skip} รอยที่เอื้อมไม่ถึง` : "") +
+          ` — ต้อง render ใหม่ ${r.moved} ชิ้น (กดย้อนกลับได้)`,
+      );
+    } catch (e) {
+      flash(e instanceof Error ? e.message : "ดูดรอยตัดไม่สำเร็จ");
+    } finally {
+      setBeatBusy(false);
+    }
+  }, [shots, mutate, flash]);
 
   const removeShot = useCallback(
     (i: number) => {
@@ -2232,6 +2320,12 @@ export default function Editor() {
             onAddBgmAtPlayhead={(f) => addBgmAt(playhead, f)}
             onToggleMixer={() => setMixerOpen((o) => !o)}
             focusIdx={focus?.kind === "music" ? focus.idx : null}
+            beats={beats}
+            beatBusy={beatBusy}
+            showBeats={showBeats}
+            onReadBeats={loadBeats}
+            onToggleBeats={() => setShowBeats((v) => !v)}
+            onSnapBeats={snapToBeats}
             flash={flash}
           />
         )}
@@ -2365,6 +2459,7 @@ export default function Editor() {
           onLayerChange={changeLayerItem}
           onLayerRemove={removeLayerItem}
           onDropPayload={(p, tl) => dropOnTimeline(p as DropPayload, tl)}
+          beats={showBeats ? beats : null}
         />
       </div>
 

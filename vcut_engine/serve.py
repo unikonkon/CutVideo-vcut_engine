@@ -1233,6 +1233,18 @@ def make_handler(ctx, job):
             if p == "/api/fx":
                 return self._json(build_fx(ctx))
 
+            if p == "/api/beats":
+                from . import beat
+                from . import fx as fxmod
+                d = fxmod.load(ctx)
+                # ความยาวหนังมาจากขั้น 3 — ถ้ายังไม่มี render.json ก็ยังดูคลื่น
+                # เสียงกับ BPM ได้ แค่กริดจะว่างเพราะไม่รู้ว่าหนังยาวแค่ไหน
+                rman = read_json(ctx.work / "render.json", {}) or {}
+                tot = sum(float(x.get("exact_dur") or x.get("dur") or 0)
+                          for x in rman.get("segments", []))
+                return self._json(beat.view(ctx, d, tot,
+                                            force="force=1" in (u.query or "")))
+
             if p == "/api/compare":
                 from . import compare as cmp_
                 return self._json(cmp_.status(ctx))
@@ -1599,6 +1611,29 @@ def make_handler(ctx, job):
 
             if p == "/api/job/stop":
                 return self._json({"ok": job.stop(), "step": job.step})
+
+            if p == "/api/beat/snap":
+                # รับ *ช็อตที่อยู่บนจอตอนนี้* ไม่ใช่อ่านจาก edl.json — คนกดปุ่มนี้
+                # หลังลากไทม์ไลน์แล้วยังไม่บันทึกได้เสมอ  รับเฉพาะสี่ค่าที่ใช้จริง
+                # แล้วคืนแค่ start/end ใหม่ ให้หน้าเว็บเอาไปทาบตามลำดับ
+                from . import beat
+                from . import fx as fxmod
+                shots = payload.get("shots")
+                if not isinstance(shots, list):
+                    return self._json({"error": "ไม่ได้ส่งรายการช็อตมา"}, 400)
+                lim = payload.get("limits") or {}
+                d = fxmod.load(ctx)
+                tot = sum(float(s.get("end", 0)) - float(s.get("start", 0))
+                          for s in shots)
+                g = beat.grid(d, read_json(beat.cache_path(ctx), {}) or {}, tot)
+                rows, report = beat.snap(
+                    shots, g,
+                    talk=float(lim.get("talk", beat.TALK_LIMIT)),
+                    broll=float(lim.get("broll", beat.BROLL_LIMIT)),
+                    min_dur=float(lim.get("min_dur", beat.MIN_DUR)))
+                return self._json({"shots": rows, "report": report,
+                                   "moved": sum(1 for r in rows if "moved" in r),
+                                   "beats": len(g)})
 
             if p == "/api/job":
                 step = payload.get("step")

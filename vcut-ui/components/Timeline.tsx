@@ -29,6 +29,7 @@ import {
   type LayerKind,
 } from "@/lib/layers";
 import { dur, rulerStep } from "@/lib/time";
+import type { BeatData } from "@/lib/api";
 
 const CHAPTER_COLORS = [
   "#3b82f6",
@@ -58,6 +59,51 @@ const LANES_BELOW: typeof LANES = [
   { kind: "music", label: "เพลง", icon: Music, h: 30, color: "#8b5cf6" },
 ];
 
+/** คลื่นเสียงของแทร็กเพลง วาดเป็นพื้นหลังของบล็อก
+ *
+ *  ค่าที่ได้มาเป็นของ *ไฟล์* ส่วนบล็อกเป็นช่วงบน *ไทม์ไลน์* — แทร็กที่วนซ้ำจึง
+ *  ต้องพับเวลากลับด้วย % ทุกจุด ไม่งั้นเพลงลูป 20 วิที่ยืดยาว 3 นาทีจะได้คลื่น
+ *  แค่ช่วงต้นแล้วเหลือพื้นที่ว่างยาว ๆ ทั้งที่เสียงยังเล่นอยู่
+ */
+function Wave({
+  peaks, hz, fileDur, loop, dur, w, h,
+}: {
+  peaks: number[];
+  hz: number;
+  fileDur: number;
+  loop: boolean;
+  dur: number;
+  w: number;
+  h: number;
+}) {
+  if (!peaks.length || w < 4 || fileDur <= 0) return null;
+  // หนึ่งแท่งต่อพิกเซล — มากกว่านั้นตาไม่เห็น และ DOM บวมฟรี
+  const cols = Math.min(Math.floor(w), 1200);
+  const pts: string[] = [];
+  for (let i = 0; i < cols; i++) {
+    const t = (i / cols) * dur;
+    const ft = loop ? t % fileDur : t;
+    const v = ft <= fileDur ? (peaks[Math.floor(ft * hz)] ?? 0) : 0;
+    pts.push(`${(i / cols) * w},${h / 2 - (v / 100) * (h / 2 - 1)}`);
+  }
+  for (let i = cols - 1; i >= 0; i--) {
+    const t = (i / cols) * dur;
+    const ft = loop ? t % fileDur : t;
+    const v = ft <= fileDur ? (peaks[Math.floor(ft * hz)] ?? 0) : 0;
+    pts.push(`${(i / cols) * w},${h / 2 + (v / 100) * (h / 2 - 1)}`);
+  }
+  return (
+    <svg
+      width={w}
+      height={h}
+      className="pointer-events-none absolute inset-0"
+      preserveAspectRatio="none"
+    >
+      <polygon points={pts.join(" ")} fill="rgba(255,255,255,0.42)" />
+    </svg>
+  );
+}
+
 function Block({
   b,
   pxPerSec,
@@ -66,6 +112,7 @@ function Block({
   selected,
   top,
   height,
+  wave,
   onSelect,
   onChange,
   onRemove,
@@ -77,6 +124,8 @@ function Block({
   selected: boolean;
   top: number;
   height: number;
+  /** คลื่นเสียงของแทร็กนี้ — มีเฉพาะเลนเพลงตอนเปิดโหมดจังหวะ */
+  wave?: { peaks: number[]; hz: number; fileDur: number; loop: boolean };
   onSelect: () => void;
   onChange: (tl: number, dur: number, mode: "move" | "resize") => void;
   onRemove: () => void;
@@ -168,7 +217,15 @@ function Block({
           className="absolute left-0 top-0 h-full w-1.5 cursor-ew-resize bg-white/25 hover:bg-white/60"
         />
       )}
-      <span className="truncate px-2">{b.label}</span>
+      {wave && (
+        <Wave
+          {...wave}
+          dur={ghost?.dur ?? b.dur}
+          w={w}
+          h={height}
+        />
+      )}
+      <span className="relative truncate px-2">{b.label}</span>
       {!readonly && (
         <div
           onPointerDown={(e) => start(e, "resize-r")}
@@ -203,6 +260,7 @@ export default function Timeline({
   onLayerChange,
   onLayerRemove,
   onDropPayload,
+  beats,
   canUndo,
   canRedo,
   onUndo,
@@ -235,6 +293,8 @@ export default function Timeline({
   ) => void;
   onLayerRemove: (kind: LayerKind, idx: number) => void;
   onDropPayload: (payload: unknown, tl: number) => void;
+  /** จังหวะเพลงที่เอนจินอ่านมา · null = ปิดโหมดจังหวะ หรือยังไม่ได้กดอ่าน */
+  beats: BeatData | null;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
@@ -315,6 +375,49 @@ export default function Timeline({
     return st ? st.rows * ROW_H + 4 : l.h;
   };
 
+  /**
+   *  ตำแหน่งเส้นจังหวะเป็นพิกเซล — ตอนซูมออกวาดทุกกี่จังหวะแทนที่จะวาดทุกจังหวะ
+   *
+   *  หนังสิบนาทีที่ 144 BPM มี 1,440 จังหวะ ห่างกัน 1.2 พิกเซลตอนซูมออกสุด
+   *  วาดครบทุกเส้นแล้วได้แถบทึบที่อ่านอะไรไม่ได้ และ div พันกว่าอันทำให้เลื่อน
+   *  ไทม์ไลน์หนืด
+   *
+   *  **บางด้วยการข้ามทีละเท่าตัว (ทุก 2 · 4 · 8 จังหวะ) ไม่ใช่ข้ามตัวที่ใกล้กัน**
+   *  วิธีหลังทำให้ระยะห่างของเส้นไม่เท่ากัน ซึ่งผิดความหมายของคำว่า "กริดจังหวะ"
+   *  ทันที — คนดูจะอ่านว่าเพลงจังหวะไม่สม่ำเสมอ  ข้ามทีละเท่าตัวได้เส้นห่างเท่ากัน
+   *  และยังเป็นตำแหน่งที่มีความหมายทางดนตรี (ทุก 4 จังหวะ = ทุกห้องเพลง)
+   */
+  const beatTicks = useMemo(() => {
+    const g = beats?.grid;
+    if (!g || g.length < 2) return [];
+    const gap = (g[g.length - 1] - g[0]) / (g.length - 1);
+    let stride = 1;
+    while (gap * stride * pxPerSec < 6 && stride < 64) stride *= 2;
+    // ตัดเส้นที่เลยท้ายเรื่องทิ้ง — ความยาวที่เอนจินใช้คำนวณกริดมาจาก render.json
+    // ส่วนความยาวบนจอนี้มาจากไทม์ไลน์ที่กำลังแก้อยู่ สองอย่างต่างกันได้เสมอ
+    // (เพิ่งลากช็อตออกแล้วยังไม่กดสร้างไฟล์) แล้วจะเหลือเส้นลอยพ้นขอบหนัง
+    const out: number[] = [];
+    for (let i = 0; i < g.length; i += stride) {
+      if (g[i] > total) break;
+      out.push(g[i] * pxPerSec);
+    }
+    return out;
+  }, [beats, pxPerSec, total]);
+
+  // แทร็กเพลงที่รู้คลื่นเสียงแล้ว — คีย์ด้วยลำดับบล็อกในเลนเพลง ซึ่งตรงกับลำดับ
+  // ใน fx.music ที่เอนจินส่งกลับมา (musicBlocks ใช้ idx ตัวเดียวกัน)
+  const waveOf = useMemo(() => {
+    const m = new Map<number, { peaks: number[]; hz: number; fileDur: number;
+                                loop: boolean }>();
+    (beats?.tracks ?? []).forEach((t, i) => {
+      if (t.peaks.length) {
+        m.set(i, { peaks: t.peaks, hz: t.peak_hz, fileDur: t.file_dur,
+                   loop: t.loop });
+      }
+    });
+    return m;
+  }, [beats]);
+
   const laneRow = (l: (typeof LANES)[number]) => {
     const st = stack.get(l.kind);
     const h = laneHeight(l);
@@ -336,6 +439,7 @@ export default function Timeline({
               selected={layerSel?.kind === l.kind && layerSel.idx === b.idx}
               top={st ? 2 + row * ROW_H : 2}
               height={st ? ROW_H - 4 : h - 4}
+              wave={l.kind === "music" ? waveOf.get(b.idx) : undefined}
               onSelect={() => onLayerSelect(l.kind, b.idx)}
               onChange={(tl, d, mode) => onLayerChange(l.kind, b.idx, tl, d, mode)}
               onRemove={() => onLayerRemove(l.kind, b.idx)}
@@ -631,6 +735,20 @@ export default function Timeline({
 
             {/* เลเยอร์ใต้วิดีโอ */}
             {lanesBelow.map(laneRow)}
+
+            {/* เส้นจังหวะ — พาดทุกเลนตั้งแต่ใต้ไม้บรรทัดลงไป วางไว้ *ใต้* บล็อก
+                (z ต่ำ) เพราะมันเป็นเส้นอ้างอิง ไม่ใช่ของที่ต้องอ่านทับของจริง */}
+            {beatTicks.length > 0 && (
+              <div className="pointer-events-none absolute bottom-0 left-0 top-7 z-0">
+                {beatTicks.map((x, i) => (
+                  <div
+                    key={i}
+                    className="absolute bottom-0 top-0 w-px bg-accent/25"
+                    style={{ left: 8 + x }}
+                  />
+                ))}
+              </div>
+            )}
 
             {/* เส้นบอกจุดที่กำลังจะปล่อยของ */}
             {dropHint != null && (
