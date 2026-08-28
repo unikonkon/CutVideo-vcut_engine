@@ -26,7 +26,7 @@ from . import (ai, assemble, caption, compare, compose, config, decide, finish,
                fx, listen, prepare, render, reset, review, scan, serve, settings,
                silence, thumbs)
 from .util import (c, die, disk_free_gb, hhmmss, info, read_json,
-                   require_tools, sweep_dir, warn)
+                   require_tools, reveal, sweep_dir, warn)
 
 USAGE = """vcut — ตัดต่อวิดีโออัตโนมัติด้วย config
 
@@ -452,6 +452,18 @@ def cmd_reset(ctx, args):
          f"{c('vcut reset --restore ' + out['snapshot'], 'g')}")
 
 
+def show(ctx, dst):
+    """เปิด Finder โชว์หนังที่เพิ่งทำเสร็จ — ปิดด้วย [project] reveal = false
+
+    อยู่ที่นี่ไม่ใช่ใน assemble.verify เพราะ verify ถูกเรียกทุกขั้นที่ต่อไฟล์ —
+    `vcut run` รอบเดียวจะเด้ง Finder สามหน้าต่างซ้อนกัน  ที่นี่รู้ว่า "คำสั่งนี้
+    จบแล้ว" จึงเด้งได้ครั้งเดียวที่ไฟล์สุดท้ายจริง ๆ
+    """
+    if dst and ctx.get("project.reveal", True):
+        reveal(dst)
+    return dst
+
+
 def cmd_run(ctx, args):
     """ทำครบขั้น 1→5 — ขั้นที่ทำไว้แล้วและค่ายังไม่เปลี่ยนจะข้ามจาก cache
 
@@ -486,9 +498,13 @@ def cmd_run(ctx, args):
         "finish": lambda: finish.run(ctx),
         "compare": lambda: compare.run(ctx),
     }
+    made = None
     for sid in todo:
-        runner[sid]()
+        got = runner[sid]()
+        if sid in ("assemble", "caption", "finish", "compare"):
+            made = got
     info(f"{c('เสร็จทั้งหมด', 'g')} ใช้เวลา {hhmmss(time.time() - t0)}")
+    show(ctx, made)
 
 
 def main(argv=None):
@@ -546,13 +562,13 @@ def main(argv=None):
     elif args.cmd == "render":
         render.run(ctx, force=args.force)
     elif args.cmd == "assemble":
-        assemble.run(ctx, out=args.out)
+        show(ctx, assemble.run(ctx, out=args.out))
     elif args.cmd == "caption":
-        caption.run(ctx, out=args.out)
+        show(ctx, caption.run(ctx, out=args.out))
     elif args.cmd == "fx":
-        finish.run(ctx, out=args.out)
+        show(ctx, finish.run(ctx, out=args.out))
     elif args.cmd == "compare":
-        compare.run(ctx, out=args.out)
+        show(ctx, compare.run(ctx, out=args.out))
     elif args.cmd == "review":
         review.run(ctx, context=args.context, force=args.force, tasks=args.tasks)
     elif args.cmd == "view":

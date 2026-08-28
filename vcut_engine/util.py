@@ -338,3 +338,21 @@ def sweep_dir(directory):
 
 def disk_free_gb(path):
     return shutil.disk_usage(str(path)).free / 1e9
+
+
+def reveal(path):
+    """เปิด Finder แล้วเลือกไฟล์ที่เพิ่งทำเสร็จให้ — คืน True ถ้าสั่งได้จริง
+
+    พิมพ์ path ออกมาอย่างเดียวยังต้องคัดลอกไปวางเองอีกทอด และ path ที่มีเว้นวรรค
+    (โฟลเดอร์ของผู้ใช้จริงมีเสมอ) วางแล้วพังบ่อย — เปิดให้เลยจบกว่า
+    ล้มเหลวเงียบได้: หนังทำเสร็จแล้ว การที่หน้าต่างไม่เด้งไม่ใช่ความล้มเหลวของงาน
+    """
+    p = Path(path).expanduser()
+    if sys.platform != "darwin" or not p.exists():
+        return False
+    try:
+        subprocess.run(["open", "-R", str(p)], check=False, timeout=10,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except (OSError, subprocess.SubprocessError):
+        return False

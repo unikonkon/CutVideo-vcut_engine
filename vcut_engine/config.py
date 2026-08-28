@@ -3,6 +3,7 @@
 ลำดับการ merge:  config/default.toml  ←  preset/ไฟล์ที่ผู้ใช้ระบุ  ←  --set บน CLI
 ค่าที่ระบุทีหลังทับค่าก่อนหน้า (deep merge ระดับ table)
 """
+import re
 import tomllib
 from copy import deepcopy
 from pathlib import Path
@@ -12,6 +13,13 @@ from .util import die
 PKG_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = PKG_ROOT / "config" / "default.toml"
 PRESET_DIR = PKG_ROOT / "config" / "presets"
+
+# ที่ที่หนังไปโผล่เมื่อ [project] out เป็นชื่อไฟล์ล้วน ๆ — ทับได้ด้วย
+# [project] out_dir  ·  เดิมทีชื่อไฟล์ล้วน ๆ ถูกวัดจาก "โฟลเดอร์ที่รันคำสั่ง"
+# ซึ่งแปลว่าหนังไปนอนใน repo ของเอนจินตอนสั่งจากเทอร์มินัล และไปนอนอีกที่ตอน
+# สั่งจากหน้าเว็บ (serve ตั้ง cwd ของตัวเอง) — ไฟล์เดียวกันอยู่คนละที่ตามวิธีสั่ง
+# คือเหตุผลที่หาไฟล์ที่ทำเสร็จแล้วไม่เจอ ปลายทางจึงต้องเป็นที่เดิมเสมอ
+EXPORT_DIR = "~/Movies/vcut"
 
 # [order] mode — "เรียงยังไง" ซึ่งเป็นคนละแกนกับ [compose] mode ที่ตอบว่า "เอาชิ้นไหน"
 # ตัวแรกคือค่าตั้งต้น · อยู่ที่นี่เพราะ validate ต้องใช้ และ compose/settings อ่านต่อได้
@@ -136,12 +144,43 @@ def load(config_name=None, overrides=None):
 
     out = Path(proj.get("out", "final.mp4")).expanduser()
     if not out.is_absolute():
-        out = (Path.cwd() / out).resolve()
+        out = export_dir(cfg, path) / out
     proj["out"] = str(out)
 
     cfg["_meta"] = {"config_files": [str(p) for p in used]}
     validate(cfg)
     return cfg
+
+
+def _slug(name):
+    """ชื่อโปรเจกต์ → ชื่อโฟลเดอร์ที่ปลอดภัย (กันขีดคั่นโฟลเดอร์กับจุดนำหน้า)"""
+    return re.sub(r"[/\\:]+", "-", str(name or "")).strip().strip(".") or "untitled"
+
+
+def project_slug(cfg, config_path=None):
+    """ชื่อโฟลเดอร์ผลงานของโปรเจกต์นี้
+
+    เอาจาก [project] name เฉพาะตอนที่ *ไฟล์โปรเจกต์เอง* ตั้งชื่อไว้ ไม่ใช่ชื่อที่
+    รับมรดกมาจาก preset ที่ extends — ไม่งั้นทุกโปรเจกต์ที่ extends "hiking-vlog"
+    จะไปลงโฟลเดอร์ hiking-vlog โฟลเดอร์เดียวกันแล้วเขียนทับหนังของกันและกัน
+    ไม่ได้ตั้งชื่อไว้ก็ใช้ชื่อไฟล์ config แทน (projects/phu-soi-dao.toml → phu-soi-dao)
+    """
+    if config_path:
+        own = (_load_toml(config_path).get("project") or {})
+        return _slug(str(own.get("name", "") or "").strip() or config_path.stem)
+    return _slug(str(cfg.get("project", {}).get("name", "") or "").strip())
+
+
+def export_dir(cfg, config_path=None):
+    """โฟลเดอร์ปลายทางของหนัง เมื่อ [project] out เป็นชื่อไฟล์ล้วน ๆ
+
+    ได้ <out_dir>/<ชื่อโปรเจกต์>/ — อยากได้ที่อื่นให้ใส่ path เต็มที่
+    [project] out (ขึ้นต้นด้วย / หรือ ~) แล้วตัวนี้จะไม่ถูกเรียกเลย
+    """
+    root = Path(str(cfg.get("project", {}).get("out_dir") or EXPORT_DIR)).expanduser()
+    if not root.is_absolute():
+        root = (Path.cwd() / root).resolve()
+    return root / project_slug(cfg, config_path)
 
 
 def validate(cfg):
