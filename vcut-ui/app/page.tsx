@@ -24,6 +24,7 @@ import {
   type FxOverlay,
   type FxShape,
   type FxTextItem,
+  type MusicTrack,
   type JobState,
   type ProjectState,
   type ReviewOp,
@@ -46,6 +47,8 @@ import {
   type DropPayload,
   type LayerKind,
 } from "@/lib/layers";
+import { resolveLook } from "@/lib/textfx";
+import { dur } from "@/lib/time";
 import { BGM_LIST, bgmLabel, bgmUrl } from "@/lib/bgm";
 import { SFX_LIST, sfxUrl } from "@/lib/sfx";
 import { STICKER_LIST, stickerUrl } from "@/lib/stickers";
@@ -344,6 +347,7 @@ export default function Editor() {
       setFxDraft({
         music: d.fx.music.map((m) => ({ ...m })),
         texts: d.fx.texts.map((t) => ({ ...t })),
+        presets: (d.fx.presets ?? []).map((x) => ({ ...x })),
         overlays: d.fx.overlays.map((o) => ({ ...o })),
         journey: JSON.parse(JSON.stringify(d.fx.journey)),
         auto_sub: {
@@ -436,6 +440,7 @@ export default function Editor() {
       setFxDraft({
         music: r.fx.fx.music.map((m) => ({ ...m })),
         texts: r.fx.fx.texts.map((t) => ({ ...t })),
+        presets: (r.fx.fx.presets ?? []).map((x) => ({ ...x })),
         overlays: r.fx.fx.overlays.map((o) => ({ ...o })),
         journey: JSON.parse(JSON.stringify(r.fx.fx.journey)),
         auto_sub: {
@@ -1408,6 +1413,16 @@ export default function Editor() {
     return out.sort((p, q) => p.tl - q.tl);
   }, [trData, shots, offsets]);
 
+  // ── ชุดสไตล์ที่จอตัวอย่างต้องรวมเอง ──
+  //
+  // รายชื่อคีย์มาจากเอนจิน ไม่ใช่ค่าคงที่ฝั่งนี้ — เอนจินเป็นเจ้าของว่า "อะไรบ้าง
+  // ที่อยู่ในชุด" (fx.PRESET_KEYS) หน้าเว็บแค่ตามอ่าน จึงไม่มีสองรายการให้เพี้ยน
+  const presets = useMemo(() => fxDraft?.presets ?? [], [fxDraft]);
+  const presetKeys = useMemo(
+    () => (fxData?.defaults.preset_keys as string[] | undefined) ?? [],
+    [fxData],
+  );
+
   // ข้อมูลให้ตัวอย่างซ้อนสดใน preview — ตัวเลขชุดเดียวกับที่จะถูกเผาตอน render
   const overlayData = useMemo(() => {
     if (!fxDraft) {
@@ -1419,9 +1434,16 @@ export default function Editor() {
     const extKind = (f: string) =>
       /\.(mov|webm|mp4|m4v)$/i.test(f) ? "video" : "image";
     return {
+      // ชุดสไตล์ต้องถูกรวมตรงนี้ ไม่ใช่ปล่อยให้ Preview ไปหาเอง — จอตัวอย่างวาด
+      // จากร่างที่ยังไม่บันทึก ซึ่งเอนจินยังไม่เห็น ถ้าไม่รวม จอจะโชว์ค่าที่ค้าง
+      // อยู่ในชิ้น ส่วนไฟล์ที่ได้ใช้ค่าของชุด (ตัวรวมเดียวกับที่แผงข้อความใช้)
       texts: layers.text
         .filter((b) => !b.orphan)
-        .map((b) => ({ item: fxDraft.texts[b.idx], tl: b.tl, idx: b.idx })),
+        .map((b) => ({
+          item: resolveLook(fxDraft.texts[b.idx], presets, presetKeys),
+          tl: b.tl,
+          idx: b.idx,
+        })),
       stickers: layers.sticker
         .filter((b) => !b.orphan)
         .map((b) => {
@@ -1438,7 +1460,7 @@ export default function Editor() {
         .map((b) => ({ item: fxDraft.shapes[b.idx], tl: b.tl, idx: b.idx })),
       cues: previewCues,
     };
-  }, [layers, fxDraft, fxData, previewCues]);
+  }, [layers, fxDraft, fxData, previewCues, presets, presetKeys]);
 
   // ย้าย/ยืดบล็อกบนเลเยอร์ → เขียนกลับเป็นหน่วยของเอนจิน (คลิป+วินาที หรือ at รวม)
   const changeLayerItem = useCallback(
@@ -1571,6 +1593,80 @@ export default function Editor() {
     },
     [focus, fxDraft, patchOverlayAt, patchTextAt, patchShapeAt],
   );
+
+  // ── ก๊อป-วางบล็อกบนไทม์ไลน์ ──
+  //
+  // **ก๊อปตัวชิ้น ไม่ใช่ตัวชี้** — เก็บสำเนาของ object ไว้เลย ไม่ใช่จำ (kind, idx)
+  // ไว้แล้วไปอ่านตอนวาง เพราะระหว่างก๊อปกับวางคนลบ/สลับชิ้นได้ แล้ว idx เดิมจะชี้
+  // ไปที่ของคนละตัวโดยไม่มีอะไรฟ้อง (บทเรียนเดียวกับกุญแจเอฟเฟกต์ที่ไม่ผูกกับลำดับ)
+  //
+  // เวลาถูกทิ้งตั้งแต่ตอนก๊อป — ที่วางมาจากหัวเล่นเสมอ ของที่ก๊อปไว้จึงเป็น
+  // "หน้าตา + ความยาว" ล้วน ๆ ส่วน id ตั้งใหม่ให้เอนจินตอนบันทึก
+  type ClipItem =
+    | { kind: "text"; item: FxTextItem }
+    | { kind: "sticker"; item: FxOverlay }
+    | { kind: "shape"; item: FxShape }
+    | { kind: "music"; item: MusicTrack };
+  const [clipboard, setClipboard] = useState<ClipItem | null>(null);
+
+  const copyLayerItem = useCallback(() => {
+    if (!fxDraft || !focus) return;
+    const { kind, idx } = focus;
+    const row =
+      kind === "text"
+        ? fxDraft.texts[idx]
+        : kind === "sticker"
+          ? fxDraft.overlays[idx]
+          : kind === "shape"
+            ? fxDraft.shapes[idx]
+            : kind === "music"
+              ? fxDraft.music[idx]
+              : null;
+    if (!row) {
+      return flash("เลเยอร์นี้ก๊อปไม่ได้ — ซับอัตโนมัติกับเสียงพูดเป็นของที่คำนวณมา");
+    }
+    setClipboard({ kind, item: { ...row } } as ClipItem);
+    flash(`ก๊อปแล้ว — กด Cmd+V วางที่หัวเล่น (${dur(playhead)})`);
+  }, [fxDraft, focus, playhead, flash]);
+
+  const pasteLayerItem = useCallback(() => {
+    if (!fxDraft || !clipboard) return flash("ยังไม่มีอะไรถูกก๊อป");
+    const { kind, item } = clipboard;
+    if (kind === "music") {
+      const d = item.dur > 0 ? item.dur : Math.max(total - playhead, 1);
+      if (overlapCount(layers.music, playhead, d) >= MAX_AUDIO_STACK) {
+        return flash(`ช่วงนี้มีเสียงซ้อนครบ ${MAX_AUDIO_STACK} ชั้นแล้ว`);
+      }
+      patchFx({
+        music: [
+          ...fxDraft.music,
+          { ...item, at: Math.round(playhead * 100) / 100, id: "" },
+        ],
+      });
+      setFocus({ kind: "music", idx: fxDraft.music.length });
+      return flash(`วางเพลง ${item.file} ที่ ${dur(playhead)}`);
+    }
+    const bind = tlToClip(shots, offsets, playhead);
+    if (!bind) return flash("หัวเล่นอยู่นอกช่วงหนัง — วางไม่ได้");
+    if (overlapCount(layers[kind], playhead, item.dur) >= MAX_STACK) {
+      return flash(`ช่วงนี้ซ้อนครบ ${MAX_STACK} ชั้นแล้ว — เลื่อนหัวเล่นไปที่ว่างก่อน`);
+    }
+    // id ว่างเสมอ — id เดิมเป็นตัวชี้ของชิ้นต้นฉบับ (ซับจากบทพูดใช้ `tr:` จับคู่
+    // กับบรรทัดที่ติ๊กไว้) สำเนาที่ถือ id เดิมจะกลายเป็นชิ้นที่สองที่อ้างว่าเป็น
+    // บรรทัดเดียวกัน แล้วติ๊กออกทีเดียวหายไปทั้งคู่
+    const row = { ...item, name: bind.name, at: bind.at, id: "" };
+    if (kind === "text") {
+      patchFx({ texts: [...fxDraft.texts, row as FxTextItem] });
+      setFocus({ kind: "text", idx: fxDraft.texts.length });
+    } else if (kind === "sticker") {
+      patchFx({ overlays: [...fxDraft.overlays, row as FxOverlay] });
+      setFocus({ kind: "sticker", idx: fxDraft.overlays.length });
+    } else {
+      patchFx({ shapes: [...fxDraft.shapes, row as FxShape] });
+      setFocus({ kind: "shape", idx: fxDraft.shapes.length });
+    }
+    flash(`วางที่ ${bind.name} ${dur(playhead)} — กดบันทึกเมื่อจัดเสร็จ`);
+  }, [fxDraft, clipboard, shots, offsets, layers, total, playhead, patchFx, flash]);
 
   const removeLayerItem = useCallback(
     (kind: LayerKind, idx: number) => {
@@ -2161,6 +2257,18 @@ export default function Editor() {
       } else if (mod && e.key.toLowerCase() === "s") {
         e.preventDefault();
         saveAll();
+      } else if (mod && e.key.toLowerCase() === "c") {
+        // ก๊อปช็อตยังไม่มี — Cmd+C จึงเป็นของบล็อกเลเยอร์อย่างเดียว ปล่อยผ่าน
+        // ตอนไม่ได้เลือกบล็อกไว้ เพื่อไม่ไปทับการก๊อปข้อความปกติของเบราว์เซอร์
+        if (focus) {
+          e.preventDefault();
+          copyLayerItem();
+        }
+      } else if (mod && e.key.toLowerCase() === "v") {
+        if (clipboard) {
+          e.preventDefault();
+          pasteLayerItem();
+        }
       } else if (e.code === "Space") {
         e.preventDefault();
         toggle();
@@ -2210,6 +2318,9 @@ export default function Editor() {
     saveAll,
     zoomFit,
     nudge,
+    clipboard,
+    copyLayerItem,
+    pasteLayerItem,
   ]);
 
   // ── จอสถานะพิเศษ ──
@@ -2309,6 +2420,7 @@ export default function Editor() {
               setPosEdit(true);
             }}
             onGotoSpeech={() => setTab("cc")}
+            flash={flash}
           />
         )}
         {tab === "music" && (
@@ -2460,6 +2572,10 @@ export default function Editor() {
           onLayerRemove={removeLayerItem}
           onDropPayload={(p, tl) => dropOnTimeline(p as DropPayload, tl)}
           beats={showBeats ? beats : null}
+          canCopyLayer={!!focus}
+          canPasteLayer={!!clipboard}
+          onCopyLayer={copyLayerItem}
+          onPasteLayer={pasteLayerItem}
         />
       </div>
 

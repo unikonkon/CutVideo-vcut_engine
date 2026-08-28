@@ -355,6 +355,27 @@ export interface MusicTrack {
   beat_offset: number;
 }
 
+/** ชุดสไตล์ที่ข้อความหลายชิ้นใช้ร่วมกัน — ชื่อคือตัวชี้ที่ข้อความอ้างถึง
+ *
+ *  **ชุดชนะค่าหน้าตาของชิ้น** ตอนเอนจินประกอบสตริง (fxtext.cues) ไม่ใช่ตอน
+ *  บันทึก — ค่าเดิมของชิ้นจึงยังอยู่ครบในไฟล์ ปลดออกจากชุดแล้วได้ของเดิมคืน
+ *
+ *  ไม่มี align เพราะจุดยึดบนจอเป็นของรายชิ้นเสมอ (ดู fx.PRESET_KEYS)
+ */
+export interface FxPreset {
+  name: string;
+  font: string;
+  size: number;
+  color: string;
+  outline: string;
+  border: number;
+  shadow: number;
+  bold: boolean;
+  italic: boolean;
+  spacing: number;
+  angle: number;
+}
+
 export interface FxTextItem {
   text: string;
   x: number;
@@ -374,6 +395,8 @@ export interface FxTextItem {
   in: number;
   out: number;
   plate: boolean;
+  /** ชื่อชุดสไตล์ที่ผูกอยู่ — "" = ไม่ผูก ใช้ค่าข้างบนตรง ๆ (ดู FxPreset) */
+  preset: string;
   at: number;
   dur: number;
   id: string;
@@ -548,6 +571,7 @@ export interface FxData {
     music: MusicTrack[];
     journey: FxJourney;
     style: Record<string, unknown>;
+    presets: FxPreset[];
     texts: FxTextItem[];
     shapes: FxShape[];
     [k: string]: unknown;
@@ -560,6 +584,10 @@ export interface FxData {
     journey: FxJourney;
     stop: JourneyStop;
     style: Record<string, unknown>;
+    /** ชุดสไตล์เปล่า — หน้าเว็บสร้างชุดใหม่จากตัวนี้ */
+    preset: FxPreset;
+    /** คีย์ที่ *อยู่ในชุด* — ที่เหลือของ FxTextItem เป็นของรายชิ้นเสมอ */
+    preset_keys: (keyof FxPreset)[];
     /** ค่าตั้งต้นของเอฟเฟกต์รายชิ้น — ทุกตัวแปลว่า "ไม่แตะ" */
     clip: FxClip;
     /** ชื่อโทนสี → คำอธิบายไทย ("" = ไม่แตะสี) */

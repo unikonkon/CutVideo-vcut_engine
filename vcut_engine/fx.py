@@ -272,6 +272,30 @@ STYLE = {
 TEXT_STYLE_KEYS = ("font", "size", "color", "outline", "border", "shadow",
                    "bold", "italic", "spacing", "angle", "align")
 
+# ── ชุดสไตล์ตั้งชื่อได้ ──
+#
+# "หัวเรื่อง" · "ป้ายสถานที่" · "ตัวเลข" — ข้อความหลายชิ้นในหนังเรื่องเดียวกันใช้
+# หน้าตาซ้ำกันเป็นชุด ๆ อยู่แล้ว  ก่อนมีตัวนี้ การแก้ชุดหนึ่งแปลว่าไล่แก้ทีละชิ้น
+# ให้ครบด้วยมือ ซึ่งพลาดไปชิ้นเดียวก็ไม่มีอะไรฟ้องจนกว่าจะเห็นในหนังที่ render แล้ว
+#
+# **ทำไมชุดต้องมีชื่อ ไม่ใช่ "ปล่อยช่องว่างไว้ = ตามสไตล์กลาง"**
+#
+# เหตุผลเดียวกับที่ TEXT_ITEM ลอกค่าทั้งชุดลงชิ้นใหม่: ค่าว่าง/ศูนย์แยกจาก "ตั้งใจ
+# สั่ง 0" ไม่ออก (ขอบหนา 0 คือคำสั่งที่คนสั่งจริง)  ส่วนชื่อชุดแยกออกเสมอ — "" คือ
+# ไม่ผูก ที่เหลือคือผูกอยู่ ไม่มีค่ากลาง ๆ ให้ตีความ
+#
+# **ชุดชนะค่าของชิ้น ตอนประกอบสตริง ไม่ใช่ตอนบันทึก** (ดู fxtext.cues) — ค่าเดิม
+# ของชิ้นจึงยังอยู่ครบในไฟล์  ผลคือปลดชิ้นออกจากชุดแล้วได้หน้าตาที่ *เห็นอยู่*
+# กลับมา ไม่ใช่ของเก่าที่ลืมไปแล้วว่าเคยตั้งไว้ (หน้าเว็บลอกค่าที่รวมแล้วลงชิ้น
+# ตอนกดปลด) และชุดที่ถูกลบทิ้งไม่ทำให้ข้อความไหนหน้าตาหาย
+#
+# align ไม่อยู่ในชุด — เป็น "จุดยึดของชิ้นนี้บนจอ" ไม่ใช่หน้าตา  ชุดที่ลากจุดยึด
+# ไปด้วยจะทำให้กดเปลี่ยนชุดทีเดียวแล้วข้อความกระโดดข้ามจอ ซึ่งไม่มีใครคาดว่าจะเกิด
+PRESET_KEYS = ("font", "size", "color", "outline", "border", "shadow",
+               "bold", "italic", "spacing", "angle")
+
+PRESET = {"name": "", **{k: STYLE[k] for k in PRESET_KEYS}}
+
 TEXT_ITEM = {
     "text": "ข้อความใหม่",
     "x": 0.5, "y": 0.5,
@@ -284,6 +308,8 @@ TEXT_ITEM = {
     "spacing": 0.0, "angle": 0.0, "align": 5,
     # แอนิเมชัน — ของชิ้นนี้เอง ไม่ใช่ค่ากลางเหมือนสมัยที่ยืมข้อความขั้น 4 มา
     "anim": "none", "in": 0.18, "out": 0.14, "plate": False,
+    # ชื่อชุดสไตล์ที่ผูกอยู่ — "" = ไม่ผูก ใช้ค่าข้างบนตรง ๆ (ดู PRESET_KEYS)
+    "preset": "",
     # ── ตัวเลขที่นับขึ้น ──
     #
     # เลขไปแทนที่ `{n}` ในข้อความ · ไม่มี `{n}` = เลขแทนข้อความทั้งก้อน
@@ -460,6 +486,8 @@ def blank():
             "journey": blank_journey(),
             # ชั้นข้อความของขั้น 5 เอง — ดูเหตุผลที่ TEXT_ITEM
             "style": dict(STYLE), "texts": [], "auto_sub": dict(AUTO_SUB),
+            # ชุดสไตล์ที่ข้อความหลายชิ้นใช้ร่วมกัน — ดู PRESET_KEYS
+            "presets": [],
             # sub   = ซับจากบทพูดทั้งกอง (ตัวเดียวคุมหมด — ซับที่เคลื่อนไหวไม่
             #         เหมือนกันทีละบรรทัดอ่านแล้วเหมือนหนังพัง ไม่ใช่เหมือนตั้งใจ)
             # boxes = กล่องข้อความที่ใส่เองในขั้น 4 · ตั้งแยกทีละกล่องได้
@@ -630,6 +658,8 @@ def load(ctx):
 
     if isinstance(d.get("style"), dict):
         out["style"] = _pick(d["style"], STYLE)
+    if isinstance(d.get("presets"), list):
+        out["presets"] = _preset_list(d["presets"])
     if isinstance(d.get("texts"), list):
         out["texts"] = [_text(t) for t in d["texts"] if isinstance(t, dict)]
     if isinstance(d.get("auto_sub"), dict):
@@ -639,6 +669,46 @@ def load(ctx):
 
 def _line(v):
     return _pick(v, LINE, {"size": (6, 400), "gap": (-1.0, 4.0)})
+
+
+def _preset(p):
+    return {**_pick(p, PRESET), "name": str(p.get("name") or "").strip()}
+
+
+def _preset_list(raw):
+    """ชุดสไตล์ทั้งกอง — ชื่อว่างตกไป ชื่อซ้ำเหลือตัวแรก
+
+    ชื่อคือตัวชี้ที่ข้อความใช้อ้าง  สองชุดชื่อเดียวกันแปลว่าคำถาม "ชิ้นนี้ผูกกับ
+    ชุดไหน" ตอบไม่ได้ — ตัดตั้งแต่ตอนอ่านดีกว่าปล่อยให้คำตอบขึ้นกับลำดับในไฟล์
+    """
+    if not isinstance(raw, list):
+        return []
+    out, seen = [], set()
+    for row in raw:
+        if not isinstance(row, dict):
+            continue
+        got = _preset(row)
+        if not got["name"] or got["name"] in seen:
+            continue
+        seen.add(got["name"])
+        out.append(got)
+    return out
+
+
+def preset_style(data, name):
+    """หน้าตาที่ชุดนี้บังคับ — {} เมื่อไม่ผูกชุด หรือชุดที่อ้างถึงไม่มีอยู่แล้ว
+
+    ชุดที่หายไปไม่ทำให้ข้อความหน้าตาหาย เพราะค่าของชิ้นเองยังอยู่ครบในไฟล์ จึงตก
+    กลับไปใช้ของเดิมได้เงียบ ๆ — ส่วนหน้าเว็บเทียบชื่อกับรายการชุดเองแล้วขึ้นเตือน
+    ตรงชิ้นนั้น ซึ่งเป็นที่ที่คนแก้ได้ ต่างจากบรรทัดเตือนกลาง log ตอน render
+    """
+    want = str(name or "").strip()
+    if not want:
+        return {}
+    for row in data.get("presets") or []:
+        if row.get("name") == want:
+            return {k: row[k] for k in PRESET_KEYS if k in row}
+    return {}
 
 
 def _text(t):
@@ -740,6 +810,10 @@ def merge(data, payload):
         out["shapes"] = [_shape(s) for s in payload["shapes"] if isinstance(s, dict)]
     if isinstance(payload.get("style"), dict):
         out["style"] = _pick({**out["style"], **payload["style"]}, STYLE)
+    if isinstance(payload.get("presets"), list):
+        # ทับทั้งกองด้วยเหตุผลเดียวกับแผนที่ — ผสมทีละชุดจะทำให้ "ลบชุดสุดท้าย
+        # ทิ้ง" กลายเป็น "ไม่เปลี่ยนอะไร"
+        out["presets"] = _preset_list(payload["presets"])
     if isinstance(payload.get("texts"), list):
         out["texts"] = [_text(t) for t in payload["texts"] if isinstance(t, dict)]
     if isinstance(payload.get("auto_sub"), dict):

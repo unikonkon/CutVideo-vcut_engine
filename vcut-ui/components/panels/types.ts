@@ -3,6 +3,7 @@ import type {
   FxClip,
   FxData,
   FxOverlay,
+  FxPreset,
   FxShape,
   FxTextItem,
   MusicTrack,
@@ -14,6 +15,8 @@ export interface FxStore {
   draft: {
     music: MusicTrack[];
     texts: FxTextItem[];
+    /** ชุดสไตล์ที่ข้อความหลายชิ้นใช้ร่วมกัน — ชื่อคือตัวชี้ที่ texts[].preset อ้าง */
+    presets: FxPreset[];
     overlays: FxOverlay[];
     journey: Record<string, unknown>;
     /** สวิตช์ซับอัตโนมัติของขั้น 5 เอง (อ่าน transcript ตรง ๆ ไม่ผ่าน captions.json) */
@@ -25,6 +28,7 @@ export interface FxStore {
   patch: (part: {
     music?: MusicTrack[];
     texts?: FxTextItem[];
+    presets?: FxPreset[];
     overlays?: FxOverlay[];
     journey?: Record<string, unknown>;
     auto_sub?: { enabled: boolean };

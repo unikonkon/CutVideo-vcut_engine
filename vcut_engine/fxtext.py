@@ -92,11 +92,17 @@ def cues(ctx, fxdata=None, man=None):
 
     for k, t in enumerate(fxdata["texts"]):
         tid = t.get("id") or f"t{k}"
-        st = {**base, **{key: t[key] for key in fx.TEXT_STYLE_KEYS if key in t}}
+        # ชุดสไตล์ชนะค่าของชิ้นเอง — รวมตรงนี้ ไม่ใช่ตอนบันทึก ค่าเดิมของชิ้นจึง
+        # ยังอยู่ครบในไฟล์ให้ปลดกลับได้ (เหตุผลเต็มอยู่ที่ fx.PRESET_KEYS)
+        st = {**base, **{key: t[key] for key in fx.TEXT_STYLE_KEYS if key in t},
+              **fx.preset_style(fxdata, t.get("preset"))}
         anim = {key: t.get(key, fx.TEXT[key]) for key in fx.TEXT}
         row = {"id": tid, "kind": "box", "text": str(t.get("text", "")),
                "name": t.get("name", ""), "clip_a": float(t.get("at", 0) or 0),
                "style": st, "x": t.get("x"), "y": t.get("y"), "fx": anim,
+               # ชื่อชุดที่ผูกอยู่ — หน้าเว็บใช้บอกว่าชิ้นนี้ตามชุดหรือแก้เอง
+               # (สไตล์ที่รวมแล้วอยู่ใน style ข้างบนเรียบร้อยทั้งสองทาง)
+               "preset": str(t.get("preset") or ""),
                # การ์ดหลายบรรทัด — ส่งดิบ ๆ ให้ตัวเขียน ASS กับหน้าเว็บกางเอง
                # ทั้งคู่ต้องรู้ความสูงรวมเพื่อวาดให้ตรงกัน (ดู stack_lines)
                "lines": list(t.get("lines") or []),

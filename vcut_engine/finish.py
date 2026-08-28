@@ -211,6 +211,10 @@ def status(ctx):
                      # ชั้นข้อความของขั้น 5 เอง — หน้าเว็บสร้างชิ้นใหม่จากค่าพวกนี้
                      "style": fx.STYLE, "text_item": fx.TEXT_ITEM,
                      "text_style_keys": list(fx.TEXT_STYLE_KEYS),
+                     # ชุดสไตล์ — หน้าเว็บสร้างชุดใหม่จาก preset แล้วรู้ว่าคีย์ไหน
+                     # อยู่ในชุด (ที่เหลือเป็นของรายชิ้นเสมอ) จาก preset_keys
+                     "preset": fx.PRESET,
+                     "preset_keys": list(fx.PRESET_KEYS),
                      "line": fx.LINE, "line_h": fxtext.LINE_H,
                      "journey": fx.blank_journey(), "stop": journey.STOP},
         # ข้อความ/รูปทรงพร้อมเวลาที่คำนวณแล้ว — หน้าเว็บวาดพรีวิวจากตัวเลขชุด

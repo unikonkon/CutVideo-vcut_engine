@@ -5,16 +5,21 @@ import {
   Captions,
   ChevronDown,
   ChevronRight,
+  Copy,
   Eye,
   EyeOff,
   GripVertical,
   Move,
+  Palette,
   Plus,
   Trash2,
   Type,
+  Unlink,
+  Users,
 } from "lucide-react";
-import { type FxTextItem } from "@/lib/api";
+import { type FxPreset, type FxTextItem } from "@/lib/api";
 import { DND_MIME } from "@/lib/layers";
+import { resolveLook } from "@/lib/textfx";
 import { dur } from "@/lib/time";
 import {
   CInput,
@@ -57,6 +62,147 @@ const ALIGNS = [
   { v: "8", label: "บน-กลาง" },
 ];
 
+const KEY_W = "vcut.text.width";
+const MIN_W = 320;
+const MAX_W = 1200;
+const DEF_W = 384;
+
+/** คีย์ที่อยู่ในชุดสไตล์ — เอนจินเป็นเจ้าของรายการนี้ (fx.PRESET_KEYS) ตัวนี้เป็น
+ *  แค่ตัวสำรองสำหรับเอนจินรุ่นก่อนหน้าที่ยังไม่ส่ง preset_keys มา */
+const LOOK_KEYS: (keyof FxPreset)[] = [
+  "font", "size", "color", "outline", "border", "shadow",
+  "bold", "italic", "spacing", "angle",
+];
+
+// จำนวนคอลัมน์ของฟอร์มตามความกว้าง *จริง* ของแผง ไม่ใช่ของหน้าต่าง — แผงนี้ลาก
+// ขยายได้ และ Tailwind ต้องเห็นชื่อคลาสเต็ม ๆ ในซอร์ส จึงเป็นตารางไม่ใช่สตริงต่อ
+const GRID: Record<number, string> = {
+  2: "grid-cols-2",
+  3: "grid-cols-3",
+  4: "grid-cols-4",
+  6: "grid-cols-6",
+};
+const colsOf = (w: number) => (w >= 820 ? 6 : w >= 620 ? 4 : w >= 470 ? 3 : 2);
+
+/** เอาเฉพาะช่องหน้าตาออกมาจากข้อความหรือชุด — ใช้ทั้งตอนสร้างชุดจากชิ้น
+ *  ตอนรวมชุดลงชิ้น และตอนปลดชิ้นออกจากชุด จึงต้องเป็นตัวเดียวกันทั้งสามที่ */
+function lookOf(src: Partial<FxPreset>, keys: (keyof FxPreset)[]) {
+  const out: Partial<FxPreset> = {};
+  for (const k of keys) if (src[k] !== undefined) (out as Record<string, unknown>)[k] = src[k];
+  return out;
+}
+
+/** ช่องหน้าตาทั้งชุด — ชุดสไตล์กับข้อความรายชิ้นใช้ฟอร์มเดียวกัน
+ *
+ *  ตัวเดียวกันจริง ๆ ไม่ใช่สองชุดที่หน้าตาเหมือนกัน — ไม่งั้นวันหนึ่งจะมีคนเติม
+ *  ช่องใหม่ให้ที่เดียวแล้วอีกที่แก้ค่านั้นไม่ได้เลยโดยไม่มีอะไรฟ้อง
+ */
+function LookFields({
+  v,
+  onChange,
+  fonts,
+  cols,
+  disabled,
+}: {
+  v: Pick<FxPreset, (typeof LOOK_KEYS)[number]>;
+  onChange: (p: Partial<FxPreset>) => void;
+  fonts: { thai: string[]; other: string[] };
+  cols: number;
+  disabled?: boolean;
+}) {
+  const fontOpts = [
+    ...fonts.thai.map((f) => ({ v: f, label: `${f} (ไทย)` })),
+    ...fonts.other.map((f) => ({ v: f, label: f })),
+  ];
+  // ฟอนต์ที่ตั้งไว้แต่ไม่มีในเครื่องนี้ต้องยังเห็นในช่อง ไม่ใช่เงียบ ๆ กลายเป็น
+  // ตัวแรกของรายการ แล้วคนกดบันทึกทับของที่ตั้งไว้โดยไม่รู้ตัว
+  if (v.font && !fontOpts.some((o) => o.v === v.font)) {
+    fontOpts.unshift({ v: v.font, label: `${v.font} (ไม่มีในเครื่องนี้)` });
+  }
+  return (
+    <div className={`grid gap-2 ${GRID[cols]}`}>
+      <Field label="ฟอนต์" span2>
+        <Sel
+          value={v.font}
+          onChange={(x) => onChange({ font: x })}
+          options={fontOpts}
+          disabled={disabled}
+        />
+      </Field>
+      <Field label="ขนาด">
+        <NInput
+          value={v.size}
+          step={2}
+          min={4}
+          max={2000}
+          onChange={(x) => onChange({ size: x })}
+          disabled={disabled}
+        />
+      </Field>
+      <Field label="สีตัวอักษร" span2>
+        <CInput value={v.color} onChange={(x) => onChange({ color: x })} disabled={disabled} />
+      </Field>
+      <Field label="สีขอบ" span2>
+        <CInput value={v.outline} onChange={(x) => onChange({ outline: x })} disabled={disabled} />
+      </Field>
+      <Field label="ความหนาขอบ">
+        <NInput
+          value={v.border}
+          step={0.5}
+          min={0}
+          max={40}
+          onChange={(x) => onChange({ border: x })}
+          disabled={disabled}
+        />
+      </Field>
+      <Field label="เงา">
+        <NInput
+          value={v.shadow}
+          step={0.5}
+          min={0}
+          max={20}
+          onChange={(x) => onChange({ shadow: x })}
+          disabled={disabled}
+        />
+      </Field>
+      <Field label="ระยะตัวอักษร">
+        <NInput
+          value={v.spacing}
+          step={0.5}
+          min={-20}
+          max={40}
+          onChange={(x) => onChange({ spacing: x })}
+          disabled={disabled}
+        />
+      </Field>
+      <Field label="เอียง (องศา)">
+        <NInput
+          value={v.angle}
+          step={1}
+          min={-360}
+          max={360}
+          onChange={(x) => onChange({ angle: x })}
+          disabled={disabled}
+        />
+      </Field>
+      <div className="col-span-2 flex items-center gap-4">
+        <Toggle
+          value={v.bold}
+          onChange={(x) => onChange({ bold: x })}
+          label="หนา"
+          disabled={disabled}
+        />
+        <Toggle
+          value={v.italic}
+          onChange={(x) => onChange({ italic: x })}
+          label="เอียง"
+          disabled={disabled}
+        />
+      </div>
+    </div>
+  );
+}
+
 /** ตัวหนังสือบนจอทั้งหมดอยู่แผงเดียว — แต่ยังเป็นคนละไฟล์ตามที่เอนจินแยกไว้
  *
  *  ข้อความบนหนัง = fx.json (ขั้น 5) วางเอง ทีละชิ้น ตำแหน่งอิสระ
@@ -69,6 +215,9 @@ const ALIGNS = [
  *  ส่วน "เลือกบรรทัดจากบทพูดใส่ลงหนัง" ย้ายไปอยู่แท็บ "บทพูดที่ถอดไว้" แล้ว —
  *  ที่นั่นคือที่ที่คนไปหาคำพูด ที่นี่คือที่ที่คนมาแต่งตัวหนังสือ  บรรทัดที่ติ๊กไป
  *  จะโผล่ในรายการข้างล่างนี้เหมือนข้อความที่พิมพ์เอง (ต่างกันแค่ id ขึ้นต้น `tr:`)
+ *
+ *  **แผงนี้ลากขยายได้** (ต่างจากแผงอื่นที่กว้างตายตัว) เพราะข้อความชิ้นหนึ่งมีช่อง
+ *  ให้ตั้ง 20 ช่อง ซึ่งใส่ลงคอลัมน์เดียวกว้าง 24rem แล้วต้องเลื่อนหาทุกครั้ง
  */
 export default function TextPanel({
   fxs,
@@ -79,6 +228,7 @@ export default function TextPanel({
   stageEdit,
   onStageEdit,
   onGotoSpeech,
+  flash,
 }: {
   fxs: FxStore;
   caps: CapStore;
@@ -90,17 +240,20 @@ export default function TextPanel({
   stageEdit: boolean;
   onStageEdit: (idx: number) => void;
   onGotoSpeech: () => void;
+  flash: (m: string) => void;
 }) {
   const [open, setOpen] = useState<number | null>(null);
+  const [openPreset, setOpenPreset] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [draftText, setDraftText] = useState("");
+  const [w, setW] = useState(DEF_W);
 
   // คลิกบล็อกบนไทม์ไลน์ (หรือบนจอตัวอย่าง) → เปิดชิ้นนั้นในแผงทันที
   useEffect(() => {
     if (focusIdx != null) setOpen(focusIdx);
   }, [focusIdx]);
 
-  const texts = fxs.draft?.texts ?? [];
+  const texts = useMemo(() => fxs.draft?.texts ?? [], [fxs.draft]);
   const shown = useMemo(
     () =>
       texts
@@ -111,9 +264,15 @@ export default function TextPanel({
     [texts, filter],
   );
 
+  const cols = colsOf(w);
+  const resize = useMemo(
+    () => ({ key: KEY_W, min: MIN_W, max: MAX_W, def: DEF_W, onWidth: setW }),
+    [],
+  );
+
   if (!fxs.data || !fxs.draft || !caps.data || !caps.draft) {
     return (
-      <Panel title={<><Type size={13} /> ข้อความ</>}>
+      <Panel title={<><Type size={13} /> ข้อความ</>} resize={resize}>
         <Spin />
       </Panel>
     );
@@ -136,6 +295,103 @@ export default function TextPanel({
 
   const patch = (i: number, p: Partial<FxTextItem>) =>
     fxs.patch({ texts: draft.texts.map((t, k) => (k === i ? { ...t, ...p } : t)) });
+
+  // ── ชุดสไตล์ ──
+  //
+  // เอนจินรุ่นก่อนหน้าไม่ส่ง defaults.preset มา — ซ่อนทั้งส่วนแล้วบอกให้รีสตาร์ต
+  // ดีกว่าขึ้นฟอร์มที่กดสร้างแล้วค่าหายเงียบ ๆ ตอนบันทึก (เอนจินจะทิ้งคีย์ที่ไม่รู้จัก)
+  const blankPreset = data.defaults.preset as FxPreset | undefined;
+  const pkeys = (data.defaults.preset_keys as (keyof FxPreset)[] | undefined)
+    ?? LOOK_KEYS;
+  const presets = draft.presets ?? [];
+  const byName = new Map(presets.map((p) => [p.name, p]));
+  const usedBy = (name: string) => draft.texts.filter((t) => t.preset === name).length;
+
+  /** หน้าตาที่ชิ้นนี้จะออกมาจริง — ชุดชนะค่าของชิ้น เหมือนที่ fxtext.cues ทำ
+   *  ฟอร์มต้องโชว์ค่าที่ *จะถูกใช้* ไม่ใช่ค่าที่ค้างอยู่ในชิ้นแล้วถูกทับทีหลัง
+   *  (ตัวรวมเป็นตัวเดียวกับที่จอตัวอย่างใช้ — ดู lib/textfx.resolveLook) */
+  const resolved = (t: FxTextItem) => resolveLook(t, presets, pkeys as string[]);
+
+  const uniqueName = (want: string) => {
+    const base = want.trim() || "ชุดใหม่";
+    if (!byName.has(base)) return base;
+    for (let n = 2; ; n++) if (!byName.has(`${base} ${n}`)) return `${base} ${n}`;
+  };
+
+  const setPresets = (ps: FxPreset[]) => fxs.patch({ presets: ps });
+
+  const patchPreset = (name: string, p: Partial<FxPreset>) =>
+    setPresets(presets.map((x) => (x.name === name ? { ...x, ...p } : x)));
+
+  /** เปลี่ยนชื่อชุด — ต้องย้ายข้อความที่ผูกอยู่ตามไปด้วยใน patch เดียว
+   *  ไม่งั้นทุกชิ้นจะกลายเป็น "ผูกกับชุดที่ไม่มีอยู่" ระหว่างสอง patch และ
+   *  Cmd+Z หนึ่งครั้งจะย้อนได้แค่ครึ่งเดียว */
+  const renamePreset = (from: string, to: string) => {
+    const name = to.trim();
+    if (!name || name === from) return;
+    if (byName.has(name)) return flash(`มีชุดชื่อ "${name}" อยู่แล้ว`);
+    fxs.patch({
+      presets: presets.map((x) => (x.name === from ? { ...x, name } : x)),
+      texts: draft.texts.map((t) => (t.preset === from ? { ...t, preset: name } : t)),
+    });
+    setOpenPreset(name);
+  };
+
+  /** ลบชุด — ข้อความที่ผูกอยู่ต้องหน้าตาเหมือนเดิมทุกชิ้น
+   *  ลบชุดคือการจัดระเบียบ ไม่ใช่คำสั่งเปลี่ยนหน้าตาหนัง จึงลอกค่าของชุดลงชิ้น
+   *  ก่อนตัดสาย ไม่ใช่ปล่อยให้ตกกลับไปเป็นค่าเก่าที่ไม่มีใครเห็นมานานแล้ว */
+  const removePreset = (name: string) => {
+    const p = byName.get(name);
+    fxs.patch({
+      presets: presets.filter((x) => x.name !== name),
+      texts: draft.texts.map((t) =>
+        t.preset === name ? { ...t, ...(p ? lookOf(p, pkeys) : {}), preset: "" } : t,
+      ),
+    });
+    setOpenPreset(null);
+    flash(`ลบชุด "${name}" แล้ว — ข้อความที่เคยผูกไว้หน้าตาเหมือนเดิม`);
+  };
+
+  const addPreset = (from?: { t: FxTextItem; i: number }) => {
+    if (!blankPreset) return;
+    const name = uniqueName(
+      from ? from.t.text.trim().split("\n")[0].slice(0, 20) : "ชุดใหม่",
+    );
+    const row: FxPreset = {
+      ...blankPreset,
+      ...(from ? lookOf(resolved(from.t), pkeys) : {}),
+      name,
+    };
+    fxs.patch({
+      presets: [...presets, row],
+      // สร้างจากชิ้นไหน ผูกชิ้นนั้นให้เลย — สร้างแล้วไม่มีอะไรใช้คือครึ่งงาน
+      ...(from
+        ? {
+            texts: draft.texts.map((t, k) =>
+              k === from.i ? { ...t, preset: name } : t,
+            ),
+          }
+        : {}),
+    });
+    setOpenPreset(name);
+    flash(from ? `สร้างชุด "${name}" จากชิ้นนี้แล้ว` : `สร้างชุด "${name}" แล้ว`);
+  };
+
+  const applyToAll = (name: string) => {
+    fxs.patch({ texts: draft.texts.map((t) => ({ ...t, preset: name })) });
+    flash(`ให้ข้อความทั้ง ${draft.texts.length} ชิ้นใช้ชุด "${name}"`);
+  };
+
+  /** ปลดชิ้นเดียวออกจากชุด โดยเก็บหน้าตาที่เห็นอยู่ไว้ — เหตุผลเดียวกับ removePreset */
+  const unlink = (i: number) => {
+    const t = draft.texts[i];
+    patch(i, { ...lookOf(resolved(t), pkeys), preset: "" });
+  };
+
+  const presetOpts = [
+    { v: "", label: "— ไม่ผูกชุด (ตั้งเอง) —" },
+    ...presets.map((p) => ({ v: p.name, label: p.name })),
+  ];
 
   // ข้อความที่มาจากบทพูดติดรหัส `tr:<คลิป>#<บรรทัด>` ไว้ที่ช่อง id — ติ๊กใส่/เอาออก
   // ทำที่แท็บ "บทพูดที่ถอดไว้" ที่นี่แค่นับให้เห็นว่ามีกี่ชิ้นและชี้ทางไป
@@ -167,7 +423,7 @@ export default function TextPanel({
   return (
     <Panel
       title={<><Type size={13} /> ข้อความ</>}
-      width="w-[24rem]"
+      resize={resize}
       footer={
         <SaveBar
           dirty={bothDirty}
@@ -196,9 +452,111 @@ export default function TextPanel({
         </div>
       )}
 
+      {/* ── ชุดสไตล์ ── */}
       <Section
-        title={`ข้อความบนหนัง (${texts.length})`}
+        title={`ชุดสไตล์ (${presets.length})`}
+        right={
+          blankPreset ? (
+            <button
+              onClick={() => addPreset()}
+              title="สร้างชุดสไตล์เปล่าไว้ผูกกับข้อความหลายชิ้น"
+              className="flex items-center gap-1 rounded-md border border-line bg-panel-2 px-1.5 py-0.5 text-[11px] text-muted hover:text-ink"
+            >
+              <Plus size={11} /> ชุดใหม่
+            </button>
+          ) : undefined
+        }
       >
+        {!blankPreset ? (
+          <div className="rounded-lg border border-warn/30 bg-warn/10 px-2.5 py-2 text-[11.5px] leading-5 text-warn">
+            เอนจินที่รันอยู่ยังไม่มีชุดสไตล์ — รีสตาร์ต ./vcut view แล้วลองใหม่
+          </div>
+        ) : presets.length === 0 ? (
+          <Empty>
+            ยังไม่มีชุด — ตั้งหน้าตาข้อความสักชิ้นให้พอใจ แล้วกด
+            &ldquo;สร้างชุดจากชิ้นนี้&rdquo; ในชิ้นนั้น จากนั้นชิ้นอื่นเลือกชุดเดียวกันได้
+          </Empty>
+        ) : (
+          <div className="flex flex-col gap-1">
+            {presets.map((p) => {
+              const on = openPreset === p.name;
+              const n = usedBy(p.name);
+              return (
+                <div key={p.name} className="rounded-lg border border-line bg-panel-2">
+                  <button
+                    onClick={() => setOpenPreset(on ? null : p.name)}
+                    className="flex w-full items-center gap-2 px-2 py-1.5 text-left"
+                  >
+                    {on ? (
+                      <ChevronDown size={12} className="shrink-0 text-muted" />
+                    ) : (
+                      <ChevronRight size={12} className="shrink-0 text-muted" />
+                    )}
+                    <span
+                      className="h-3.5 w-3.5 shrink-0 rounded-[3px] border border-line-2"
+                      style={{ background: p.color }}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-[12px] text-ink">
+                      {p.name}
+                    </span>
+                    <span className="shrink-0 truncate font-mono text-[10px] text-faint">
+                      {p.font} {p.size}
+                    </span>
+                    <span
+                      className={`shrink-0 rounded px-1 text-[10px] ${
+                        n > 0 ? "bg-accent/15 text-accent" : "text-faint"
+                      }`}
+                      title="จำนวนข้อความที่ผูกชุดนี้อยู่"
+                    >
+                      {n}
+                    </span>
+                  </button>
+                  {on && (
+                    <div className="flex flex-col gap-2 border-t border-line p-2">
+                      <Field label="ชื่อชุด">
+                        <TInput
+                          value={p.name}
+                          onChange={(v) => renamePreset(p.name, v)}
+                        />
+                      </Field>
+                      <LookFields
+                        v={p}
+                        onChange={(x) => patchPreset(p.name, x)}
+                        fonts={data.fonts}
+                        cols={cols}
+                      />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          onClick={() => applyToAll(p.name)}
+                          disabled={draft.texts.length === 0}
+                          title="ให้ข้อความทุกชิ้นในหนังใช้ชุดนี้"
+                          className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-muted hover:text-ink disabled:opacity-40"
+                        >
+                          <Users size={12} /> ใช้กับข้อความทุกชิ้น
+                        </button>
+                        <div className="flex-1" />
+                        <button
+                          onClick={() => removePreset(p.name)}
+                          className="flex items-center gap-1 rounded-md px-2 py-1 text-[11.5px] text-danger hover:bg-danger/10"
+                        >
+                          <Trash2 size={12} /> ลบชุด
+                        </button>
+                      </div>
+                      <p className="text-[10px] leading-4 text-faint">
+                        แก้ที่นี่ที่เดียว ข้อความที่ผูกอยู่ {n} ชิ้นเปลี่ยนตามทั้งหมด ·
+                        ลบชุดแล้วหน้าตาของชิ้นที่เคยผูกไม่เปลี่ยน (ลอกค่าลงชิ้นให้)
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Section>
+
+      {/* ── ข้อความบนหนัง ── */}
+      <Section title={`ข้อความบนหนัง (${texts.length})`}>
         <div className="flex gap-1.5">
           <input
             type="text"
@@ -241,162 +599,242 @@ export default function TextPanel({
         {texts.length === 0 ? (
           <Empty>ยังไม่มีข้อความ — กด &ldquo;+ ที่หัวเล่น&rdquo; หรือลากลงไทม์ไลน์</Empty>
         ) : (
-          <div className="flex max-h-96 flex-col gap-1 overflow-y-auto pr-1">
-            {shown.map(({ t, i }) => (
-              <div
-                key={i}
-                className={`rounded-lg border bg-panel-2 ${
-                  focusIdx === i ? "border-accent" : "border-line"
-                }`}
-              >
-                <button
-                  onClick={() => setOpen(open === i ? null : i)}
-                  className="flex w-full items-center gap-2 px-2 py-1.5 text-left"
+          <div className="flex max-h-[32rem] flex-col gap-1 overflow-y-auto pr-1">
+            {shown.map(({ t, i }) => {
+              const p = byName.get(t.preset || "");
+              const lost = Boolean(t.preset) && !p;
+              const view = resolved(t);
+              return (
+                <div
+                  key={i}
+                  className={`rounded-lg border bg-panel-2 ${
+                    focusIdx === i ? "border-accent" : "border-line"
+                  }`}
                 >
-                  {open === i ? (
-                    <ChevronDown size={12} className="shrink-0 text-muted" />
-                  ) : (
-                    <ChevronRight size={12} className="shrink-0 text-muted" />
-                  )}
-                  <span className="min-w-0 flex-1 truncate text-[12px] text-ink">
-                    {t.text || "(ว่าง)"}
-                  </span>
-                  <span className="shrink-0 font-mono text-[10px] text-faint">
-                    {t.name} @{t.at.toFixed(1)}
-                  </span>
-                </button>
-                {open === i && (
-                  <div className="flex flex-col gap-2 border-t border-line p-2">
-                    <TInput value={t.text} onChange={(v) => patch(i, { text: v })} />
-                    <div className="grid grid-cols-3 gap-2">
-                      <Field label="โผล่วินาที (ในคลิป)">
-                        <NInput value={t.at} min={0} onChange={(v) => patch(i, { at: v })} />
-                      </Field>
-                      <Field label="นาน (วิ)">
-                        <NInput value={t.dur} min={0.2} onChange={(v) => patch(i, { dur: v })} />
-                      </Field>
-                      <Field label="ขนาด">
-                        <NInput value={t.size} step={2} min={10} onChange={(v) => patch(i, { size: v })} />
-                      </Field>
-                      <Field label="X (0-1)">
-                        <NInput value={t.x} step={0.05} min={0} max={1} onChange={(v) => patch(i, { x: v })} />
-                      </Field>
-                      <Field label="Y (0-1)">
-                        <NInput value={t.y} step={0.05} min={0} max={1} onChange={(v) => patch(i, { y: v })} />
-                      </Field>
-                      <Field label="แอนิเมชัน">
-                        <Sel value={t.anim} onChange={(v) => patch(i, { anim: v })} options={animOpts} />
-                      </Field>
-                      <Field label="สี" span2>
-                        <CInput value={t.color} onChange={(v) => patch(i, { color: v })} />
-                      </Field>
-                      <Field label="ขอบ">
-                        <NInput value={t.border} step={0.5} min={0} onChange={(v) => patch(i, { border: v })} />
-                      </Field>
-                    </div>
-                    {countOpts.length > 0 && (
-                      <div className="flex flex-col gap-2 rounded-lg border border-line bg-panel-2/60 p-2">
-                        <Field label="ตัวเลขที่นับขึ้น">
-                          <Sel
-                            value={t.count ?? ""}
-                            onChange={(v) => {
-                              // เปิดนับครั้งแรกแล้วยังไม่มีที่ให้เลขลง — ใส่ {n}
-                              // ให้เลย ไม่งั้นกดเปิดแล้วจอตัวอย่างไม่เปลี่ยนอะไร
-                              // และไม่มีอะไรบอกว่าต้องพิมพ์ {n} เอง
-                              const need =
-                                v &&
-                                !t.text.includes("{n}") &&
-                                (t.lines?.length ?? 0) === 0 &&
-                                t.text.trim() !== "";
-                              patch(i, need ? { count: v, text: "{n}" } : { count: v });
-                            }}
-                            options={countOpts}
-                          />
-                        </Field>
-                        {t.count ? (
-                          <>
-                            <div className="grid grid-cols-2 gap-2">
-                              <Field label="เริ่มที่">
-                                <NInput
-                                  value={t.count_from ?? 0}
-                                  step={1}
-                                  onChange={(v) => patch(i, { count_from: v })}
-                                />
-                              </Field>
-                              <Field label="จบที่">
-                                <NInput
-                                  value={t.count_to ?? 0}
-                                  step={1}
-                                  onChange={(v) => patch(i, { count_to: v })}
-                                />
-                              </Field>
-                            </div>
-                            <div className="text-[10.5px] leading-4 text-faint">
-                              {(t.lines?.length ?? 0) > 0
-                                ? "การ์ดหลายบรรทัด — พิมพ์ {n} ตรงบรรทัดที่อยากให้เลขไปลง (ไม่มี = ไม่นับให้)"
-                                : "เลขไปแทนที่ {n} ในข้อความ · ไม่มี {n} = เลขแทนข้อความทั้งก้อน"}
-                            </div>
-                          </>
-                        ) : null}
-                      </div>
+                  <button
+                    onClick={() => setOpen(open === i ? null : i)}
+                    className="flex w-full items-center gap-2 px-2 py-1.5 text-left"
+                  >
+                    {open === i ? (
+                      <ChevronDown size={12} className="shrink-0 text-muted" />
+                    ) : (
+                      <ChevronRight size={12} className="shrink-0 text-muted" />
                     )}
+                    <span className="min-w-0 flex-1 truncate text-[12px] text-ink">
+                      {t.text || "(ว่าง)"}
+                    </span>
+                    {p && (
+                      <span
+                        className="flex shrink-0 items-center gap-1 rounded bg-accent/15 px-1 text-[10px] text-accent"
+                        title={`ใช้ชุดสไตล์ "${p.name}"`}
+                      >
+                        <Palette size={9} />
+                        {p.name}
+                      </span>
+                    )}
+                    {lost && (
+                      <span className="shrink-0 rounded bg-warn/20 px-1 text-[10px] text-warn">
+                        ไม่มีชุดนี้
+                      </span>
+                    )}
+                    <span className="shrink-0 font-mono text-[10px] text-faint">
+                      {t.name} @{t.at.toFixed(1)}
+                    </span>
+                  </button>
+                  {open === i && (
+                    <div className="flex flex-col gap-2 border-t border-line p-2">
+                      <TInput value={t.text} onChange={(v) => patch(i, { text: v })} />
 
-                    <div className="flex items-center gap-4">
-                      <Toggle value={t.bold} onChange={(v) => patch(i, { bold: v })} label="หนา" />
-                      <Toggle value={t.plate} onChange={(v) => patch(i, { plate: v })} label="พื้นหลังทึบ" />
-                      <div className="flex-1" />
-                      <button
-                        onClick={() => {
-                          fxs.patch({ texts: draft.texts.filter((_, k) => k !== i) });
-                          setOpen(null);
-                        }}
-                        className="flex items-center gap-1 rounded-md px-2 py-1 text-[11.5px] text-danger hover:bg-danger/10"
-                      >
-                        <Trash2 size={12} /> ลบ
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-2.5">
-                      <div className="grid shrink-0 grid-cols-3 gap-0.5 rounded-md border border-line bg-panel p-0.5">
-                        {SPOTS.map((row) =>
-                          row.map((sp) => (
-                            <button
-                              key={sp.align}
-                              onClick={() =>
-                                patch(i, { align: sp.align, x: sp.x, y: sp.y })
-                              }
-                              title={`จัดไป${sp.label}`}
-                              className={`flex h-4 w-4 items-center justify-center rounded-[3px] hover:bg-panel-3 hover:text-accent ${
-                                t.align === sp.align ? "text-accent" : "text-faint"
-                              }`}
-                            >
-                              <span className="h-1 w-1 rounded-full bg-current" />
-                            </button>
-                          )),
-                        )}
+                      <div className={`grid gap-2 ${GRID[cols]}`}>
+                        <Field label="โผล่วินาที (ในคลิป)">
+                          <NInput value={t.at} min={0} onChange={(v) => patch(i, { at: v })} />
+                        </Field>
+                        <Field label="นาน (วิ)">
+                          <NInput value={t.dur} min={0.2} onChange={(v) => patch(i, { dur: v })} />
+                        </Field>
+                        <Field label="X (0-1)">
+                          <NInput value={t.x} step={0.05} min={0} max={1} onChange={(v) => patch(i, { x: v })} />
+                        </Field>
+                        <Field label="Y (0-1)">
+                          <NInput value={t.y} step={0.05} min={0} max={1} onChange={(v) => patch(i, { y: v })} />
+                        </Field>
+                        <Field label="แอนิเมชัน">
+                          <Sel value={t.anim} onChange={(v) => patch(i, { anim: v })} options={animOpts} />
+                        </Field>
+                        <Field label="เข้า (วิ)">
+                          <NInput value={t.in} step={0.02} min={0} max={1.5} onChange={(v) => patch(i, { in: v })} />
+                        </Field>
+                        <Field label="ออก (วิ)">
+                          <NInput value={t.out} step={0.02} min={0} max={1.5} onChange={(v) => patch(i, { out: v })} />
+                        </Field>
                       </div>
-                      <button
-                        onClick={() => onStageEdit(i)}
-                        title="เลือกชิ้นนี้แล้วเปิดโหมดแก้ตำแหน่งบนจอตัวอย่าง"
-                        className={`flex shrink-0 items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] ${
-                          stageEdit && focusIdx === i
-                            ? "text-accent"
-                            : "text-muted hover:text-ink"
-                        }`}
-                      >
-                        <Move size={12} /> แก้บนจอ
-                      </button>
-                      <p className="min-w-0 flex-1 text-[10px] leading-4 text-faint">
-                        จุดซ้ายคือจุดยึด — ลากบนจอตัวอย่างจัดละเอียดต่อได้
-                      </p>
+
+                      {/* หน้าตา — ผูกชุดอยู่ก็ยังเห็นค่าที่จะถูกใช้จริง แค่แก้ที่นี่ไม่ได้ */}
+                      {blankPreset && (
+                        <div className="flex flex-col gap-2 rounded-lg border border-line bg-panel/60 p-2">
+                          <div className="flex items-end gap-2">
+                            <div className="min-w-0 flex-1">
+                              <Field label="ชุดสไตล์">
+                                <Sel
+                                  // โชว์ชื่อที่ผูกอยู่จริงเสมอ แม้ชุดนั้นจะหายไปแล้ว —
+                                  // ตกเป็น "ไม่ผูกชุด" ตรงนี้จะขัดกับคำเตือนข้างล่าง
+                                  // ที่บอกว่ายังผูกอยู่ แล้วคนอ่านไม่รู้ว่าอันไหนจริง
+                                  value={t.preset}
+                                  onChange={(v) => patch(i, { preset: v })}
+                                  options={
+                                    lost
+                                      ? [{ v: t.preset, label: `${t.preset} (ไม่มีชุดนี้แล้ว)` }, ...presetOpts]
+                                      : presetOpts
+                                  }
+                                />
+                              </Field>
+                            </div>
+                            {p ? (
+                              <button
+                                onClick={() => unlink(i)}
+                                title="เลิกตามชุด แล้วแก้หน้าตาของชิ้นนี้เอง (หน้าตาที่เห็นอยู่ไม่เปลี่ยน)"
+                                className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-line px-2 text-[11px] text-muted hover:text-ink"
+                              >
+                                <Unlink size={12} /> แก้เฉพาะชิ้นนี้
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => addPreset({ t, i })}
+                                title="เก็บหน้าตาของชิ้นนี้เป็นชุด แล้วชิ้นอื่นเลือกใช้ได้"
+                                className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-line px-2 text-[11px] text-muted hover:text-ink"
+                              >
+                                <Copy size={12} /> สร้างชุดจากชิ้นนี้
+                              </button>
+                            )}
+                          </div>
+                          {lost && (
+                            <p className="text-[10.5px] leading-4 text-warn">
+                              ชิ้นนี้ผูกกับชุด &ldquo;{t.preset}&rdquo; ที่ไม่มีอยู่แล้ว —
+                              ตอนนี้ใช้ค่าของชิ้นเอง เลือกชุดใหม่หรือตั้งเป็น
+                              &ldquo;ไม่ผูกชุด&rdquo; ก็ได้
+                            </p>
+                          )}
+                          <LookFields
+                            v={view}
+                            onChange={(x) => patch(i, x)}
+                            fonts={data.fonts}
+                            cols={cols}
+                            disabled={Boolean(p)}
+                          />
+                          {p && (
+                            <p className="text-[10.5px] leading-4 text-faint">
+                              ค่าพวกนี้มาจากชุด &ldquo;{p.name}&rdquo; — แก้ที่ชุดข้างบนเพื่อ
+                              เปลี่ยนทุกชิ้นที่ผูกอยู่ ({usedBy(p.name)} ชิ้น)
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {countOpts.length > 0 && (
+                        <div className="flex flex-col gap-2 rounded-lg border border-line bg-panel-2/60 p-2">
+                          <Field label="ตัวเลขที่นับขึ้น">
+                            <Sel
+                              value={t.count ?? ""}
+                              onChange={(v) => {
+                                // เปิดนับครั้งแรกแล้วยังไม่มีที่ให้เลขลง — ใส่ {n}
+                                // ให้เลย ไม่งั้นกดเปิดแล้วจอตัวอย่างไม่เปลี่ยนอะไร
+                                // และไม่มีอะไรบอกว่าต้องพิมพ์ {n} เอง
+                                const need =
+                                  v &&
+                                  !t.text.includes("{n}") &&
+                                  (t.lines?.length ?? 0) === 0 &&
+                                  t.text.trim() !== "";
+                                patch(i, need ? { count: v, text: "{n}" } : { count: v });
+                              }}
+                              options={countOpts}
+                            />
+                          </Field>
+                          {t.count ? (
+                            <>
+                              <div className="grid grid-cols-2 gap-2">
+                                <Field label="เริ่มที่">
+                                  <NInput
+                                    value={t.count_from ?? 0}
+                                    step={1}
+                                    onChange={(v) => patch(i, { count_from: v })}
+                                  />
+                                </Field>
+                                <Field label="จบที่">
+                                  <NInput
+                                    value={t.count_to ?? 0}
+                                    step={1}
+                                    onChange={(v) => patch(i, { count_to: v })}
+                                  />
+                                </Field>
+                              </div>
+                              <div className="text-[10.5px] leading-4 text-faint">
+                                {(t.lines?.length ?? 0) > 0
+                                  ? "การ์ดหลายบรรทัด — พิมพ์ {n} ตรงบรรทัดที่อยากให้เลขไปลง (ไม่มี = ไม่นับให้)"
+                                  : "เลขไปแทนที่ {n} ในข้อความ · ไม่มี {n} = เลขแทนข้อความทั้งก้อน"}
+                              </div>
+                            </>
+                          ) : null}
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-4">
+                        <Toggle value={t.plate} onChange={(v) => patch(i, { plate: v })} label="พื้นหลังทึบ" />
+                        <div className="flex-1" />
+                        <button
+                          onClick={() => {
+                            fxs.patch({ texts: draft.texts.filter((_, k) => k !== i) });
+                            setOpen(null);
+                          }}
+                          className="flex items-center gap-1 rounded-md px-2 py-1 text-[11.5px] text-danger hover:bg-danger/10"
+                        >
+                          <Trash2 size={12} /> ลบ
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2.5">
+                        <div className="grid shrink-0 grid-cols-3 gap-0.5 rounded-md border border-line bg-panel p-0.5">
+                          {SPOTS.map((row) =>
+                            row.map((sp) => (
+                              <button
+                                key={sp.align}
+                                onClick={() =>
+                                  patch(i, { align: sp.align, x: sp.x, y: sp.y })
+                                }
+                                title={`จัดไป${sp.label}`}
+                                className={`flex h-4 w-4 items-center justify-center rounded-[3px] hover:bg-panel-3 hover:text-accent ${
+                                  t.align === sp.align ? "text-accent" : "text-faint"
+                                }`}
+                              >
+                                <span className="h-1 w-1 rounded-full bg-current" />
+                              </button>
+                            )),
+                          )}
+                        </div>
+                        <button
+                          onClick={() => onStageEdit(i)}
+                          title="เลือกชิ้นนี้แล้วเปิดโหมดแก้ตำแหน่งบนจอตัวอย่าง"
+                          className={`flex shrink-0 items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] ${
+                            stageEdit && focusIdx === i
+                              ? "text-accent"
+                              : "text-muted hover:text-ink"
+                          }`}
+                        >
+                          <Move size={12} /> แก้บนจอ
+                        </button>
+                        <p className="min-w-0 flex-1 text-[10px] leading-4 text-faint">
+                          จุดซ้ายคือจุดยึด — ลากบนจอตัวอย่างจัดละเอียดต่อได้ ·
+                          จุดยึดเป็นของชิ้นนี้เสมอ ไม่ตามชุดสไตล์
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            ))}
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
         <p className="text-[10px] leading-4 text-faint">
-          ลากจัดตำแหน่งบนจอตัวอย่างได้ — กด &ldquo;แก้ตำแหน่ง&rdquo; ในแถบใต้จอ
+          คลิกบล็อกบนไทม์ไลน์แล้ว Cmd+C / Cmd+V เพื่อทำสำเนาข้อความไปวางที่หัวเล่น ·
+          ลากขอบขวาของแผงนี้เพื่อขยายให้ฟอร์มกางเป็นหลายคอลัมน์
         </p>
       </Section>
 
@@ -414,8 +852,8 @@ export default function TextPanel({
         <ChevronRight size={13} className="shrink-0 text-faint" />
       </button>
 
-      <Section title="สไตล์ซับ (ใช้กับซับจากบทพูดทุกบรรทัด)">
-        <div className="grid grid-cols-2 gap-2">
+      <Section title="สไตล์ซับ (ใช้กับซับจากบทพูดทุกบรรทัด · คนละไฟล์กับข้างบน)">
+        <div className={`grid gap-2 ${GRID[cols]}`}>
           <Field label="ฟอนต์" span2>
             <Sel
               value={String(st("font"))}
@@ -436,10 +874,10 @@ export default function TextPanel({
               options={ALIGNS}
             />
           </Field>
-          <Field label="สีตัวอักษร">
+          <Field label="สีตัวอักษร" span2>
             <CInput value={String(st("color"))} onChange={(v) => setSt("color", v)} />
           </Field>
-          <Field label="สีขอบ">
+          <Field label="สีขอบ" span2>
             <CInput value={String(st("outline"))} onChange={(v) => setSt("outline", v)} />
           </Field>
           <Field label="ความหนาขอบ">

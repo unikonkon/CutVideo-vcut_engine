@@ -3,6 +3,8 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Captions,
+  ClipboardCopy,
+  ClipboardPaste,
   Copy,
   Eye,
   EyeOff,
@@ -261,6 +263,10 @@ export default function Timeline({
   onLayerRemove,
   onDropPayload,
   beats,
+  canCopyLayer,
+  canPasteLayer,
+  onCopyLayer,
+  onPasteLayer,
   canUndo,
   canRedo,
   onUndo,
@@ -295,6 +301,11 @@ export default function Timeline({
   onDropPayload: (payload: unknown, tl: number) => void;
   /** จังหวะเพลงที่เอนจินอ่านมา · null = ปิดโหมดจังหวะ หรือยังไม่ได้กดอ่าน */
   beats: BeatData | null;
+  /** มีบล็อกเลเยอร์ที่เลือกอยู่ไหม — ซับอัตโนมัติกับเสียงพูดก๊อปไม่ได้ (คำนวณมา) */
+  canCopyLayer: boolean;
+  canPasteLayer: boolean;
+  onCopyLayer: () => void;
+  onPasteLayer: () => void;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
@@ -512,6 +523,25 @@ export default function Timeline({
           className="rounded-md p-2 text-muted hover:bg-panel-2 hover:text-ink disabled:opacity-30"
         >
           <Copy size={14} />
+        </button>
+        <div className="mx-1 h-5 w-px bg-line" />
+        {/* ก๊อป-วางของบน *ชั้นแต่งหนัง* — คนละอย่างกับปุ่มสำเนาช็อตข้างบน
+            สำเนาช็อตต่อท้ายตัวเดิม ส่วนอันนี้วางที่หัวเล่นเสมอ จะได้เลือกที่วางเอง */}
+        <button
+          onClick={onCopyLayer}
+          disabled={!canCopyLayer}
+          title="ก๊อปบล็อกที่เลือกบนเลเยอร์ (ข้อความ/สติกเกอร์/รูปทรง/เพลง) — Cmd+C"
+          className="rounded-md p-2 text-muted hover:bg-panel-2 hover:text-ink disabled:opacity-30"
+        >
+          <ClipboardCopy size={14} />
+        </button>
+        <button
+          onClick={onPasteLayer}
+          disabled={!canPasteLayer}
+          title="วางสำเนาตรงหัวเล่น — Cmd+V"
+          className="rounded-md p-2 text-muted hover:bg-panel-2 hover:text-ink disabled:opacity-30"
+        >
+          <ClipboardPaste size={14} />
         </button>
         <button
           onClick={() => selected != null && onRemove(selected)}

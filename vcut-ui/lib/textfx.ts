@@ -154,3 +154,43 @@ export function wordStates(
     return { w, o: p, s };
   });
 }
+
+// ── ชุดสไตล์ที่ข้อความหลายชิ้นใช้ร่วมกัน ──
+//
+// **ที่มา: vcut_engine/fx.py → preset_style · fxtext.cues**
+//
+// มีสองชุดด้วยเหตุผลเดียวกับสูตรข้างบน: จอตัวอย่างวาดจาก *ร่างที่ยังไม่บันทึก*
+// ซึ่งเอนจินยังไม่เห็น  ถ้าไม่รวมชุดสไตล์ที่ฝั่งนี้ด้วย จอจะโชว์ค่าที่ค้างอยู่ใน
+// ชิ้น (54) ส่วนไฟล์ที่ได้ใช้ค่าของชุด (96) โดยไม่มีอะไรบอกจนกว่าจะ render เสร็จ
+//
+// กันเพี้ยนด้วย scripts/check_preset.py หัวข้อ "เทียบกับหน้าเว็บ"
+//
+// ไม่ import ชนิดจาก lib/api มาใช้โดยตั้งใจ — ตัวเทียบสูตรแปลงไฟล์นี้เป็น JS
+// เดี่ยว ๆ แล้ว import ผ่าน data: URL ซึ่ง resolve import ข้ามไฟล์ไม่ได้
+
+export interface LookPreset {
+  name: string;
+}
+
+/** หน้าตาที่ชิ้นนี้จะออกมาจริง — **ชุดชนะค่าของชิ้น** เหมือนที่เอนจินรวม
+ *
+ *  `keys` มาจากเอนจิน (defaults.preset_keys) ไม่ใช่ค่าคงที่ฝั่งนี้ — วันที่มีคน
+ *  เติมช่องใหม่ลงชุด หน้าเว็บจะตามทันเองโดยไม่ต้องแก้ไฟล์นี้
+ *
+ *  ไม่ผูกชุด หรือชุดที่อ้างถึงไม่มีอยู่แล้ว → คืนตัวเดิม *ตัวเดียวกัน* ไม่ใช่
+ *  สำเนา เพื่อให้ useMemo ที่ห่ออยู่ข้างนอกยังเทียบด้วย === ได้
+ */
+export function resolveLook<T extends { preset?: string }>(
+  item: T,
+  presets: readonly LookPreset[],
+  keys: readonly string[],
+): T {
+  const want = String(item.preset ?? "").trim();
+  if (!want) return item;
+  const p = presets.find((x) => x.name === want);
+  if (!p) return item;
+  const src = p as unknown as Record<string, unknown>;
+  const out: Record<string, unknown> = { ...item };
+  for (const k of keys) if (k in src) out[k] = src[k];
+  return out as T;
+}

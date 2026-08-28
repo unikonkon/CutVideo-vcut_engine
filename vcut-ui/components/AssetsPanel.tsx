@@ -6,7 +6,6 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
 } from "react";
 import {
   ArrowUpDown,
@@ -37,6 +36,7 @@ import {
   type VModeOption,
 } from "@/lib/api";
 import { DND_MIME } from "@/lib/layers";
+import { readPref, usePref } from "@/lib/pref";
 import { dur } from "@/lib/time";
 
 interface UpItem {
@@ -76,43 +76,6 @@ const MIN_W = 240;
 const MAX_W = 720;
 const KEY_W = "vcut.assets.width";
 const KEY_LOOK = "vcut.assets.look";
-
-// localStorage เป็นข้อมูลที่อยู่ *นอก* React และอ่านตอน prerender ไม่ได้ —
-// useSyncExternalStore มีช่องให้บอก "ค่าฝั่งเซิร์ฟเวอร์" แยกไว้ตรง ๆ HTML ที่
-// prerender ไว้จึงตรงกับที่เบราว์เซอร์วาดรอบแรกเสมอ แล้วค่อยสลับเป็นค่าที่จำไว้
-const prefWatchers = new Set<() => void>();
-
-function readPref<T extends string>(key: string, fallback: T, ok: (v: string) => boolean) {
-  try {
-    const v = localStorage.getItem(key);
-    return v && ok(v) ? (v as T) : fallback;
-  } catch {
-    return fallback; // โหมดส่วนตัว/ปิด storage ไว้
-  }
-}
-
-function usePref<T extends string>(key: string, fallback: T, ok: (v: string) => boolean) {
-  const value = useSyncExternalStore(
-    (cb) => {
-      prefWatchers.add(cb);
-      return () => prefWatchers.delete(cb);
-    },
-    () => readPref(key, fallback, ok),
-    () => fallback,
-  );
-  const set = useCallback(
-    (v: T) => {
-      try {
-        localStorage.setItem(key, v);
-      } catch {
-        /* เขียนไม่ได้ก็ใช้ต่อได้ แค่ไม่จำข้ามรอบ */
-      }
-      prefWatchers.forEach((f) => f());
-    },
-    [key],
-  );
-  return [value, set] as const;
-}
 
 const dateShort = (sec: number) =>
   sec
