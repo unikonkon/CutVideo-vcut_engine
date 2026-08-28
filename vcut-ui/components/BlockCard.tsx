@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -23,6 +29,9 @@ export interface CardAnchor {
   x: number;
   /** ขอบบนของกล่องไทม์ไลน์ (px จากขอบบนจอ) */
   top: number;
+  /** ขอบบน/ล่างของตัวบล็อกเอง — โหมด "ลงล่าง" ห้อยจากขอบล่างของมัน */
+  blockTop: number;
+  blockBottom: number;
   /** บล็อกเลื่อนพ้นขอบไปแล้วไหม — พ้นแล้วซ่อนการ์ด ไม่ใช่ปล่อยให้ชี้ไปที่ว่าง */
   off: boolean;
 }
@@ -31,6 +40,8 @@ const W = 396;
 const GAP = 10;
 /** ระยะขั้นต่ำจากขอบจอ — หางต้องยังชี้เข้าบล็อกได้ จึงเลื่อนการ์ดไม่ใช่ตัดทิ้ง */
 const EDGE = 12;
+/** เตี้ยกว่านี้แล้วการ์ดอ่านไม่รู้เรื่อง — ใช้ตัดสินว่าช่องว่างที่มีพอวางไหม */
+const MIN_H = 200;
 
 const KIND_LABEL: Record<string, string> = {
   text: "ข้อความบนหนัง",
@@ -62,13 +73,15 @@ export type CardItem =
  *  ตัวอักษร ชุดสไตล์ นับเลข) อยู่ในแผงเหมือนเดิม และปุ่ม ⚙ พาไปที่นั่น — ถ้ายัด
  *  ครบ 20 ช่อง การ์ดจะสูงจนบังไทม์ไลน์ที่มันมีไว้ให้แก้ตรงจุดพอดี
  *
- *  **ลอยเหนือไทม์ไลน์ ไม่ใช่ใต้บล็อกอย่างในภาพต้นแบบ** — กล่องไทม์ไลน์จริงสูง
- *  21rem และอยู่ชิดขอบล่างจอ การ์ดใต้บล็อกจึงตกนอกจอเสมอ  หางชี้ลงไปที่บล็อก
- *  ให้ผลเดียวกันคือ "การ์ดใบนี้เป็นของชิ้นนั้น" โดยยังเห็นครบทั้งใบ
+ *  **ที่ตั้งเริ่มต้นคือเหนือไทม์ไลน์ ไม่ใช่ใต้บล็อกอย่างในภาพต้นแบบ** — กล่อง
+ *  ไทม์ไลน์จริงสูง 21rem และอยู่ชิดขอบล่างจอ การ์ดใต้บล็อกจึงตกนอกจอเสมอ  หาง
+ *  ชี้ลงไปที่บล็อกให้ผลเดียวกันคือ "การ์ดใบนี้เป็นของชิ้นนั้น" โดยยังเห็นครบทั้งใบ
+ *  แต่ถ้าที่ตรงนั้นทับจอหนัง การ์ดจะย้ายลงมาห้อยใต้บล็อกแทน (ดู "หลบจอหนัง")
  */
 export default function BlockCard({
   sel,
   anchor,
+  videoRef,
   name,
   tl,
   animOpts,
@@ -82,6 +95,8 @@ export default function BlockCard({
 }: {
   sel: CardItem;
   anchor: CardAnchor;
+  /** จอหนังที่กำลังเล่นอยู่ — การ์ดต้องไม่ทับมัน (ดู "หลบจอหนัง" ด้านล่าง) */
+  videoRef: RefObject<HTMLVideoElement | null>;
   /** ชื่อคลิปที่ชิ้นนี้เกาะอยู่ — เพลงผูกกับเวลาในหนังตรง ๆ จึงเป็น "" */
   name: string;
   /** วินาทีในหนัง — ตัวเลขเดียวกับที่เห็นบนไม้บรรทัด */
@@ -109,14 +124,68 @@ export default function BlockCard({
     return () => window.removeEventListener("keydown", h);
   }, [onClose]);
 
+  // กรอบจอหนังบนหน้าจอ — วัดใหม่เมื่อมันเปลี่ยนขนาด (ลากแผงข้าง · สลับแท็บ ·
+  // เปลี่ยนสัดส่วนหนัง) และเมื่อไทม์ไลน์บอกว่าเรขาคณิตขยับ  <video> กว้าง/สูง
+  // เต็มกรอบผืนหนังพอดี กรอบของมันจึงเป็นกรอบหนังจริง ๆ ไม่ใช่ทั้งช่องพรีวิว
+  //
+  //  วัดก่อนวาด (useLayoutEffect) ไม่ใช่หลังวาด — ตอนการ์ดเพิ่งขึ้น เฟรมแรกที่ยัง
+  //  ไม่รู้กรอบหนังจะไปโผล่ที่ตั้งเริ่มต้นคือ *ทับหนัง* แล้วค่อยกระโดดลงมา
+  const [vid, setVid] = useState<DOMRect | null>(null);
+  const aTop = anchor.top;
+  useLayoutEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const upd = () => setVid(v.getBoundingClientRect());
+    upd();
+    const ro = new ResizeObserver(upd);
+    ro.observe(v);
+    window.addEventListener("resize", upd);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", upd);
+    };
+  }, [videoRef, aTop]);
+
   if (anchor.off) return null;
 
-  const left = Math.min(
-    Math.max(EDGE, anchor.x - W / 2),
-    (typeof window === "undefined" ? 1600 : window.innerWidth) - W - EDGE,
-  );
+  const vw = typeof window === "undefined" ? 1600 : window.innerWidth;
+  const vh = typeof window === "undefined" ? 900 : window.innerHeight;
+  const left = Math.min(Math.max(EDGE, anchor.x - W / 2), vw - W - EDGE);
   // หางชี้ที่บล็อกจริงเสมอ แม้การ์ดจะถูกดันหนีขอบจอไปแล้ว
   const tail = Math.min(Math.max(16, anchor.x - left), W - 16);
+
+  // ── หลบจอหนัง ──
+  //
+  //  ที่ตั้งปกติของการ์ดคือ "เหนือไทม์ไลน์" ซึ่งบนจอโน้ตบุ๊กคือ *ทับจอหนังเต็ม ๆ*
+  //  (วัดจริง 1470×702: จอหนังจบที่ y=297 ไทม์ไลน์เริ่มที่ y=358 — เหลือ 61px
+  //  ให้การ์ดสูง ~400)  ตอนกำลังเลื่อนตำแหน่งข้อความแล้วมองไม่เห็นข้อความ คือการ์ด
+  //  บังสิ่งเดียวที่ต้องดู
+  //
+  //  ทดสอบเป็น "สี่เหลี่ยมทับกันไหม" ไม่ใช่แค่แนวตั้ง — หนังแนวตั้งกินจอแค่ ~400px
+  //  จากกว้าง 1470 บล็อกที่อยู่ริมซ้าย/ขวาจึงวางการ์ดข้างบนได้สบายโดยไม่บังอะไร
+  //  การไล่ลงล่างทุกครั้งจะเป็นการเสียที่ฟรี (ล่าง = ทับไทม์ไลน์แทน)
+  const vr = vid && vid.width > 8 ? vid : null;
+  const hitsX = !!vr && left < vr.right && left + W > vr.left;
+  const floor = vr ? vr.bottom + GAP : 8; // ขึ้นไปได้สูงสุดแค่นี้ถึงจะไม่ทับหนัง
+  const gapAbove = anchor.top - GAP - floor;
+  const above = !hitsX || gapAbove >= MIN_H;
+
+  // ลงล่าง = ห้อยจากใต้บล็อก  ถ้าบล็อกอยู่ลานล่าง ๆ จนที่เหลือไม่พอ ก็ดึงการ์ด
+  // ขึ้นเท่าที่ยังไม่ชนหนัง แล้ว *ถอดหาง* ทิ้ง — หางที่ชี้ไปโดนตัวการ์ดเองหรือชี้
+  // ผิดแถว โกหกมากกว่าไม่มีหาง (บล็อกที่เลือกมีวงแหวนขาวบอกตัวตนอยู่แล้ว)
+  const room = vh - EDGE;
+  const wantTop = anchor.blockBottom + GAP;
+  const belowTop = Math.max(floor, Math.min(wantTop, room - MIN_H));
+  const tailUp = belowTop >= wantTop - 0.5;
+
+  const box: React.CSSProperties = above
+    ? { bottom: `calc(100vh - ${anchor.top - GAP}px)` }
+    : { top: belowTop };
+  const maxH = above
+    ? hitsX
+      ? gapAbove
+      : anchor.top - GAP - 8
+    : Math.max(140, room - belowTop);
 
   const { kind, item } = sel;
   const rows: React.ReactNode[] = [];
@@ -248,14 +317,14 @@ export default function BlockCard({
     <div
       ref={ref}
       className="fixed z-50 rounded-2xl border border-line-2 bg-panel shadow-[0_26px_64px_rgba(0,0,0,.75)]"
-      style={{ left, width: W, bottom: `calc(100vh - ${anchor.top - GAP}px)` }}
+      style={{ left, width: W, ...box }}
     >
       <div
         className="flex flex-col gap-3 overflow-y-auto overscroll-contain p-4"
         style={{
-          // จอเตี้ยกว่าการ์ด — เลื่อนในการ์ดดีกว่าให้มันล้นออกนอกจอด้านบนแล้วหัวการ์ด
-          // (ซึ่งบอกว่ากำลังแก้ชิ้นไหนอยู่) หายไปเงียบ ๆ
-          maxHeight: Math.max(180, anchor.top - GAP - 8),
+          // ที่ว่างที่เหลือหลังหลบจอหนังแล้ว — เลื่อนในการ์ดดีกว่าปล่อยให้ล้นไปทับ
+          // หนัง หรือล้นออกนอกจอจนหัวการ์ด (ซึ่งบอกว่ากำลังแก้ชิ้นไหน) หายเงียบ ๆ
+          maxHeight: maxH,
         }}
       >
         <div className="flex items-center gap-2">
@@ -352,11 +421,16 @@ export default function BlockCard({
           </div>
         </div>
       </div>
-      {/* หางชี้ลงไปที่บล็อกบนไทม์ไลน์ */}
-      <span
-        className="absolute -bottom-[7px] h-3 w-3 rotate-45 border-b border-r border-line-2 bg-panel"
-        style={{ left: tail - 6 }}
-      />
+      {/* หางชี้ไปที่บล็อกบนไทม์ไลน์ — ชี้ลงเมื่อการ์ดอยู่เหนือไทม์ไลน์ ชี้ขึ้นเมื่อ
+          หลบจอหนังลงมาห้อยใต้บล็อก  ถูกดึงขึ้นจนไม่ได้อยู่ใต้บล็อกแล้วก็ไม่มีหาง */}
+      {(above || tailUp) && (
+        <span
+          className={`absolute h-3 w-3 rotate-45 border-line-2 bg-panel ${
+            above ? "-bottom-[7px] border-b border-r" : "-top-[7px] border-l border-t"
+          }`}
+          style={{ left: tail - 6 }}
+        />
+      )}
     </div>
   );
 }

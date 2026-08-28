@@ -1691,6 +1691,8 @@ export default function Editor() {
       if (!a || !prev) return a === prev ? prev : a;
       return Math.abs(a.x - prev.x) < 0.5 &&
         Math.abs(a.top - prev.top) < 0.5 &&
+        Math.abs(a.blockTop - prev.blockTop) < 0.5 &&
+        Math.abs(a.blockBottom - prev.blockBottom) < 0.5 &&
         a.off === prev.off
         ? prev
         : a;
@@ -2693,6 +2695,7 @@ export default function Editor() {
         <BlockCard
           sel={card}
           anchor={anchor}
+          videoRef={videoRef}
           name={card.kind === "music" ? "" : card.item.name}
           tl={
             (layers[focus.kind] ?? []).find((b) => b.idx === focus.idx)?.tl ?? 0

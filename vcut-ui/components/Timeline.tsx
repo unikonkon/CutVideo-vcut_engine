@@ -192,6 +192,10 @@ function Block({
   const w = Math.max((ghost?.dur ?? b.dur) * pxPerSec, 6);
   return (
     <div
+      // ให้การ์ดลอยหาบล็อกที่เลือกเจอโดยไม่ต้องคำนวณแถวซ้ำ — ความสูงแถว การซ้อน
+      // และการเลื่อนของกล่องไทม์ไลน์ อยู่ในไฟล์นี้หลายที่ วัดจากตัว DOM จริงจึง
+      // ไม่มีทางหลุดจากกัน
+      data-sel-block={selected ? "" : undefined}
       onPointerDown={(e) => start(e, "move")}
       onPointerMove={move}
       onPointerUp={end}
@@ -386,13 +390,15 @@ export default function Timeline({
   const selBlock = layerSel
     ? (layers[layerSel.kind] ?? []).find((b) => b.idx === layerSel.idx)
     : undefined;
-  const selVis = layerSel ? vis[layerSel.kind] : false;
   const selTl = selBlock?.tl ?? 0;
   const selDur = selBlock?.dur ?? 0;
   const selOrphan = selBlock?.orphan ?? false;
 
   useEffect(() => {
-    if (!selBlock || !selVis || selOrphan) {
+    // อ่าน vis ทั้งกองในนี้ ไม่ใช่ดึงมาแค่เลนตัวเอง — ซ่อน/กางเลน *ตัวอื่น* ก็ดัน
+    // แถวขึ้นลง  ถ้าไม่ผูก vis ทั้งก้อนไว้เป็น dep การ์ดจะค้างชี้แถวเดิม (กล่อง
+    // ไทม์ไลน์สูงคงที่ ตัว ResizeObserver จึงไม่ยิงให้)
+    if (!selBlock || !layerSel || !vis[layerSel.kind] || selOrphan) {
       onAnchor(null);
       return;
     }
@@ -401,11 +407,18 @@ export default function Timeline({
     if (!el || !sec) return;
     const tell = () => {
       const r = el.getBoundingClientRect();
+      const s = sec.getBoundingClientRect();
       const x0 = r.left - el.scrollLeft + 8 + selTl * pxPerSec;
       const x1 = x0 + selDur * pxPerSec;
+      // แถวของบล็อกในแนวตั้ง — วัดจากตัวมันเอง แล้วหนีบไว้ในกล่องไทม์ไลน์เผื่อ
+      // แถวถูกตัดขอบ  ไม่เจอตัว (เพิ่งวาด) ก็ถอยไปใช้ขอบบนกล่องแทน
+      const be = el.querySelector<HTMLElement>("[data-sel-block]");
+      const b = be?.getBoundingClientRect();
       onAnchor({
         x: Math.min(Math.max((x0 + x1) / 2, r.left + 8), r.right - 8),
-        top: sec.getBoundingClientRect().top,
+        top: s.top,
+        blockTop: b ? Math.max(s.top, b.top) : s.top,
+        blockBottom: b ? Math.min(s.bottom, b.bottom) : s.top,
         // เลื่อนจนบล็อกพ้นขอบแล้ว — ซ่อนการ์ด ไม่ใช่ปล่อยให้หางชี้ไปที่ว่าง
         off: x1 < r.left + 4 || x0 > r.right - 4,
       });
@@ -420,7 +433,7 @@ export default function Timeline({
       window.removeEventListener("resize", tell);
       ro.disconnect();
     };
-  }, [selBlock, selVis, selOrphan, selTl, selDur, pxPerSec, onAnchor]);
+  }, [selBlock, layerSel, vis, selOrphan, selTl, selDur, pxPerSec, onAnchor]);
 
   // ข้อความ/สติกเกอร์ซ้อนกันได้ (สูงสุด 5) · เพลง/เสียงเอฟเฟกต์ 6 —
   // ชิ้นที่ทับเวลากันแยกแถวให้อัตโนมัติ
