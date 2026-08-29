@@ -728,16 +728,49 @@ export interface SetupField {
   help?: string;
   options?: string[];
   labels?: Record<string, string>;
+  /** คำอธิบายรายตัวเลือก — โชว์ใต้ช่องตามตัวที่เลือกอยู่ */
+  helps?: Record<string, string>;
   min?: number;
   max?: number;
   step?: number;
+  unit?: string;
+  placeholder?: string;
+  /** ตั้งไว้ถูกแล้วสำหรับเกือบทุกคน — พับเก็บใต้ "ขั้นสูง" ของกลุ่มนั้น */
+  adv?: boolean;
+}
+
+/** หนึ่งขั้นย่อยในไปป์ไลน์ พร้อมสถานะว่าทำไปแล้วหรือยัง และของที่ทำไว้เก่าหรือยัง */
+export interface SetupStep {
+  id: string;
+  label: string;
+  phase: string;
+  phase_no: number;
+  /** แผนจะรันขั้นนี้ไหม — false = ถูกปิด/ข้าม ดูเหตุผลที่ skip */
+  run: boolean;
+  skip: string;
+  exists: boolean;
+  mtime: number;
+  /** คีย์ค่าตั้งที่เปลี่ยนไปหลังจากขั้นนี้ทำไว้ — ไม่ว่าง = ของที่มีเก่าแล้ว */
+  changed: string[];
+  summary: string;
+}
+
+export interface SetupPhase {
+  id: string;
+  no: number;
+  label: string;
+  why: string;
+  steps: SetupStep[];
 }
 
 export interface SetupData {
   fields: SetupField[];
   tiers: Record<string, { label: string; rank: number }>;
-  phases: unknown[];
-  steps: unknown[];
+  /** ชื่อกลุ่มค่าตั้ง เรียงตามลำดับที่คนเดินผ่านมันจริง — มาจากเอนจิน ไม่ใช่
+   *  ตารางในหน้าเว็บ (stage ที่ไม่มีชื่อเคยขึ้นเป็นชื่อดิบโดยไม่มีอะไรฟ้อง) */
+  stages?: { id: string; label: string }[];
+  phases: SetupPhase[];
+  steps: SetupStep[];
   values: Record<string, unknown>;
   inherited: Record<string, unknown>;
   project: { path: string; extends: string; raw: string; chain: string[] };

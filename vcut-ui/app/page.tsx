@@ -71,6 +71,7 @@ import StickerPanel from "@/components/panels/StickerPanel";
 import TranscriptPanel from "@/components/panels/TranscriptPanel";
 import ReviewPanel from "@/components/panels/ReviewPanel";
 import SetupPanel from "@/components/panels/SetupPanel";
+import PipelinePanel from "@/components/panels/PipelinePanel";
 
 /** ก๊อปเอฟเฟกต์รายชิ้นทั้งกองแบบตื้นสองชั้น — draft ต้องไม่ใช้ object เดียวกับ
  *  ที่โหลดมา ไม่งั้นแก้ค่าแล้ว "ของเดิม" เปลี่ยนตาม แล้วปุ่มย้อนกลับคืนอะไรไม่ได้ */
@@ -2588,6 +2589,9 @@ export default function Editor() {
             applyOps={applyReviewOps}
             flash={flash}
           />
+        )}
+        {tab === "pipeline" && (
+          <PipelinePanel reloadKey={reloadKey} job={job} onRun={runJob} />
         )}
         {tab === "setup" && (
           <SetupPanel reloadKey={reloadKey} flash={flash} />

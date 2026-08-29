@@ -4,6 +4,7 @@ import {
   Bot,
   Captions,
   FolderOpen,
+  Layers,
   Music,
   Settings,
   Smile,
@@ -17,6 +18,7 @@ export type Tab =
   | "stickers"
   | "cc"
   | "review"
+  | "pipeline"
   | "setup";
 
 // label = ตัวสั้นที่โชว์บนแถบ, title = คำอธิบายเต็มตอนชี้ค้าง
@@ -32,7 +34,17 @@ const ITEMS: {
   { id: "stickers", icon: Smile, label: "สติกเกอร์", title: "สติกเกอร์ / ภาพซ้อน / แผนที่เส้นทาง" },
   { id: "cc", icon: Captions, label: "บทพูด", title: "บทพูดที่ถอดไว้ — เลือกบรรทัดใส่ลงหนัง" },
   { id: "review", icon: Bot, label: "AI", title: "AI ดูหนัง" },
-  { id: "setup", icon: Settings, label: "ตั้งค่า", title: "ตั้งค่าเอนจิน" },
+  // ── สองแท็บสุดท้าย = "เครื่องมือของทั้งเรื่อง" ไม่ใช่ "ของที่อยู่ในหนัง" ──
+  //
+  // หกแท็บแรกตอบคำถาม "หนังมีอะไรอยู่บ้าง" (คลิป ข้อความ เพลง …) สองตัวนี้ตอบ
+  // "จะผลิตมันยังไง" — เส้นแบ่งจึงอยู่ตรงนี้ ไม่ใช่เรียงปนกันตามลำดับที่เพิ่ม
+  {
+    id: "pipeline",
+    icon: Layers,
+    label: "ไปป์ไลน์",
+    title: "ทำถึงขั้นไหนแล้ว · ของที่มีเก่าหรือยัง · สั่งรันทีละขั้น",
+  },
+  { id: "setup", icon: Settings, label: "ตั้งค่า", title: "ตั้งค่าเอนจินทั้ง 135 ค่า" },
 ];
 
 export default function TabNav({

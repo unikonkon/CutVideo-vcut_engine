@@ -13,7 +13,7 @@ import threading
 import tomllib
 from pathlib import Path
 
-from . import compare, config, fx
+from . import config, fx
 from .util import read_json
 
 PKG_ROOT = Path(__file__).resolve().parent.parent
@@ -44,8 +44,28 @@ STEPS = [
     {"id": "assemble", "label": "ต่อเป็นไฟล์"},
     {"id": "caption",  "label": "ใส่ข้อความ"},
     {"id": "finish",   "label": "แต่งหนัง"},
-    {"id": "compare",  "label": "เทียบก่อน-หลัง"},
 ]
+# ── กลุ่มของค่าตั้ง เรียงตามลำดับที่คนเดินผ่านมันจริง ────────────────────────────────
+#
+# อยู่ที่นี่ไม่ใช่ในหน้าเว็บ ด้วยเหตุผลเดียวกับที่ FIELDS อยู่ที่นี่ — เดิมหน้าเว็บ
+# มีตารางชื่อกลุ่มเป็นของตัวเอง แล้ว stage ที่ไม่มีในตารางนั้นจะขึ้นเป็นชื่อดิบ
+# ("review") โดยไม่มีอะไรฟ้อง
+STAGES = [
+    {"id": "project",  "label": "โปรเจกต์"},
+    {"id": "scan",     "label": "① อ่านคลิป"},
+    {"id": "thumbs",   "label": "① ภาพตัวอย่าง"},
+    {"id": "listen",   "label": "② ถอดเสียง"},
+    {"id": "ai",       "label": "② ความเห็น AI"},
+    {"id": "prepare",  "label": "② เตรียมคลัง"},
+    {"id": "compose",  "label": "③ รวมร่าง"},
+    {"id": "render",   "label": "④ ตัดชิ้น"},
+    {"id": "assemble", "label": "④ ต่อไฟล์"},
+    {"id": "caption",  "label": "④ ใส่ข้อความ"},
+    {"id": "fx",       "label": "⑤ แต่งหนัง"},
+    {"id": "review",   "label": "AI ดูหนังที่ตัดแล้ว"},
+]
+STAGE_ORDER = [x["id"] for x in STAGES]
+
 STEP_ORDER = [s["id"] for s in STEPS]
 STEP_LABEL = {s["id"]: s["label"] for s in STEPS}
 # งานที่รันผ่านคิวเดียวกับขั้นในไปป์ไลน์ แต่ไม่ใช่ "ขั้น" — ไม่มีไฟล์ผลลัพธ์ประจำตัว
@@ -83,16 +103,6 @@ PHASES = [
      "why": "ใช้ไทม์ไลน์ของขั้น 3 กับข้อความของขั้น 4 แล้วแต่งเป็นไฟล์ตัวที่สาม "
             "— ข้อความเคลื่อนไหว · รูปทรง · สโลว์โม/ซูม/สี · ภาพซ้อน · เพลง",
      "steps": ["finish"]},
-    # ขั้น 6 กิน *หนังสองเรื่อง* — ผลของขั้นก่อนหน้ากับคลิปดิบที่ไม่ได้อยู่ใน
-    # ไทม์ไลน์เลย  ยัดเข้าขั้น 5 จะพังสัญญา "ไม่ตั้งอะไร → ได้ไฟล์เหมือนขั้น 4"
-    # ของมันทันที เพราะขั้น 5 ทำงานบนไทม์ไลน์เดียวเสมอ (ดู compare.py)
-    #
-    # ปิดไว้เป็นค่าตั้งต้น: ขั้นนี้ต้องมีคนบอกก่อนว่าคลิปดิบตัวไหนคือ "ก่อน"
-    # ไม่มีค่าที่เดาให้ได้ และ `vcut run` ต้องไม่ไปตายที่ขั้นสุดท้ายเพราะเรื่องนี้
-    {"id": "compare", "no": 6, "label": "เทียบก่อน-หลัง",
-     "why": "วางหนังที่ตัดเสร็จแล้วไว้ข้างฟุตเทจดิบตัวเดียวกัน "
-            "— คลิปสายสอนตัดต่อใช้ท่านี้เพื่อให้เห็นว่าการตัดทำอะไรกับของดิบ",
-     "steps": ["compare"]},
 ]
 
 # ── คีย์ไหนเป็นของขั้นไหน — ใช้ตอนรีเซ็ตทีละขั้น ────────────────
@@ -106,7 +116,6 @@ PHASE_STAGES = {
     "compose": ["compose", "render", "assemble"],
     "text": ["caption"],
     "fx": ["fx"],
-    "compare": ["compare"],
 }
 SCOPES = ["all"] + [p["id"] for p in PHASES]
 SCOPE_LABEL = {"all": "ทุกขั้น",
@@ -126,7 +135,12 @@ def scope_keys(scope):
 def F(key, label, typ, tier, stage, **kw):
     """stage = อยู่ในขั้นไหนของไปป์ไลน์ (ใช้จัดกลุ่มในหน้าเว็บ)
     tier  = แก้แล้วต้องทำอะไรใหม่ (ใช้คิดราคา)
-    ส่วน step ที่อยู่ใน **kw คือระยะห่างของ slider ตัวเลข — คนละเรื่องกัน"""
+    ส่วน step ที่อยู่ใน **kw คือระยะห่างของ slider ตัวเลข — คนละเรื่องกัน
+
+    adv=True = ค่าที่ตั้งไว้ถูกแล้วสำหรับเกือบทุกคน — หน้าเว็บพับเก็บไว้ใต้
+    "ขั้นสูง" ของกลุ่มนั้น *ไม่ใช่* ย้ายไปอยู่หน้าอื่น เพราะเวลาที่คนต้องการ
+    encode.crf คือตอนที่กำลังมอง encode.bitrate อยู่พอดี
+    """
     return {"key": key, "label": label, "type": typ, "tier": tier, "stage": stage, **kw}
 
 
@@ -142,6 +156,10 @@ FIELDS = [
       help="ที่ที่หนังทุกขั้นไปนอน แยกโฟลเดอร์ย่อยตามชื่อโปรเจกต์ให้เอง — "
            "ไม่ใช่โฟลเดอร์ที่รันคำสั่ง ไฟล์จึงไปที่เดิมเสมอ"),
     F("project.reveal", "เปิด Finder โชว์ไฟล์เมื่อเสร็จ", "bool", "free", "project"),
+    F("project.work", "โฟลเดอร์แคช", "path", "scan", "project", adv=True,
+      help="ที่เก็บผลของทุกขั้น (manifest · บทพูด · pool · edl · ชิ้นที่ตัดแล้ว) "
+           "· ชี้ไปที่ใหม่ = เหมือนเริ่มโปรเจกต์เปล่า ต้องไล่ทำใหม่ตั้งแต่อ่านคลิป "
+           "ของเดิมไม่ได้หายไปไหน ชี้กลับมาก็ได้คืน"),
 
     # ── อ่านคลิป ──
     F("scan.motion_window", "ช่วงที่ใช้วัดความสั่น", "float", "scan", "scan",
@@ -151,6 +169,15 @@ FIELDS = [
       min=1, max=15, step=1),
     F("scan.workers", "จำนวนงานพร้อมกัน", "int", "free", "scan", min=1, max=12, step=1,
       help="ไม่มีผลต่อผลลัพธ์ มีผลแค่ความเร็ว — M3 8GB: 6 กำลังดี"),
+    F("scan.extensions", "นามสกุลไฟล์ที่นับเป็นคลิป", "list_str", "scan", "scan", adv=True,
+      placeholder=".MOV", help="ตรงตัวพิมพ์ใหญ่-เล็ก — .MOV กับ .mov ต้องใส่ทั้งคู่"),
+    F("scan.bright_fps", "เฟรม/วิ ที่สุ่มมาวัดความสว่าง", "int", "scan", "scan",
+      min=1, max=15, step=1, adv=True,
+      help="ใช้กับตัวกรอง 'ทิ้งคลิปที่มืดกว่า' — สูงขึ้นแม่นขึ้นแต่ scan ช้าลง"),
+    F("scan.color.full_range_clips", "คลิปที่ต้องแปลงช่วงสีเต็ม→ทีวี", "list_str",
+      "render", "scan", adv=True, placeholder="IMG_7372",
+      help="คลิปที่บันทึกมาเป็น full range จะสีจัดกว่าเพื่อนถ้าไม่แปลง "
+           "— ใส่ชื่อไฟล์ไม่ต้องมีนามสกุล"),
 
     # ── สามค่านี้เลือกด้วยการกดที่ตัวคลิปในขั้น 1 ไม่ใช่กรอกในฟอร์ม ──
     # อยู่ใน FIELDS เพื่อให้ปุ่มรีเซ็ตกับตัวจับ "ค่าเปลี่ยนไปแล้ว" มองเห็น
@@ -172,6 +199,16 @@ FIELDS = [
       help="ไม่มีผลต่อผลลัพธ์ มีผลแค่ความเร็ว — M3 8GB: 6 กำลังดี"),
     F("listen.import_dir", "ดึง transcript จากที่อื่น", "path", "listen", "listen",
       help="มีผลถอดเสียงจากรอบก่อนอยู่แล้ว ชี้มาที่นี่เพื่อข้ามขั้นนี้ทั้งหมด"),
+    F("listen.binary", "คำสั่ง whisper", "path", "listen", "listen", adv=True,
+      placeholder="whisper-cli", help="ชื่อคำสั่งใน PATH หรือ path เต็ม"),
+    F("listen.keep_wav", "เก็บไฟล์เสียง 16k ที่แปลงไว้", "bool", "free", "listen", adv=True,
+      help="กินดิสก์ราว 30MB ต่อชั่วโมงฟุตเทจ · เปิดไว้เมื่ออยากเอาไปใช้ต่อเอง"),
+    F("listen.filter.hallucination", "รูปแบบข้อความหลอน (regex)", "list_str",
+      "listen", "listen", adv=True,
+      help="whisper ชอบเดา 'ขอบคุณครับ' / 'Thanks for watching' ตอนเจอความเงียบ "
+           "· บรรทัดที่ตรงรูปแบบใดรูปแบบหนึ่งจะถูกทิ้ง — ผิดพลาดแล้วบทพูดหายเป็นแถบ"),
+    F("listen.filter.min_chars", "สั้นกว่ากี่ตัวอักษรถือว่าไม่ใช่คำพูด", "int",
+      "listen", "listen", min=0, max=20, step=1, adv=True, unit="ตัว"),
     F("listen.export", "เขียนไฟล์บทพูดแยกต่อคลิป", "select", "listen", "listen",
       options=["off", "txt", "srt", "both"],
       labels={"off": "ไม่เขียน", "txt": "ข้อความล้วน (.txt)",
@@ -219,6 +256,31 @@ FIELDS = [
               "trim_suggest": "แนะนำช่วงที่ควรเก็บ"}),
     F("ai.batch_clips", "ซอยเป็นก้อนละกี่คลิป", "int", "ai", "ai", min=0, max=300, step=10,
       help="0 = ไม่ซอย · ก้อนเล็กเร็วกว่าและหลุดยากกว่า (แบ่งบทไม่ถูกซอยไม่ว่าตั้งเท่าไร)"),
+    F("ai.sheets", "ส่งภาพ contact sheet ให้ AI ดูด้วย", "bool", "ai", "ai",
+      help="ต้องทำภาพตัวอย่างไว้ก่อน · ปิด = AI เห็นแต่ตัวเลขกับบทพูด ไม่เห็นภาพเลย "
+           "· Gemini ไม่มีเครื่องมืออ่านไฟล์ ค่านี้จึงมีผลกับ Claude เป็นหลัก"),
+    F("ai.transcript_chars", "ตัดคำพูดต่อคลิปไม่เกิน", "int", "ai", "ai",
+      min=0, max=5000, step=50, unit="ตัว",
+      help="กันโปรมป์บวมจนโมเดลใช้โควตาหมดไปกับการอ่าน · 0 = ส่งเต็ม"),
+    F("ai.timeout", "หมดเวลาต่อการเรียกหนึ่งครั้ง", "int", "ai", "ai",
+      min=60, max=7200, step=60, unit="วิ"),
+    F("ai.gemini_max_tokens", "โทเคนตอบสูงสุด (Gemini)", "int", "ai", "ai", adv=True,
+      min=1024, max=131072, step=1024,
+      help="น้อยเกินไปแล้วคำตอบถูกตัดกลางคัน ซึ่งอ่านออกมาเป็น JSON ไม่ได้"),
+    F("ai.gemini_temperature", "ความสร้างสรรค์ (Gemini)", "float", "ai", "ai", adv=True,
+      min=0, max=2, step=0.05, help="ต่ำ = ตอบซ้ำเดิมได้ · สูง = เดามากขึ้น"),
+    F("ai.binary", "คำสั่ง claude", "path", "ai", "ai", adv=True, placeholder="claude"),
+    F("ai.allowed_tools", "เครื่องมือที่ยอมให้ claude ใช้", "str", "ai", "ai", adv=True,
+      placeholder="Read,Write",
+      help="⚠️ ขั้นนี้ต้องอ่าน contact sheet และเขียน ai.json เท่านั้น "
+           "— เพิ่ม Bash เข้าไปคือให้โมเดลสั่งอะไรก็ได้ในเครื่อง"),
+    F("ai.permission_mode", "โหมดสิทธิ์ของ claude", "select", "ai", "ai", adv=True,
+      options=["acceptEdits", "default", "plan", "bypassPermissions"],
+      labels={"acceptEdits": "รับการแก้ไฟล์อัตโนมัติ (ค่าตั้งต้น)",
+              "default": "ถามทุกครั้ง (ค้างรอคำตอบที่ไม่มีใครตอบ)",
+              "plan": "วางแผนอย่างเดียว ไม่เขียนไฟล์",
+              "bypassPermissions": "⚠️ ข้ามการขออนุญาตทั้งหมด"},
+      help="ขั้นนี้รันแบบไม่มีคนนั่งเฝ้า — 'ถามทุกครั้ง' จึงเท่ากับค้างจนหมดเวลา"),
     # อยู่ขั้น 3 เพราะเป็นเรื่อง "เรียงยังไง" ล้วน ๆ — มีผลเฉพาะตอน [order] mode = pick
     F("ai.apply.order", "ให้บทที่ AI แบ่งเป็นตัวจัดลำดับ", "bool", "edl", "compose",
       help='มีผลเฉพาะตอนเรียงลำดับแบบ "ตามที่วิธีเลือกจัดให้" — แบบอื่นคนเลือกไว้ยังไงชนะเสมอ'),
@@ -253,6 +315,10 @@ FIELDS = [
       min=0, max=40, step=1, help="0 = เก็บหมด"),
     F("broll.drop_below_bright", "ทิ้งคลิปที่มืดกว่า", "float", "edl", "prepare",
       min=0, max=80, step=1, help="0 = เก็บหมด"),
+    F("broll.min_source_duration", "คลิปต้นทางต้องยาวอย่างน้อย", "float", "edl", "prepare",
+      min=0, max=60, step=0.5, unit="วิ",
+      help="วัดที่ *ความยาวคลิปดิบ* ไม่ใช่ท่อนที่ตัดได้ — คลิปสั้นมักเป็นตอนกดพลาด "
+           "· 0 = ไม่ใช้เกณฑ์นี้"),
 
     # ── ตัดสินใจ: ความยาว ──
     F("select.enabled", "ตัดให้ถึงเป้าความยาว", "bool", "edl", "prepare"),
@@ -318,6 +384,8 @@ FIELDS = [
     F("compose.to", "ถึง", "str", "edl", "compose", placeholder="2026-07-31 23:59"),
     F("compose.context", "โจทย์ที่จะบอก AI", "text", "edl", "compose",
       placeholder="เล่าตามลำดับการเดินทาง เน้นช่วงขึ้นเขา"),
+    F("compose.manual", "ชิ้นที่เลือกเอง", "clips", "edl", "compose",
+      help="ใช้เมื่อเลือก 'เลือกทีละชิ้นเอง' — ติ๊กที่ตัวชิ้นในขั้น 2 ไม่ต้องกรอกที่นี่"),
     F("compose.ask_max", "ส่งให้ AI ไม่เกิน", "int", "edl", "compose",
       min=0, max=600, step=10, unit="ชิ้น",
       help="คัดตัวคะแนนดีที่สุดส่งไปเท่านี้ก่อน (คงสัดส่วนพูด:วิว) · 0 = ส่งทั้งคลัง "
@@ -345,6 +413,23 @@ FIELDS = [
       labels={"blur_pad": "พื้นหลังเบลอ", "pillarbox": "แถบดำ", "crop": "ครอปเต็มจอ"}),
     F("video.width", "ความกว้าง", "int", "render", "render", min=640, max=3840, step=2),
     F("video.height", "ความสูง", "int", "render", "render", min=360, max=2160, step=2),
+    F("video.fps", "เฟรมเรตของหนัง", "str", "render", "render",
+      placeholder="60000/1001",
+      help="บังคับให้ทุกคลิปเท่ากัน กัน sync หลุด — เขียนเป็นเศษส่วนได้ "
+           "(60000/1001 = 59.94) ซึ่งตรงกว่าเลขทศนิยม"),
+    F("video.scale_flags", "อัลกอริทึมย่อ/ขยายภาพ", "select", "render", "render",
+      adv=True, options=["lanczos", "bicubic", "bilinear", "spline", "neighbor"],
+      help="lanczos คมสุดและช้าสุด — คลิปที่ต้องย่อจาก 4K ลง 1080p เห็นผลชัด"),
+    F("video.blur.scale", "ย่อเหลือเท่าไรก่อนเบลอ", "str", "render", "render",
+      adv=True, placeholder="480:270",
+      help="พื้นหลังเบลอของคลิปแนวตั้ง — ย่อก่อนเบลอแล้วขยายกลับ เร็วกว่าเบลอที่ "
+           "1080p หลายเท่าโดยตาดูไม่ออก"),
+    F("video.blur.sigma", "ความฟุ้งของพื้นหลังเบลอ", "float", "render", "render",
+      adv=True, min=0, max=40, step=0.5),
+    F("video.blur.brightness", "ความสว่างพื้นหลังเบลอ", "float", "render", "render",
+      adv=True, min=-1, max=1, step=0.05, help="ติดลบ = หรี่ลง ให้ตัวหนังเด่นกว่าพื้น"),
+    F("video.blur.saturation", "ความอิ่มสีพื้นหลังเบลอ", "float", "render", "render",
+      adv=True, min=0, max=3, step=0.05),
 
     # ── เสียง (แพง) ──
     F("audio.target_lufs_talk", "ความดังเป้า — ช่วงพูด", "float", "render", "render",
@@ -366,6 +451,23 @@ FIELDS = [
       help="สูงขึ้น = เสียงสม่ำเสมอขึ้นแต่ไดนามิกแคบลง · 0 = ไม่ให้ limiter ทำงานเลย"),
     F("audio.compressor", "ใส่ compressor", "bool", "render", "render"),
     F("audio.denoise", "ลดเสียงซ่า", "bool", "render", "render"),
+    F("audio.tp_ceiling", "เพดานยอดคลื่นจริง", "float", "render", "render",
+      min=-12, max=0, step=0.5, unit="dBTP",
+      help="เผื่อไว้ให้ AAC ซึ่งเข้ารหัสแล้วยอดคลื่นโผล่เกินที่วัดไว้ได้ "
+           "— ตั้งไว้ที่ 0 แล้วจะได้เสียงแตกบางจังหวะบนเครื่องเล่นบางตัว"),
+    F("audio.cap_up", "เร่งได้สูงสุด", "float", "render", "render",
+      min=0, max=48, step=1, unit="dB",
+      help="กันชิ้นที่เกือบเงียบถูกดันขึ้นเป้าจนเสียงลมเสียงซ่าดังขึ้นมาด้วย"),
+    F("audio.cap_down", "ลดได้สูงสุด", "float", "render", "render",
+      min=0, max=48, step=1, unit="dB"),
+    F("audio.fade", "fade ตรงรอยต่อ", "float", "render", "render",
+      min=0, max=0.5, step=0.005, unit="วิ",
+      help="กันเสียง 'ป๊อก' ตรงรอยตัด · 0 = ไม่ทำ ซึ่งได้ยินชัดเมื่อตัดกลางเสียงต่อเนื่อง"),
+    F("audio.limiter_level_disabled", "ปิดออปชัน level ของ alimiter", "bool",
+      "render", "render", adv=True,
+      help="⚠️ ต้องเปิดสวิตช์นี้ไว้เสมอ — ออปชัน level ของ ffmpeg ดันสัญญาณขึ้นชน "
+           "เพดานให้เอง ซึ่งทับค่าความดังที่คำนวณมาทั้งหมดทิ้ง ปิดสวิตช์นี้แล้ว "
+           "ค่า 'ความดังเป้า' ทุกตัวข้างบนจะไม่มีความหมาย"),
     # tier เป็น free ไม่ใช่ render — loudnorm ตัวนี้อยู่ในสายตอน *ต่อไฟล์*
     # (assemble.run) ไม่ได้อยู่ในชิ้น เปลี่ยนแล้วจึงต่อใหม่พอ ไม่ต้องตัดใหม่ทุกชิ้น
     F("audio.master_lufs", "ความดังรวมทั้งเรื่อง", "float", "free", "assemble",
@@ -382,11 +484,74 @@ FIELDS = [
     # แปลว่าเพดานยังเท่าเดิม ไฟล์จึงไม่เล็กลงอย่างที่ตั้งใจในฉากที่ภาพเคลื่อนเยอะ
     F("encode.maxrate", "เพดานบิตเรต", "str", "render", "render"),
     F("encode.bufsize", "บัฟเฟอร์บิตเรต", "str", "render", "render"),
+    F("encode.profile", "โปรไฟล์ H.264", "select", "render", "render", adv=True,
+      options=["baseline", "main", "high"],
+      help="high = คุณภาพดีสุดและรองรับทั่วไปแล้ว · baseline ไว้เผื่อเครื่องเก่ามาก"),
+    F("encode.crf", "คุณภาพคงที่ (CRF)", "int", "render", "render",
+      min=0, max=51, step=1,
+      help="ใช้เฉพาะตอนเลือก libx264 — เลขน้อย = คุณภาพสูง ไฟล์ใหญ่ (18 ≈ ตาดูไม่ออก) "
+           "· videotoolbox ไม่สนค่านี้ ใช้บิตเรตแทน"),
+    F("encode.preset", "ความเร็วในการเข้ารหัส", "select", "render", "render",
+      options=["ultrafast", "superfast", "veryfast", "faster", "fast",
+               "medium", "slow", "slower", "veryslow"],
+      help="ใช้เฉพาะตอนเลือก libx264 — ช้าลง = ไฟล์เล็กลงที่คุณภาพเท่าเดิม"),
+    F("encode.gop", "ระยะคีย์เฟรม", "int", "render", "render", adv=True,
+      min=0, max=600, step=10, unit="เฟรม"),
+    F("encode.keyframe_sec", "บังคับคีย์เฟรมทุก", "float", "render", "render",
+      adv=True, min=0, max=10, step=0.5, unit="วิ",
+      help="จำเป็นต่อการต่อไฟล์แบบไม่เข้ารหัสซ้ำ — ห่างเกินไปแล้วรอยต่อจะเพี้ยน"),
+    F("encode.acodec", "ตัวเข้ารหัสเสียง", "select", "render", "render", adv=True,
+      options=["aac", "alac", "pcm_s16le"],
+      help="aac = ไฟล์เล็กและเปิดได้ทุกที่ · pcm/alac = ไม่สูญเสีย แต่ไฟล์ใหญ่มาก"),
+    F("encode.abitrate", "บิตเรตเสียง", "str", "render", "render", adv=True,
+      placeholder="192k"),
+    F("encode.arate", "ความถี่สุ่มเสียง", "int", "render", "render", adv=True,
+      min=8000, max=192000, step=100, unit="Hz"),
+    F("encode.achannels", "จำนวนช่องเสียง", "int", "render", "render", adv=True,
+      min=1, max=2, step=1,
+      help="บังคับให้เท่ากันทุกชิ้น — คลิปโมโนปนสเตอริโอแล้วต่อไฟล์ตรง ๆ ไม่ได้"),
     F("render.workers", "render พร้อมกันกี่ชิ้น", "int", "free", "render",
       min=1, max=8, step=1, help="ไม่มีผลต่อผลลัพธ์ — M3: videotoolbox เป็นคอขวดอยู่แล้ว"),
+    F("render.min_free_gb", "ดิสก์ต้องเหลืออย่างน้อย", "float", "free", "render",
+      min=0, max=500, step=1, unit="GB",
+      help="ตรวจก่อนเริ่ม ไม่ใช่ระหว่างทาง — ดิสก์เต็มกลางคันแล้วได้ชิ้นที่เขียนไม่จบ"),
     F("render.concat_mode", "วิธีต่อไฟล์", "select", "free", "assemble",
       options=["copy", "encode"],
       labels={"copy": "ต่อตรง ๆ ไม่เข้ารหัสซ้ำ", "encode": "เข้ารหัสใหม่ทั้งเรื่อง"}),
+
+    # ── AI ดูหนังที่ตัดแล้ว (`vcut review` · แท็บ AI) ──
+    #
+    # คนละบทบาทกับ [ai] ข้างบน: ตัวนั้นอยู่ *ก่อน* ตัด เห็นกองคลิปดิบ แล้วคัดว่า
+    # จะเอาช็อตไหน  ส่วนตัวนี้อยู่ *หลัง* ตัด เห็นหนังที่ประกอบแล้ว แล้วติชม
+    # ค่าที่ไม่ได้ตั้งในกลุ่มนี้ตกไปใช้ของ [ai]
+    F("review.tasks", "งานที่ให้ AI ทำตอนดูหนัง", "multi", "free", "review",
+      options=["cut", "trim", "music", "sfx", "sticker", "text"],
+      labels={"cut": "เอาช็อตออก / สลับที่", "trim": "ตัดช่วงเงียบหัว-ท้ายช็อต",
+              "music": "เลือกเพลงมาวาง", "sfx": "วางเสียงเอฟเฟกต์",
+              "sticker": "วางสติกเกอร์/ภาพซ้อน", "text": "เขียนข้อความบนหนัง"},
+      help="สองตัวแรกแก้ที่ไทม์ไลน์ (ไม่ต้องตัดชิ้นใหม่ กดรับแล้วได้ไฟล์ในไม่ถึงนาที) "
+           "· สี่ตัวหลังเขียนลงชั้นเอฟเฟกต์ของขั้น 5"),
+    F("review.trim_min", "ตัดสั้นกว่านี้ ไม่ต้องเสนอ", "float", "free", "review",
+      min=0, max=5, step=0.05, unit="วิ", help="เสนอตัด 0.1 วิ ไม่คุ้มค่าที่ต้องมาอ่าน"),
+    F("review.trim_keep", "ตัดแล้วช็อตต้องเหลืออย่างน้อย", "float", "free", "review",
+      min=0, max=10, step=0.05, unit="วิ"),
+    F("review.max_ops", "เสนอได้ไม่เกินกี่รายการต่อครั้ง", "int", "free", "review",
+      min=1, max=200, step=5,
+      help="รายการยาวเกินไปแล้วไม่มีใครไล่อ่านจริง — กดรับทั้งกองแทน ซึ่งเป็น "
+           "คนละเรื่องกับการรีวิว"),
+    F("review.text_chars", "ตัดบทพูดต่อช็อตไม่เกิน", "int", "free", "review",
+      min=0, max=2000, step=20, unit="ตัว"),
+    F("review.model", "โมเดล", "select", "free", "review",
+      options=["sonnet", "opus", "haiku"]),
+    F("review.timeout", "หมดเวลาต่อรอบ", "int", "free", "review",
+      min=60, max=7200, step=60, unit="วิ", adv=True),
+    F("review.context", "โจทย์ตั้งต้นเวลาให้ AI ดู", "text", "free", "review",
+      placeholder="ดูว่าช่วงไหนยืดเกินไป", help="ช่องในแท็บ AI ทับค่านี้ได้รายรอบ"),
+
+    # ── ขั้น 4 · ใส่ข้อความ ──
+    F("caption.ffmpeg", "ffmpeg ที่มีฟิลเตอร์ ass", "path", "free", "caption", adv=True,
+      help="ว่าง = หาให้เอง (ffmpeg-full ก่อน แล้วค่อย ffmpeg) · ffmpeg ของ homebrew "
+           "ตัวปกติ *ไม่มี* ฟิลเตอร์ตัวหนังสือ ขั้นนี้จึงล้มโดยไม่เกี่ยวกับข้อความที่ใส่"),
 
     # ── ขั้น 5 · แต่งหนัง ──
     # เอฟเฟกต์รายชิ้นไม่ได้อยู่ในฟอร์ม เพราะมันเป็นของที่ตั้ง *รายชิ้น* ในไทม์ไลน์
@@ -394,37 +559,6 @@ FIELDS = [
     # captions.json) ที่นี่มีแต่ค่ากลางจริง ๆ
     F("fx.out_suffix", "ท้ายชื่อไฟล์ของขั้น 5", "str", "free", "fx",
       help="ต่อท้ายชื่อไฟล์ของขั้น 3 — final.mp4 + '-fx' = final-fx.mp4"),
-
-    # ── ขั้น 6 · เทียบก่อน-หลัง ──
-    F("compare.enabled", "ทำไฟล์เทียบก่อน-หลัง", "bool", "free", "compare",
-      help="ปิดไว้เป็นค่าตั้งต้น — ต้องมีคนบอกก่อนว่าคลิปดิบตัวไหนคือ 'ก่อน'"),
-    F("compare.before", "คลิปดิบฝั่ง Before", "str", "free", "compare",
-      help="ชื่อไฟล์ในโฟลเดอร์ฟุตเทจ — ฟุตเทจตัวเดียวกับที่หนังฝั่ง After ตัดมา"),
-    F("compare.after", "หนังฝั่ง After", "str", "free", "compare",
-      placeholder="(ว่าง = ไฟล์ล่าสุดที่ทำไว้)",
-      help="ว่าง = ไล่หาจากขั้น 5 → 4 → 3 แล้วบอกทุกครั้งว่าหยิบตัวไหนมา"),
-    F("compare.layout", "เลย์เอาต์", "select", "free", "compare",
-      options=["tilt", "side", "stack"],
-      labels={"tilt": "เหลื่อมกัน (ตามคลิปต้นแบบ)", "side": "เทียบข้างเท่ากัน",
-              "stack": "บน-ล่าง"},
-      help="tilt = เรขาคณิตที่วัดจากคลิปต้นแบบจริง (สองช่องเหลื่อมและไม่เท่ากัน)"),
-    F("compare.hold", "เมื่อฝั่งหนึ่งจบก่อน", "select", "free", "compare",
-      options=["freeze", "cut"],
-      labels={"freeze": "ค้างเฟรมสุดท้ายรออีกฝั่ง", "cut": "จบพร้อมกันที่ตัวสั้นสุด"},
-      help="After สั้นกว่า Before คือประเด็นทั้งหมดของคลิปแนวนี้ — cut จะตัด "
-           "Before ทิ้งกลางคัน ซึ่งแทบไม่มีใครต้องการ"),
-    F("compare.bg", "สีพื้นหลัง", "str", "free", "compare", placeholder="#3B1418"),
-    F("compare.label_before", "ป้ายฝั่งซ้าย", "str", "free", "compare",
-      placeholder="Before", help="ว่าง = ไม่ต้องมีป้าย"),
-    F("compare.label_after", "ป้ายฝั่งขวา", "str", "free", "compare",
-      placeholder="After"),
-    F("compare.title", "หัวเรื่อง", "str", "free", "compare"),
-    F("compare.subtitle", "หัวเรื่องรอง", "str", "free", "compare"),
-    F("compare.font", "ฟอนต์ป้าย", "str", "free", "compare"),
-    F("compare.timeline", "สกรีนเรคคอร์ดไทม์ไลน์", "str", "free", "compare",
-      help="ไฟล์วิดีโอที่จะวางเป็นแถบล่าง — ไม่มีก็ปล่อยว่าง"),
-    F("compare.out_suffix", "ท้ายชื่อไฟล์ของขั้น 6", "str", "free", "compare",
-      help="ต่อท้ายชื่อไฟล์ของขั้น 3 — final.mp4 + '-vs' = final-vs.mp4"),
 ]
 
 FIELD_BY_KEY = {f["key"]: f for f in FIELDS}
@@ -525,10 +659,6 @@ def plan(cfg, start=None, no_thumbs=False):
             skip = "ปิด [jumpcut] enabled ไว้"
         elif sid == "listen" and not get_at(cfg, "listen.enabled", True):
             skip = "ปิด [listen] enabled ไว้"
-        elif sid == "compare" and not get_at(cfg, "compare.enabled", False):
-            skip = "ปิด [compare] enabled ไว้"
-        elif sid == "compare" and not str(get_at(cfg, "compare.before", "") or ""):
-            skip = "ยังไม่ได้เลือกคลิปดิบฝั่ง Before"
         out.append({"id": sid, "label": STEP_LABEL[sid], "phase": ph["id"],
                     "phase_no": ph["no"], "run": skip is None, "skip": skip})
     return out
@@ -861,7 +991,6 @@ def step_status(ctx, cfg):
             "caption": Path(ctx.out).with_name(
                 Path(ctx.out).stem + "-text" + Path(ctx.out).suffix),
             "finish": fx.out_path(ctx),
-            "compare": compare.out_path(ctx, quiet=True),
         }[sid]
         exists = path.exists() and (not path.is_dir() or any(path.iterdir()))
         rec = {**st, "exists": exists,
@@ -936,14 +1065,6 @@ def step_status(ctx, cfg):
             if newer:
                 rec["changed"] = newer
                 rec["summary"] += " · " + " กับ ".join(newer) + "เปลี่ยนไปหลังจากนั้น"
-        elif sid == "compare" and exists:
-            # เทียบด้วยเวลาแก้เหมือนขั้น 4/5 — วัตถุดิบของขั้นนี้คือหนังฝั่ง After
-            # ซึ่งถูกทำใหม่ทุกครั้งที่ขั้นก่อนหน้าถูกสั่ง
-            rec["summary"] = f"{path.stat().st_size / 1e9:.2f} GB"
-            src, _ = compare.after_path(ctx)
-            if src.exists() and src.stat().st_mtime > path.stat().st_mtime:
-                rec["changed"] = ["หนังฝั่ง After"]
-                rec["summary"] += " · หนังฝั่ง After เปลี่ยนไปหลังจากนั้น"
         out.append(rec)
     return out
 
