@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   Check,
   Film,
@@ -33,10 +33,18 @@ import {
   Section,
   Sel,
   Spin,
+  TileGrid,
   TInput,
   Toggle,
 } from "@/components/ui";
 import type { FxStore } from "./types";
+
+// ลากขอบขวาเพื่อขยาย — คลังสติกเกอร์ 40 กว่าใบกับคลังภาพซ้อนได้แถวละ 3-4 ใบที่
+// ความกว้างเริ่มต้น  จำแยกจากแท็บอื่น (ดู vcut.assets.width ที่คลังคลิป)
+const KEY_W = "vcut.stickers.width";
+const MIN_W = 320;
+const MAX_W = 1000;
+const DEF_W = 352;
 
 // ตารางหมากรุกหลังรูป — สติกเกอร์ส่วนใหญ่เป็นสีขาวบนพื้นใส ถ้าวางบนพื้นทึบสีเดียว
 // จะแยกไม่ออกว่าส่วนไหนคือตัวรูป ส่วนไหนคือพื้นที่โปร่ง
@@ -119,10 +127,14 @@ export default function StickerPanel({
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [showJourney, setShowJourney] = useState(false);
+  const resize = useMemo(
+    () => ({ key: KEY_W, min: MIN_W, max: MAX_W, def: DEF_W }),
+    [],
+  );
 
   if (!fxs.data || !fxs.draft) {
     return (
-      <Panel title={<><Smile size={13} /> สติกเกอร์ / ภาพซ้อน</>}>
+      <Panel title={<><Smile size={13} /> สติกเกอร์ / ภาพซ้อน</>} resize={resize}>
         <Spin />
       </Panel>
     );
@@ -206,6 +218,7 @@ export default function StickerPanel({
   return (
     <Panel
       title={<><Smile size={13} /> สติกเกอร์ / ภาพซ้อน</>}
+      resize={resize}
       footer={
         <SaveBar
           dirty={fxs.dirty}
@@ -244,7 +257,7 @@ export default function StickerPanel({
             (MOV/WebM) ≤40MB
           </Empty>
         ) : (
-          <div className="grid grid-cols-3 gap-1.5">
+          <TileGrid min={98}>
             {data.overlay.assets.map((a) => (
               <div
                 key={a.file}
@@ -287,7 +300,7 @@ export default function StickerPanel({
                 </div>
               </div>
             ))}
-          </div>
+          </TileGrid>
         )}
       </Section>
 
@@ -297,7 +310,7 @@ export default function StickerPanel({
         {STICKER_CATS.map((c) => (
           <div key={c.key} className="flex flex-col gap-1">
             <div className="text-[10.5px] font-medium text-muted">{c.label}</div>
-            <div className="grid grid-cols-4 items-start gap-1.5">
+            <TileGrid min={72} className="items-start">
               {STICKER_LIST.filter((s) => s.cat === c.key).map((s) => (
                 <button
                   key={s.file}
@@ -338,7 +351,7 @@ export default function StickerPanel({
                   </span>
                 </button>
               ))}
-            </div>
+            </TileGrid>
           </div>
         ))}
       </Section>
@@ -439,7 +452,7 @@ export default function StickerPanel({
       <Section title={`รูปทรง (${shapes.length})`}>
         {/* วาดด้วย libass เอง ไม่มีไฟล์ภาพให้จัดการ — จึงไม่มี "คลัง" แบบภาพซ้อน
             มีแต่ปุ่มสี่ปุ่มที่กดแล้วเกิดชิ้นใหม่ทันที */}
-        <div className="grid grid-cols-4 gap-1.5">
+        <TileGrid min={72}>
           {Object.entries(shapeKinds).map(([k, label]) => (
             <button
               key={k}
@@ -459,7 +472,7 @@ export default function StickerPanel({
               <span className="text-[10.5px]">{label}</span>
             </button>
           ))}
-        </div>
+        </TileGrid>
 
         {shapes.length === 0 ? (
           <Empty>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   Download,
   GripVertical,
@@ -28,10 +28,18 @@ import {
   SaveBar,
   Section,
   Spin,
+  TileGrid,
   TInput,
   Toggle,
 } from "@/components/ui";
 import type { FxStore } from "./types";
+
+// ลากขอบขวาเพื่อขยาย — คลังเสียงมีไทล์ 60 กว่าใบซึ่งที่ 22rem ได้แถวละ 2 ใบ
+// จำแยกจากแท็บอื่นเพราะแต่ละแท็บมีของคนละขนาด (ดู vcut.assets.width ที่คลังคลิป)
+const KEY_W = "vcut.music.width";
+const MIN_W = 320;
+const MAX_W = 900;
+const DEF_W = 352;
 
 export default function MusicPanel({
   fxs,
@@ -88,9 +96,14 @@ export default function MusicPanel({
     });
   };
 
+  const resize = useMemo(
+    () => ({ key: KEY_W, min: MIN_W, max: MAX_W, def: DEF_W }),
+    [],
+  );
+
   if (!fxs.data || !fxs.draft) {
     return (
-      <Panel title={<><Music size={13} /> เพลงประกอบ</>}>
+      <Panel title={<><Music size={13} /> เพลงประกอบ</>} resize={resize}>
         <Spin />
       </Panel>
     );
@@ -124,6 +137,7 @@ export default function MusicPanel({
   return (
     <Panel
       title={<><Music size={13} /> เพลงประกอบ ({items.length} แทร็ก)</>}
+      resize={resize}
       footer={
         <SaveBar
           dirty={fxs.dirty}
@@ -169,7 +183,7 @@ export default function MusicPanel({
           />
         </div>
         {unused.length > 0 && (
-          <div className="flex flex-col gap-1">
+          <TileGrid min={220}>
             {unused.map((t) => (
               <div
                 key={t}
@@ -194,7 +208,7 @@ export default function MusicPanel({
                 </button>
               </div>
             ))}
-          </div>
+          </TileGrid>
         )}
       </Section>
 
@@ -209,7 +223,7 @@ export default function MusicPanel({
               </span>
               <span className="min-w-0 truncate text-[9.5px] text-faint">{c.hint}</span>
             </div>
-            <div className="grid grid-cols-2 gap-1.5">
+            <TileGrid min={148}>
               {BGM_LIST.filter((b) => b.cat === c.key).map((b) => (
                 <div
                   key={b.file}
@@ -247,7 +261,7 @@ export default function MusicPanel({
                   </button>
                 </div>
               ))}
-            </div>
+            </TileGrid>
           </div>
         ))}
         <div className="text-[10.5px] leading-4 text-muted">
@@ -264,7 +278,7 @@ export default function MusicPanel({
         {SFX_CATS.map((c) => (
           <div key={c.key} className="flex flex-col gap-1">
             <div className="text-[10.5px] font-medium text-muted">{c.label}</div>
-            <div className="grid grid-cols-2 gap-1.5">
+            <TileGrid min={148}>
               {SFX_LIST.filter((s) => s.cat === c.key).map((s) => (
                 <div
                   key={s.file}
@@ -307,7 +321,7 @@ export default function MusicPanel({
                   </button>
                 </div>
               ))}
-            </div>
+            </TileGrid>
           </div>
         ))}
         <div className="text-[10.5px] leading-4 text-muted">

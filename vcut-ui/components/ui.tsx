@@ -123,6 +123,41 @@ export function Panel({
   );
 }
 
+/** ตารางที่จำนวนคอลัมน์คิดจาก *ความกว้างจริงของแผง* — ไม่ต้องวัดด้วย JS
+ *
+ *  `auto-fill` + `minmax` ให้เบราว์เซอร์คิดให้ระหว่างลากขอบแผง จึงไม่ต้องมี state
+ *  ความกว้าง ไม่ต้องมี ResizeObserver ประจำแผง และ **ไม่ re-render สักครั้ง**
+ *  ตอนลาก — เรื่องนี้สำคัญกับแผงเพลง (ไทล์เสียง 60 กว่าใบ) และแผงสติกเกอร์ (40 ใบ)
+ *
+ *  `min` = ความกว้างที่ช่องหนึ่งต้องได้อย่างน้อยถึงจะยังอ่านรู้เรื่อง — ตั้งจาก
+ *  ของที่อยู่ในช่องจริง ไม่ใช่จากจำนวนคอลัมน์ที่อยากได้ (ตั้งจากจำนวนคอลัมน์
+ *  แปลว่าพอแผงแคบลง ช่องจะถูกบีบจนตัวหนังสือหายไปแทนที่จะลดคอลัมน์)
+ */
+export function TileGrid({
+  min,
+  gap = 6,
+  className = "",
+  children,
+}: {
+  min: number;
+  gap?: number;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={className}
+      style={{
+        display: "grid",
+        gap,
+        gridTemplateColumns: `repeat(auto-fill, minmax(${min}px, 1fr))`,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function Section({
   title,
   right,

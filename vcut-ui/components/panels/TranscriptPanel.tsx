@@ -4,8 +4,23 @@ import { useMemo, useState } from "react";
 import { Captions, CheckSquare, Square } from "lucide-react";
 import { type FxTextItem } from "@/lib/api";
 import { dur } from "@/lib/time";
-import { Empty, Panel, SaveBar, Section, Spin, TInput, Toggle } from "@/components/ui";
+import {
+  Empty,
+  Panel,
+  SaveBar,
+  Section,
+  Spin,
+  TInput,
+  Toggle,
+} from "@/components/ui";
 import type { FxStore, SpeechLine } from "./types";
+
+// ลากขอบขวาเพื่อขยาย — บรรทัดบทพูดถูกตัดท้ายด้วย truncate กว้างขึ้นจึงได้อ่าน
+// มากขึ้นต่อบรรทัด ซึ่งเป็นสิ่งเดียวที่คนต้องการจากแผงนี้ตอนไล่เลือกประโยค
+const KEY_W = "vcut.cc.width";
+const MIN_W = 320;
+const MAX_W = 860;
+const DEF_W = 384;
 
 /** ข้อความที่มาจากบทพูดติดรหัสไว้ที่ช่อง id — ติ๊กออกแล้วลบถูกชิ้นเสมอ
  *  แม้ปิดโปรเจกต์ไปแล้วเปิดใหม่ (เอนจินเก็บ id ตามที่ส่งไป ไม่เขียนทับ) */
@@ -46,9 +61,14 @@ export default function TranscriptPanel({
     return m;
   }, [texts]);
 
+  const resize = useMemo(
+    () => ({ key: KEY_W, min: MIN_W, max: MAX_W, def: DEF_W }),
+    [],
+  );
+
   if (!fxs.data || !fxs.draft) {
     return (
-      <Panel title={<><Captions size={13} /> บทพูดที่ถอดไว้</>}>
+      <Panel title={<><Captions size={13} /> บทพูดที่ถอดไว้</>} resize={resize}>
         <Spin />
       </Panel>
     );
@@ -104,7 +124,7 @@ export default function TranscriptPanel({
   return (
     <Panel
       title={<><Captions size={13} /> บทพูดที่ถอดไว้</>}
-      width="w-[24rem]"
+      resize={resize}
       footer={
         <SaveBar
           dirty={fxs.dirty}

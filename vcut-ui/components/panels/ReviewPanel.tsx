@@ -24,6 +24,14 @@ import {
 } from "@/lib/api";
 import { Empty, Panel, Section, Spin, TInput } from "@/components/ui";
 
+// ลากขอบขวาเพื่อขยาย — ข้อเสนอของ AI มีเหตุผลกำกับทุกข้อ ซึ่งที่ 24rem ตกบรรทัด
+// สามสี่บรรทัดต่อข้อ  รายการยังเป็นคอลัมน์เดียวเสมอโดยตั้งใจ: มันคือของที่ต้อง
+// *อ่าน* ทีละข้อแล้วตัดสินใจ ไม่ใช่ของที่กวาดตาหา
+const KEY_W = "vcut.review.width";
+const MIN_W = 320;
+const MAX_W = 860;
+const DEF_W = 384;
+
 /** ไอคอน + สีประจำชนิดข้อเสนอ — ชนิดไหนแตะไฟล์ไหน คนอ่านต้องรู้ตั้งแต่ตาแรก */
 const LOOK: Record<string, { icon: typeof Bot; tone: string }> = {
   drop: { icon: Trash2, tone: "text-danger" },
@@ -92,9 +100,14 @@ export default function ReviewPanel({
     [ops, applied],
   );
 
+  const resize = useMemo(
+    () => ({ key: KEY_W, min: MIN_W, max: MAX_W, def: DEF_W }),
+    [],
+  );
+
   if (!data) {
     return (
-      <Panel title={<><Bot size={13} /> AI Review</>}>
+      <Panel title={<><Bot size={13} /> AI Review</>} resize={resize}>
         <Spin />
       </Panel>
     );
@@ -148,7 +161,7 @@ export default function ReviewPanel({
   };
 
   return (
-    <Panel title={<><Bot size={13} /> AI ดูหนังที่ตัดแล้ว</>} width="w-[24rem]">
+    <Panel title={<><Bot size={13} /> AI ดูหนังที่ตัดแล้ว</>} resize={resize}>
       <Section title="ให้ AI ทำอะไรบ้าง">
         <div className="flex flex-col gap-1">
           {tasksAll.map((t) => {
