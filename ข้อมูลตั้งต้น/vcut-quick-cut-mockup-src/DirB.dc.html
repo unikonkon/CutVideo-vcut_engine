@@ -1,0 +1,125 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pridi:wght@600;700&family=Bai+Jamjuree:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; background: #f3efe6; color: #141414; font-family: "Bai Jamjuree", "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #E0102A; } a:hover { color: #a80a1e; }
+    .disp { font-family: "Pridi", Georgia, serif; font-weight: 700; }
+    .num { font-family: "Pridi", Georgia, serif; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .rule { height: 2px; background: #141414; }
+    .seg { display: flex; border: 2px solid #141414; }
+    .seg span { padding: 6px 14px; font-size: 13px; font-weight: 500; border-right: 2px solid #141414; }
+    .seg span:last-child { border-right: 0; }
+    .seg .on { background: #141414; color: #f3efe6; }
+    .row { display: grid; grid-template-columns: 26px 170px 1fr auto; align-items: center; gap: 16px; padding: 11px 0; border-top: 1px solid #141414; font-size: 13.5px; }
+    .box { width: 14px; height: 14px; border: 2px solid #141414; display: flex; align-items: center; justify-content: center; }
+    .box.on { background: #E0102A; border-color: #E0102A; }
+    .kv { font-size: 12.5px; color: #6b665c; }
+    .kv b { color: #141414; font-weight: 600; }
+    .card { display: flex; flex-direction: column; gap: 6px; border: 2px solid #141414; padding: 8px; background: #fffdf8; }
+    .card.on { box-shadow: 6px 6px 0 #E0102A; }
+    .pv { height: 96px; background: #141414; display: flex; align-items: center; justify-content: center; }
+  </style>
+</helmet>
+<div style="width: 1440px; height: 900px; background: #f3efe6; display: flex; flex-direction: column; overflow: hidden;">
+
+  <!-- top: มาสต์เฮดแบบสิ่งพิมพ์ -->
+  <div style="display: flex; align-items: flex-end; gap: 24px; padding: 18px 32px 12px 32px; border-bottom: 3px solid #141414; flex-shrink: 0;">
+    <span class="disp" style="font-size: 30px; line-height: 1; letter-spacing: -0.02em;">vcut<span style="color: #E0102A;">.</span></span>
+    <span style="font-size: 12px; color: #6b665c; padding-bottom: 3px;">IMG_1234.MOV · 2:14 · แนวตั้ง</span>
+    <div style="flex: 1;"></div>
+    <div style="display: flex; gap: 28px; align-items: flex-end;">
+      <span style="display: flex; align-items: baseline; gap: 8px; color: #6b665c;"><span class="num" style="font-size: 22px; line-height: 1;">01</span><span style="font-size: 12.5px;">ใส่วิดีโอ</span></span>
+      <span style="display: flex; align-items: baseline; gap: 8px;"><span class="num" style="font-size: 34px; line-height: 1; color: #E0102A;">02</span><span style="font-size: 14px; font-weight: 600;">เลือกสไตล์ · ตัด</span></span>
+      <span style="display: flex; align-items: baseline; gap: 8px; color: #b3ada1;"><span class="num" style="font-size: 22px; line-height: 1;">03</span><span style="font-size: 12.5px;">เลือกแบบ · ส่งออก</span></span>
+    </div>
+    <div style="flex: 1;"></div>
+    <span style="font-size: 12.5px; font-weight: 500; padding-bottom: 3px; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px;">โหมดเต็ม</span>
+  </div>
+
+  <div style="flex: 1; display: grid; grid-template-columns: 1fr 400px; min-height: 0;">
+    <div style="display: flex; flex-direction: column; gap: 16px; padding: 20px 32px; border-right: 3px solid #141414; overflow: hidden;">
+      <div style="display: flex; align-items: baseline; gap: 14px;">
+        <span class="disp" style="font-size: 28px; line-height: 1.1;">สไตล์</span>
+        <span style="font-size: 12px; color: #6b665c;">ถอดจากคลิปอ้างอิง 7 ตัว — ตัวเลขวัดจากไฟล์จริง</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px;">
+        <div class="card on">
+          <div class="pv" style="background: #E0102A;"><span class="disp" style="font-size: 16px; color: #fff;">คลิป VDO ของคุณ</span></div>
+          <span class="disp" style="font-size: 15px;">A · ปิดการขาย</span>
+          <span class="kv">ช็อต <b>1.7–2.0 วิ</b> · ช้า → รัว → ช้า</span>
+        </div>
+        <div class="card">
+          <div class="pv"><span class="num" style="font-size: 30px; color: #fff;">255.9K</span></div>
+          <span class="disp" style="font-size: 15px;">B · โชว์หลักฐาน</span>
+          <span class="kv">ช็อต <b>2.4 วิ</b> · เลขนับขึ้น</span>
+        </div>
+        <div class="card">
+          <div class="pv"><svg width="120" height="30" viewBox="0 0 120 30" fill="none"><path d="M6 6 C 40 6 40 24 74 24 L 114 24" stroke="#fff" stroke-width="2.5"/></svg></div>
+          <span class="disp" style="font-size: 15px;">C · สอนกรอบวิธีคิด</span>
+          <span class="kv">ช็อต <b>5.0 วิ</b> · ผังนีออน</span>
+        </div>
+        <div class="card" style="border-style: dashed; opacity: 0.5;">
+          <div class="pv" style="background: #d8d2c4;"></div>
+          <span class="disp" style="font-size: 15px;">D · Before | After</span>
+          <span class="kv">ต้องมี compare</span>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 36px; align-items: flex-end;">
+        <div style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em;">ความยาว</span><div class="seg"><span>30</span><span class="on">45 วิ</span><span>60</span><span>ทั้งคลิป</span></div></div>
+        <div style="display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em;">จำนวนแบบ</span><div class="seg"><span>2</span><span>3</span><span class="on">4</span><span>5</span></div></div>
+        <div style="display: flex; flex-direction: column; gap: 8px;"><span style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em;">AI</span><div style="display: flex; gap: 18px; font-size: 13px;"><span style="display: flex; align-items: center; gap: 8px;"><span class="box"></span>ไฮไลต์ให้ 1 แบบ <span class="kv">3 นาที · $0.5</span></span><span style="display: flex; align-items: center; gap: 8px;"><span class="box on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4"><path d="M20 6 9 17l-5-5"/></svg></span>ดูหนังแล้วเสนอแก้</span></div></div>
+      </div>
+
+      <div style="display: flex; align-items: baseline; gap: 14px; margin-top: 4px;">
+        <span class="disp" style="font-size: 22px;">ชั้นแต่งหนัง</span>
+        <span style="font-size: 12px; color: #6b665c;">ค่าตั้งต้นของทุกแบบ · แก้รายแบบได้ตอนส่งออก</span>
+      </div>
+      <div style="display: flex; flex-direction: column;">
+        <div class="row"><span class="box on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4"><path d="M20 6 9 17l-5-5"/></svg></span><span style="font-weight: 500;">ซับจากบทพูด</span><span class="kv">หนา ขาวขอบดำ · กลางล่าง · <b>54</b></span><span style="font-size: 12px; font-weight: 600; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px;">แก้</span></div>
+        <div class="row"><span class="box on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4"><path d="M20 6 9 17l-5-5"/></svg></span><span style="font-weight: 500;">HOOK + การ์ดปิด</span><span class="kv">จากประโยคแรก · ทีละคำ · เน้น<b style="color: #E0102A;">แดง</b> · การ์ด 4 วิ</span><span style="font-size: 12px; font-weight: 600; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px;">แก้</span></div>
+        <div class="row"><span class="box on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4"><path d="M20 6 9 17l-5-5"/></svg></span><span style="font-weight: 500;">เพลง · 2 แทร็ก</span><span class="kv">สนุก/มีพลัง <b>−18 dB</b> · หลบ 6 · SFX ให้ AI วาง</span><span style="font-size: 12px; font-weight: 600; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px;">แก้</span></div>
+        <div class="row"><span class="box"></span><span style="color: #6b665c;">สติกเกอร์ / ภาพซ้อน</span><span class="kv">คลัง 200 · มาสคอตยังไม่มีไฟล์</span><span style="font-size: 12px; font-weight: 600; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px;">แก้</span></div>
+        <div class="row" style="border-bottom: 1px solid #141414;"><span class="box on"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4"><path d="M20 6 9 17l-5-5"/></svg></span><span style="font-weight: 500;">เอฟเฟกต์รายช็อต</span><span class="kv">ยิงรัว zoom <b>1.05→1.22</b> · punch · glitch ท้าย</span><span style="font-size: 12px; font-weight: 600; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px;">แก้</span></div>
+      </div>
+      <div style="flex: 1;"></div>
+      <div style="display: flex; align-items: center; gap: 16px; font-size: 12.5px;">
+        <span style="font-weight: 600; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px;">ขั้นสูง ↓</span>
+        <span style="color: #6b665c;">ตั้งค่า 135 · เลือกชิ้น 7 · ลำดับ 6 · AI 4 · รีเซ็ต · cache · เพิ่มเติม</span>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; padding: 20px 28px; gap: 12px; background: #ebe6da;">
+      <span class="disp" style="font-size: 22px;">จะได้ 4 แบบ</span>
+      <div style="display: flex; flex-direction: column;">
+        <div style="display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; padding: 10px 0; border-top: 1px solid #141414; align-items: baseline;"><span class="num" style="font-size: 20px; color: #E0102A;">A</span><span style="font-size: 13.5px; font-weight: 500;">ตัดชิดทั้งคลิป<br><span class="kv">ลบเงียบ 7 ช่วง</span></span><span class="num" style="font-size: 18px;">1:43</span></div>
+        <div style="display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; padding: 10px 0; border-top: 1px solid #141414; align-items: baseline;"><span class="num" style="font-size: 20px; color: #E0102A;">B</span><span style="font-size: 13.5px; font-weight: 500;">ย่อ 45 วิ ตามกฎ<br><span class="kv">ประโยคคะแนนสูงก่อน</span></span><span class="num" style="font-size: 18px;">0:45</span></div>
+        <div style="display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; padding: 10px 0; border-top: 1px solid #141414; align-items: baseline;"><span class="num" style="font-size: 20px; color: #E0102A;">C</span><span style="font-size: 13.5px; font-weight: 500;">ยิงรัว + ซูมไล่<br><span class="kv">ช็อต 0.8 วิ</span></span><span class="num" style="font-size: 18px;">0:45</span></div>
+        <div style="display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; padding: 10px 0; border-top: 1px solid #141414; border-bottom: 1px solid #141414; align-items: baseline;"><span class="num" style="font-size: 20px; color: #E0102A;">D</span><span style="font-size: 13.5px; font-weight: 500;">ช้า มีซับ<br><span class="kv">ช็อต 2.0 วิ</span></span><span class="num" style="font-size: 18px;">0:58</span></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: #6b665c; padding-top: 2px;">
+        <div style="display: flex; justify-content: space-between;"><span>ถอดเสียง</span><span style="color: #141414; font-weight: 500;">ทำอยู่แล้ว</span></div>
+        <div style="display: flex; justify-content: space-between;"><span>ตัด 4 แบบ</span><span style="color: #141414; font-weight: 500;">1:10</span></div>
+        <div style="display: flex; justify-content: space-between;"><span>ซับ · ข้อความ · เพลง</span><span style="color: #141414; font-weight: 500;">3:00</span></div>
+        <div style="display: flex; justify-content: space-between;"><span>AI ดูหนัง</span><span style="color: #141414; font-weight: 500;">1:00 · $0.16</span></div>
+      </div>
+      <div style="flex: 1;"></div>
+      <div style="display: flex; align-items: baseline; gap: 10px;"><span class="num" style="font-size: 56px; line-height: 1; letter-spacing: -0.03em;">5</span><span class="disp" style="font-size: 20px;">นาที</span><span class="kv">โดยประมาณ</span></div>
+      <div style="display: flex; align-items: center; justify-content: space-between; height: 56px; padding: 0 20px; background: #141414; color: #f3efe6; border: 2px solid #141414; box-shadow: 6px 6px 0 #E0102A;">
+        <span class="disp" style="font-size: 18px;">ตัดให้เลย</span>
+        <span style="font-size: 13px;">4 แบบ →</span>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

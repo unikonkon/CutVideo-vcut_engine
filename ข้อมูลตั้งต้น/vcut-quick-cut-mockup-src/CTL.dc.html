@@ -1,0 +1,108 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mitr:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <style>
+body{margin:0;background:#1c1e1b;color:#d9dbd2;font-family:"Mitr","Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased;font-size:12.5px}
+.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+.tag{font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#7f847a;white-space:nowrap}
+.panel{background:#242723;border-radius:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),inset 0 -1px 0 rgba(0,0,0,.5),0 2px 0 #0f100e}
+.well{white-space:nowrap;background:#161815;border-radius:4px;box-shadow:inset 0 2px 4px rgba(0,0,0,.7),inset 0 0 0 1px #0f100e}
+.well.sel{box-shadow:inset 0 2px 4px rgba(0,0,0,.7),inset 0 0 0 1.5px #ffb020}
+.led{width:8px;height:8px;border-radius:999px;background:#3a3d38;box-shadow:inset 0 1px 1px rgba(0,0,0,.6);flex-shrink:0}
+.led.on{background:#ffb020;box-shadow:0 0 6px #ffb020,0 0 12px rgba(255,176,32,.5)}
+.led.dim{background:#8a6a2a;box-shadow:0 0 4px rgba(255,176,32,.35)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:6px 12px;border-radius:4px;font-size:12px;color:#d9dbd2;background:linear-gradient(#34382f,#2a2d27);box-shadow:0 2px 0 #0f100e,inset 0 1px 0 rgba(255,255,255,.08);white-space:nowrap}
+.btn.on{background:linear-gradient(#3f4a2e,#2f3823);color:#ffb020;box-shadow:0 1px 0 #0f100e,inset 0 2px 3px rgba(0,0,0,.5)}
+.btn.off{color:#7f847a}
+.btn.sm{padding:3px 8px;font-size:10.5px}
+.btn.ghost{background:transparent;box-shadow:inset 0 0 0 1px #3a3d38}
+.row{display:grid;grid-template-columns:34px 160px 1fr auto auto;align-items:center;gap:14px;padding:9px 12px}
+.row+.row{border-top:1px solid #0f100e}
+.kv{font-size:12px;color:#7f847a}.kv b{color:#d9dbd2;font-weight:500}
+.knob{width:34px;height:34px;border-radius:999px;background:radial-gradient(circle at 40% 35%,#4a4e46,#23261f 70%);box-shadow:0 2px 0 #0f100e,inset 0 1px 0 rgba(255,255,255,.12);position:relative;flex-shrink:0}
+.knob::after{content:"";position:absolute;left:50%;top:4px;width:2px;height:10px;background:#ffb020;margin-left:-1px;border-radius:1px}
+.knob.sm{width:26px;height:26px}.knob.sm::after{height:8px;top:3px}
+.knob.r45::after{transform-origin:1px 13px;transform:rotate(45deg)}.knob.r90::after{transform-origin:1px 13px;transform:rotate(90deg)}.knob.rm60::after{transform-origin:1px 13px;transform:rotate(-60deg)}
+.knob.sm.r45::after{transform-origin:1px 10px}.knob.sm.rm60::after{transform-origin:1px 10px}.knob.sm.r90::after{transform-origin:1px 10px}
+.seg7{font-family:"JetBrains Mono",monospace;font-weight:700;color:#ffb020;text-shadow:0 0 8px rgba(255,176,32,.6);letter-spacing:.06em}
+.seg7.off{color:#3a3d38;text-shadow:none}
+.cta{display:flex;align-items:center;justify-content:center;gap:10px;height:54px;border-radius:6px;background:linear-gradient(#ffc652,#e59a10);color:#1c1e1b;font-size:15px;font-weight:600;box-shadow:0 3px 0 #7a5208,inset 0 1px 0 rgba(255,255,255,.4)}
+.cta.sm{height:40px;font-size:13px}
+.meter{display:flex;gap:2px}.meter i{flex:1;height:8px;background:#2a2d27;border-radius:1px;box-shadow:inset 0 1px 1px rgba(0,0,0,.5)}.meter i.l{background:#ffb020;box-shadow:0 0 4px rgba(255,176,32,.5)}.meter i.h{background:#8a6a2a}
+.stat{display:flex;justify-content:space-between;font-family:"JetBrains Mono",monospace;font-size:10.5px;color:#7f847a;letter-spacing:.04em}.stat span:last-child{color:#d9dbd2}
+.h{display:flex;align-items:center;gap:12px}.h .t{font-size:16px;font-weight:500}
+.lane{display:flex;align-items:center;gap:8px;height:20px}.lane .bar{flex:1;position:relative;height:12px;background:#111311;border-radius:2px}
+.blk{position:absolute;top:0;height:12px;border-radius:2px;background:#4a4e46}.blk.a{background:#8a6a2a}.blk.on{background:#ffb020}
+.thumb{position:relative;border-radius:3px;overflow:hidden;background:#000}.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb .tc{position:absolute;right:4px;bottom:4px;padding:0 5px;background:rgba(0,0,0,.75);font-family:"JetBrains Mono",monospace;font-size:10px;color:#ffb020}
+.tog{width:30px;height:16px;border-radius:3px;background:#161815;box-shadow:inset 0 2px 3px rgba(0,0,0,.7);position:relative;flex-shrink:0}.tog i{position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:2px;background:linear-gradient(#4a4e46,#2a2d27);box-shadow:0 1px 0 #0f100e}.tog.on i{left:16px;background:linear-gradient(#ffc652,#e59a10)}
+.fld{display:flex;flex-direction:column;gap:3px}.fld label{font-size:10.5px;color:#7f847a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fld div{padding:5px 8px;font-family:"JetBrains Mono",monospace;font-size:11.5px;color:#d9dbd2}
+.fld.chg div{box-shadow:inset 0 2px 4px rgba(0,0,0,.7),inset 0 0 0 1px #ffb020}
+.strip{display:flex;gap:2px;align-items:center}.strip span{font-size:9.5px;font-family:"JetBrains Mono",monospace;letter-spacing:.1em}
+</style>
+</helmet>
+<div style="width:1440px;height:900px;background:#1c1e1b;display:flex;flex-direction:column;overflow:hidden;position:relative;">
+<div class="panel" style="height:52px;margin:10px 10px 0 10px;display:flex;align-items:center;gap:12px;padding:0 16px;flex-shrink:0;">
+    <span class="mono" style="font-size:13px;font-weight:700;letter-spacing:.1em;">VCUT</span>
+    <span class="well mono" style="padding:4px 10px;font-size:11px;color:#ffb020;">IMG_1234.MOV  02:14  1126×1788</span>
+    <span class="well mono" style="padding:4px 10px;font-size:11px;color:#7f847a;">VAR <span style="color:#ffb020;">B</span> · EDL 6 · FX 7</span><span class="btn sm">↶</span><span class="btn sm">↷</span><span class="btn sm on">SAVE EDL</span><span class="btn sm">SAVE FX</span>
+    <div style="flex:1;"></div>
+    <div style="display:flex;gap:6px;"><span class="btn"><span class="led on"></span>01 ใส่วิดีโอ</span><span class="btn"><span class="led on"></span>02 เลือกสไตล์ · ตัด</span><span class="btn on"><span class="led on"></span>03 เลือกแบบ · ส่งออก</span></div>
+    <div style="flex:1;"></div>
+    <span class="well mono" style="padding:4px 10px;font-size:11px;color:#ffb020;">EDL MOD 1 · ต่อไฟล์ใหม่ ~10 s</span><span class="btn on">◀ กลับ 03</span>
+    
+  </div>
+  <div style="flex:1;display:grid;grid-template-columns:1fr 400px;grid-template-rows:1fr 250px;gap:10px;padding:10px;min-height:0;">
+    <div class="panel" style="display:flex;flex-direction:column;min-width:0;overflow:hidden;">
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:12px;min-height:0;position:relative;"><div style="position:relative;height:520px;aspect-ratio:9/16;border-radius:4px;overflow:hidden;background:#000;box-shadow:0 0 0 1px #0f100e;">
+          <img src="f57.jpg" style="width:100%;height:100%;object-fit:cover;display:block;">
+          <div style="position:absolute;left:0;right:0;top:14%;display:flex;flex-direction:column;align-items:center;gap:3px;">
+            <span style="font-size:22px;font-weight:600;color:#fff;text-shadow:2px 2px 0 #000,-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000;">น้ำตกที่ไกล</span>
+            <span style="font-size:16px;font-weight:600;color:#fff;text-shadow:2px 2px 0 #000,-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000;">ยังไม่ไกลเท่า</span>
+            <span style="font-size:22px;font-weight:600;color:#E0102A;text-shadow:2px 2px 0 #000,-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000;">บันไดที่ต้องเจอ</span>
+          </div>
+          <div style="position:absolute;left:70%;top:6.5%;width:20%;aspect-ratio:1/1;"><img src="st-4k.png" style="width:100%;height:100%;object-fit:contain;display:block;"></div>
+          <div style="position:absolute;left:12px;right:12px;bottom:14%;text-align:center;font-size:13px;font-weight:600;color:#fff;text-shadow:2px 2px 0 #000,-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000;">น้ำตกที่ไกลยังไม่ไกลเท่า</div>
+        </div>
+        <span class="well mono" style="position:absolute;left:14px;top:14px;padding:3px 8px;font-size:10px;color:#7f847a;">LIVE · ตามลำดับที่จัดอยู่ (ยังไม่บันทึก) · SHOT 3/6 · TALK</span></div>
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-top:1px solid #0f100e;">
+        <span class="btn sm">◀◀</span><span class="btn sm on">▶</span><span class="btn sm">▶▶</span>
+        <span class="well seg7" style="padding:3px 10px;font-size:14px;">00:00:01:12</span><span class="mono kv" style="white-space:nowrap;">/ 00:00:44:06</span>
+        <div style="flex:1;"></div><span class="mono kv" style="font-size:10.5px;white-space:nowrap;">1080×1920 · −14.0 LUFS · 30 fps</span>
+      </div>
+    </div>
+    <div class="panel" style="display:flex;flex-direction:column;gap:10px;padding:14px;overflow:hidden;">
+      <div class="h"><span class="tag">SHOT 3 · TALK</span><span class="t" style="font-size:14px;">0:12–0:23 · 10.6 s</span><div style="flex:1;"></div><span class="mono kv" style="font-size:10px;">T03 · IMG_1234</span></div>
+      <div class="well" style="padding:10px 12px;display:flex;flex-direction:column;gap:8px;">
+        <span class="tag">TRIM · เล็มหัว-ท้าย (วินาทีของคลิปต้นฉบับ)</span>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div class="fld"><label>เริ่ม (วิ)</label><div class="well">12.40</div></div><div class="fld"><label>จบ (วิ)</label><div class="well">23.00</div></div></div>
+        <div style="display:flex;gap:4px;"><span class="btn sm">−0.5</span><span class="btn sm">−0.1</span><span class="btn sm">+0.1</span><span class="btn sm">+0.5</span><div style="flex:1;"></div><span class="btn sm">ตัดตรงหัวเล่น</span></div>
+      </div>
+      <div style="display:flex;gap:4px;"><span class="btn sm on">▶ เล่นจากช็อตนี้</span><span class="btn sm">◀ ย้ายซ้าย</span><span class="btn sm">ย้ายขวา ▶</span><span class="btn sm">ตัดเสียง</span><span class="btn sm">→ ถังทิ้ง</span></div>
+      <div class="well" style="padding:10px 12px;display:flex;flex-direction:column;gap:6px;"><span class="tag">TEXT ในช็อตนี้</span><div class="stat"><span>บทพูด</span><span>"2.2 กิโล 17 คุ้ง ทางขึ้นชันตลอด"</span></div><div class="stat"><span>SCORE</span><span>0.88 · BRIGHT 0.6 · MOTION 0.4</span></div></div>
+      <div class="well" style="padding:10px 12px;display:flex;flex-direction:column;gap:6px;"><span class="tag">ถังทิ้ง · 2</span><div class="stat"><span>T04 · 0.7 s</span><span>กู้</span></div><div class="stat"><span>T07 · 0.9 s</span><span>กู้</span></div></div>
+      <div style="flex:1;"></div>
+      <span class="kv" style="font-size:10.5px;line-height:15px;">เอฟเฟกต์รายช็อต (ซูม/โทน/ความเร็ว) แก้ที่ชั้น "เอฟเฟกต์รายช็อต" · ที่นี่คือ edl.json อย่างเดียว</span>
+      <div class="cta sm">ต่อไฟล์ใหม่ · assemble · ~10 s</div>
+    </div>
+    <div class="panel" style="grid-column:1 / span 2;display:flex;flex-direction:column;gap:6px;padding:10px 14px;overflow:hidden;">
+      <div style="display:flex;align-items:center;gap:12px;"><span class="tag">TIMELINE · B</span><span class="mono kv" style="font-size:10.5px;">6 SHOTS · 0:44 · TRASH 2 · LIVE PREVIEW</span><div style="flex:1;"></div><span class="btn sm">ถังทิ้ง 2</span><span class="btn sm">ลำดับ ◀ ▶</span><span class="btn sm">ตัดตรงนี้</span><span class="btn sm">ดูดเข้าบีต</span><span class="btn sm">↶</span><span class="tag">ZOOM</span><span class="knob sm r45"></span></div>
+      <div style="display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:center;height:18px;"><span></span><div style="position:relative;height:18px;"><span style="position:absolute;left:0%;top:0;height:6px;width:1px;background:#3a3d38;"></span><span class="mono" style="position:absolute;left:0%;top:7px;font-size:9px;color:#7f847a;">00s</span><span style="position:absolute;left:10%;top:0;height:6px;width:1px;background:#3a3d38;"></span><span class="mono" style="position:absolute;left:10%;top:7px;font-size:9px;color:#7f847a;">05s</span><span style="position:absolute;left:20%;top:0;height:6px;width:1px;background:#3a3d38;"></span><span class="mono" style="position:absolute;left:20%;top:7px;font-size:9px;color:#7f847a;">10s</span><span style="position:absolute;left:30%;top:0;height:6px;width:1px;background:#3a3d38;"></span><span class="mono" style="position:absolute;left:30%;top:7px;font-size:9px;color:#7f847a;">15s</span><span style="position:absolute;left:40%;top:0;height:6px;width:1px;background:#3a3d38;"></span><span class="mono" style="position:absolute;left:40%;top:7px;font-size:9px;color:#7f847a;">20s</span><span style="position:absolute;left:50%;top:0;height:6px;width:1px;background:#3a3d38;"></span><span class="mono" style="position:absolute;left:50%;top:7px;font-size:9px;color:#7f847a;">25s</span><span style="position:absolute;left:60%;top:0;height:6px;width:1px;background:#3a3d38;"></span><span class="mono" style="position:absolute;left:60%;top:7px;font-size:9px;color:#7f847a;">30s</span><span style="position:absolute;left:70%;top:0;height:6px;width:1px;background:#3a3d38;"></span><span class="mono" style="position:absolute;left:70%;top:7px;font-size:9px;color:#7f847a;">35s</span><span style="position:absolute;left:80%;top:0;height:6px;width:1px;background:#3a3d38;"></span><span class="mono" style="position:absolute;left:80%;top:7px;font-size:9px;color:#7f847a;">40s</span><span style="position:absolute;left:90%;top:0;height:6px;width:1px;background:#3a3d38;"></span><span class="mono" style="position:absolute;left:90%;top:7px;font-size:9px;color:#7f847a;">45s</span></div></div>
+      <div style="display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:center;height:20px;"><span style="display:flex;align-items:center;gap:8px;"><span class="led on"></span><span class="tag">TEXT ⑤</span></span><div style="position:relative;height:12px;background:#111311;border-radius:2px;"><span class="blk a" style="left:0%;width:6%;"></span><span class="blk a" style="left:91%;width:9%;"></span></div></div><div style="display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:center;height:20px;"><span style="display:flex;align-items:center;gap:8px;"><span class="led on"></span><span class="tag">STICKER</span></span><div style="position:relative;height:12px;background:#111311;border-radius:2px;"><span class="blk a" style="left:0%;width:100%;"></span></div></div><div style="display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:center;height:20px;"><span style="display:flex;align-items:center;gap:8px;"><span class="led on"></span><span class="tag">SHAPE</span></span><div style="position:relative;height:12px;background:#111311;border-radius:2px;"><span class="blk a" style="left:13%;width:4%;"></span></div></div><div style="display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:center;height:16px;"><span style="display:flex;align-items:center;gap:8px;"><span class="led on"></span><span class="tag">CAPTION</span></span><div style="position:relative;height:12px;background:#111311;border-radius:2px;"><span class="blk " style="left:0%;width:41%;"></span><span class="blk " style="left:42%;width:29%;"></span><span class="blk " style="left:72%;width:28%;"></span></div></div>
+      <div style="display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:center;"><span style="display:flex;align-items:center;gap:8px;"><span class="led on"></span><span class="tag">SHOTS</span></span><div style="display:flex;gap:3px;position:relative;">
+        <div class="well" style="width:160px;height:56px;display:flex;flex-direction:column;justify-content:space-between;padding:4px 6px;box-sizing:border-box;background:#3f4a2e;flex-shrink:0;"><span class="strip"><span style="color:#d9dbd2;">TALK</span></span><span class="mono" style="font-size:10px;color:#d9dbd2;">0:00–0:08 · 7.9s</span></div><div class="well" style="width:56px;height:56px;display:flex;flex-direction:column;justify-content:space-between;padding:4px 6px;box-sizing:border-box;background:#2f3a4a;flex-shrink:0;"><span class="strip"><span style="color:#d9dbd2;">BROLL</span></span><span class="mono" style="font-size:10px;color:#d9dbd2;">1240 · 2.1s</span></div><div class="well sel" style="width:200px;height:56px;display:flex;flex-direction:column;justify-content:space-between;padding:4px 6px;box-sizing:border-box;background:#3f4a2e;flex-shrink:0;"><span class="strip"><span style="color:#ffb020;">TALK</span></span><span class="mono" style="font-size:10px;color:#d9dbd2;">0:12–0:23 · 10.6s</span></div><div class="well" style="width:52px;height:56px;display:flex;flex-direction:column;justify-content:space-between;padding:4px 6px;box-sizing:border-box;background:#2f3a4a;flex-shrink:0;"><span class="strip"><span style="color:#d9dbd2;">BROLL</span></span><span class="mono" style="font-size:10px;color:#d9dbd2;">DJI · 2.0s</span></div><div class="well" style="width:300px;height:56px;display:flex;flex-direction:column;justify-content:space-between;padding:4px 6px;box-sizing:border-box;background:#3f4a2e;flex-shrink:0;"><span class="strip"><span style="color:#d9dbd2;">TALK</span></span><span class="mono" style="font-size:10px;color:#d9dbd2;">0:31–0:48 · 17.5s</span></div><div class="well" style="width:80px;height:56px;display:flex;flex-direction:column;justify-content:space-between;padding:4px 6px;box-sizing:border-box;background:#2f3a4a;flex-shrink:0;"><span class="strip"><span style="color:#d9dbd2;">BROLL</span></span><span class="mono" style="font-size:10px;color:#d9dbd2;">DJI · 4.1s</span></div>
+        <span style="position:absolute;left:3.4%;top:-118px;width:2px;height:190px;background:#ffb020;box-shadow:0 0 6px #ffb020;"></span></div></div>
+      <div style="display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:center;height:16px;"><span style="display:flex;align-items:center;gap:8px;"><span class="led on"></span><span class="tag">SPEECH</span></span><div style="position:relative;height:12px;background:#111311;border-radius:2px;"><span class="blk " style="left:0%;width:17%;"></span><span class="blk " style="left:22%;width:24%;"></span><span class="blk " style="left:52%;width:39%;"></span></div></div><div style="display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:center;height:20px;"><span style="display:flex;align-items:center;gap:8px;"><span class="led on"></span><span class="tag">MUSIC TR1 · TR2</span></span><div style="position:relative;height:12px;background:#111311;border-radius:2px;"><span class="blk a" style="left:0%;width:100%;"></span><span class="blk on" style="left:25%;width:2%;"></span><span class="blk on" style="left:58%;width:2%;"></span></div></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

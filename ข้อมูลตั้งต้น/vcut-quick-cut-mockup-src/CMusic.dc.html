@@ -1,0 +1,122 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mitr:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <style>
+body{margin:0;background:#1c1e1b;color:#d9dbd2;font-family:"Mitr","Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased;font-size:12.5px}
+.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+.tag{font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#7f847a;white-space:nowrap}
+.panel{background:#242723;border-radius:6px;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),inset 0 -1px 0 rgba(0,0,0,.5),0 2px 0 #0f100e}
+.well{white-space:nowrap;background:#161815;border-radius:4px;box-shadow:inset 0 2px 4px rgba(0,0,0,.7),inset 0 0 0 1px #0f100e}
+.well.sel{box-shadow:inset 0 2px 4px rgba(0,0,0,.7),inset 0 0 0 1.5px #ffb020}
+.led{width:8px;height:8px;border-radius:999px;background:#3a3d38;box-shadow:inset 0 1px 1px rgba(0,0,0,.6);flex-shrink:0}
+.led.on{background:#ffb020;box-shadow:0 0 6px #ffb020,0 0 12px rgba(255,176,32,.5)}
+.led.dim{background:#8a6a2a;box-shadow:0 0 4px rgba(255,176,32,.35)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:6px 12px;border-radius:4px;font-size:12px;color:#d9dbd2;background:linear-gradient(#34382f,#2a2d27);box-shadow:0 2px 0 #0f100e,inset 0 1px 0 rgba(255,255,255,.08);white-space:nowrap}
+.btn.on{background:linear-gradient(#3f4a2e,#2f3823);color:#ffb020;box-shadow:0 1px 0 #0f100e,inset 0 2px 3px rgba(0,0,0,.5)}
+.btn.off{color:#7f847a}
+.btn.sm{padding:3px 8px;font-size:10.5px}
+.btn.ghost{background:transparent;box-shadow:inset 0 0 0 1px #3a3d38}
+.row{display:grid;grid-template-columns:34px 160px 1fr auto auto;align-items:center;gap:14px;padding:9px 12px}
+.row+.row{border-top:1px solid #0f100e}
+.kv{font-size:12px;color:#7f847a}.kv b{color:#d9dbd2;font-weight:500}
+.knob{width:34px;height:34px;border-radius:999px;background:radial-gradient(circle at 40% 35%,#4a4e46,#23261f 70%);box-shadow:0 2px 0 #0f100e,inset 0 1px 0 rgba(255,255,255,.12);position:relative;flex-shrink:0}
+.knob::after{content:"";position:absolute;left:50%;top:4px;width:2px;height:10px;background:#ffb020;margin-left:-1px;border-radius:1px}
+.knob.sm{width:26px;height:26px}.knob.sm::after{height:8px;top:3px}
+.knob.r45::after{transform-origin:1px 13px;transform:rotate(45deg)}.knob.r90::after{transform-origin:1px 13px;transform:rotate(90deg)}.knob.rm60::after{transform-origin:1px 13px;transform:rotate(-60deg)}
+.knob.sm.r45::after{transform-origin:1px 10px}.knob.sm.rm60::after{transform-origin:1px 10px}.knob.sm.r90::after{transform-origin:1px 10px}
+.seg7{font-family:"JetBrains Mono",monospace;font-weight:700;color:#ffb020;text-shadow:0 0 8px rgba(255,176,32,.6);letter-spacing:.06em}
+.seg7.off{color:#3a3d38;text-shadow:none}
+.cta{display:flex;align-items:center;justify-content:center;gap:10px;height:54px;border-radius:6px;background:linear-gradient(#ffc652,#e59a10);color:#1c1e1b;font-size:15px;font-weight:600;box-shadow:0 3px 0 #7a5208,inset 0 1px 0 rgba(255,255,255,.4)}
+.cta.sm{height:40px;font-size:13px}
+.meter{display:flex;gap:2px}.meter i{flex:1;height:8px;background:#2a2d27;border-radius:1px;box-shadow:inset 0 1px 1px rgba(0,0,0,.5)}.meter i.l{background:#ffb020;box-shadow:0 0 4px rgba(255,176,32,.5)}.meter i.h{background:#8a6a2a}
+.stat{display:flex;justify-content:space-between;font-family:"JetBrains Mono",monospace;font-size:10.5px;color:#7f847a;letter-spacing:.04em}.stat span:last-child{color:#d9dbd2}
+.h{display:flex;align-items:center;gap:12px}.h .t{font-size:16px;font-weight:500}
+.lane{display:flex;align-items:center;gap:8px;height:20px}.lane .bar{flex:1;position:relative;height:12px;background:#111311;border-radius:2px}
+.blk{position:absolute;top:0;height:12px;border-radius:2px;background:#4a4e46}.blk.a{background:#8a6a2a}.blk.on{background:#ffb020}
+.thumb{position:relative;border-radius:3px;overflow:hidden;background:#000}.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb .tc{position:absolute;right:4px;bottom:4px;padding:0 5px;background:rgba(0,0,0,.75);font-family:"JetBrains Mono",monospace;font-size:10px;color:#ffb020}
+.tog{width:30px;height:16px;border-radius:3px;background:#161815;box-shadow:inset 0 2px 3px rgba(0,0,0,.7);position:relative;flex-shrink:0}.tog i{position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:2px;background:linear-gradient(#4a4e46,#2a2d27);box-shadow:0 1px 0 #0f100e}.tog.on i{left:16px;background:linear-gradient(#ffc652,#e59a10)}
+.fld{display:flex;flex-direction:column;gap:3px}.fld label{font-size:10.5px;color:#7f847a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fld div{padding:5px 8px;font-family:"JetBrains Mono",monospace;font-size:11.5px;color:#d9dbd2}
+.fld.chg div{box-shadow:inset 0 2px 4px rgba(0,0,0,.7),inset 0 0 0 1px #ffb020}
+.strip{display:flex;gap:2px;align-items:center}.strip span{font-size:9.5px;font-family:"JetBrains Mono",monospace;letter-spacing:.1em}
+</style>
+</helmet>
+<div style="width:1440px;height:900px;background:#1c1e1b;display:flex;flex-direction:column;overflow:hidden;position:relative;">
+<div class="panel" style="height:52px;margin:10px 10px 0 10px;display:flex;align-items:center;gap:12px;padding:0 16px;flex-shrink:0;">
+    <span class="mono" style="font-size:13px;font-weight:700;letter-spacing:.1em;">VCUT</span>
+    <span class="well mono" style="padding:4px 10px;font-size:11px;color:#ffb020;">IMG_1234.MOV  02:14  1126×1788</span>
+    <span class="well mono" style="padding:4px 10px;font-size:11px;color:#ffb020;">B · EDIT MUSIC · TR1 + TR2</span>
+    <div style="flex:1;"></div>
+    <div style="display:flex;gap:6px;"><span class="btn"><span class="led on"></span>01 ใส่วิดีโอ</span><span class="btn"><span class="led on"></span>02 เลือกสไตล์ · ตัด</span><span class="btn on"><span class="led on"></span>03 เลือกแบบ · ส่งออก</span></div>
+    <div style="flex:1;"></div>
+    <span class="btn on">↻ ทำขั้น ⑤ ใหม่ · ~45 s</span>
+    
+  </div>
+  <div style="flex:1;display:grid;grid-template-columns:270px 1fr 400px;gap:10px;padding:10px;min-height:0;">
+    <div class="panel" style="display:flex;flex-direction:column;gap:10px;padding:14px 12px;overflow:hidden;">
+      <div style="display:flex;flex-direction:column;gap:2px;"><div class="h"><span class="seg7" style="font-size:18px;">B</span><span class="t" style="font-size:14px;">ย่อ 45 วิ ตามกฎ</span></div><span class="mono kv" style="font-size:10.5px;">44.2 s · 6 SHOTS</span></div>
+      <span class="tag">LAYERS · กดเพื่อสลับแผง</span>
+      <div style="display:flex;flex-direction:column;gap:2px;"><div style="display:flex;align-items:center;gap:8px;padding:7px 10px;"><span class="led"></span><span style="flex:1;font-size:12px;">ข้อความ</span><span class="kv" style="font-size:10.5px;">HOOK · การ์ดปิด</span></div><div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:#161815;border-radius:4px;box-shadow:inset 0 0 0 1px #ffb020;"><span class="led on"></span><span style="flex:1;font-size:12px;">เพลง · 2 แทร็ก</span><span class="kv" style="font-size:10.5px;">อัปบีต · SFX 2</span></div><div style="display:flex;align-items:center;gap:8px;padding:7px 10px;"><span class="led"></span><span style="flex:1;font-size:12px;">สติกเกอร์ / ภาพซ้อน</span><span class="kv" style="font-size:10.5px;">1</span></div><div style="display:flex;align-items:center;gap:8px;padding:7px 10px;"><span class="led"></span><span style="flex:1;font-size:12px;">ซับจากบทพูด</span><span class="kv" style="font-size:10.5px;">12 · <span style='color:#ffb020;'>2 ไม่มั่นใจ</span></span></div><div style="display:flex;align-items:center;gap:8px;padding:7px 10px;"><span class="led"></span><span style="flex:1;font-size:12px;">โทนสี / ซูม / ความเร็ว</span><span class="kv" style="font-size:10.5px;">punch · zoom 3</span></div><div style="display:flex;align-items:center;gap:8px;padding:7px 10px;"><span class="led"></span><span style="flex:1;font-size:12px;">แผนที่เส้นทาง</span><span class="kv" style="font-size:10.5px;">4 หมุด</span></div></div>
+      <div style="height:1px;background:#0f100e;"></div>
+      <span class="kv" style="font-size:10.5px;line-height:15px;">เพลงหลบเสียงพูดด้วย sidechaincompress — ไม่ต้องรู้ว่าใครพูดตรงไหน แก้ไทม์ไลน์แล้วไม่พัง</span>
+      <div style="flex:1;"></div>
+      <div class="well" style="padding:8px 10px;display:flex;flex-direction:column;gap:4px;">
+        <div class="stat"><span>⑤ FX REBUILD</span><span>~45 s</span></div>
+        <div class="stat"><span>③ RENDER</span><span style="color:#ffb020;">CACHE</span></div>
+      </div>
+      <span class="btn">◀ กลับ 03 · เลือกแบบ</span>
+    </div>
+    <div class="panel" style="display:flex;flex-direction:column;min-width:0;overflow:hidden;">
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:14px;min-height:0;position:relative;"><div style="position:relative;height:560px;aspect-ratio:9/16;border-radius:4px;overflow:hidden;background:#000;box-shadow:0 0 0 1px #0f100e;">
+          <img src="f57.jpg" style="width:100%;height:100%;object-fit:cover;display:block;">
+          <div style="position:absolute;left:0;right:0;top:14%;display:flex;flex-direction:column;align-items:center;gap:3px;">
+            <span style="font-size:22px;font-weight:600;color:#fff;text-shadow:2px 2px 0 #000,-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000;">น้ำตกที่ไกล</span>
+            <span style="font-size:16px;font-weight:600;color:#fff;text-shadow:2px 2px 0 #000,-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000;">ยังไม่ไกลเท่า</span>
+            <span style="font-size:22px;font-weight:600;color:#E0102A;text-shadow:2px 2px 0 #000,-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000;">บันไดที่ต้องเจอ</span>
+          </div>
+          <div style="position:absolute;left:70%;top:6.5%;width:20%;aspect-ratio:1/1;"><img src="st-4k.png" style="width:100%;height:100%;object-fit:contain;display:block;"></div>
+          <div style="position:absolute;left:12px;right:12px;bottom:14%;text-align:center;font-size:13px;font-weight:600;color:#fff;text-shadow:2px 2px 0 #000,-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000;">น้ำตกที่ไกลยังไม่ไกลเท่า</div>
+        </div>
+        <span class="well mono" style="position:absolute;left:14px;top:14px;padding:3px 8px;font-size:10px;color:#ffb020;">MUSIC · TR1 Neon Run · DUCK ON TALK · BEAT GRID 98</span></div>
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-top:1px solid #0f100e;">
+        <span class="btn sm">◀◀</span><span class="btn sm on">▶</span><span class="btn sm">▶▶</span><span class="btn sm">ไทม์ไลน์ ▸</span>
+        <span class="well seg7" style="padding:3px 10px;font-size:14px;">00:00:01:12</span><span class="mono kv" style="white-space:nowrap;">/ 00:00:44:06</span>
+        <div style="flex:1;"></div><span class="mono kv" style="font-size:10.5px;white-space:nowrap;">1080×1920 · −14.0 LUFS · 30 fps</span>
+      </div>
+      <div style="padding:4px 14px 12px 14px;"><div style="display:flex;flex-direction:column;gap:4px;">
+        <div class="lane"><span class="tag" style="width:34px;">TEXT</span><div class="bar"><span class="blk a" style="left:0;width:6%;"></span><span class="blk a" style="left:91%;width:9%;"></span></div></div>
+        <div class="lane"><span class="tag" style="width:34px;">STKR</span><div class="bar"><span class="blk a" style="left:0;width:100%;"></span></div></div>
+        <div class="lane"><span class="tag" style="width:34px;">MUSIC</span><div class="bar"><span class="blk on" style="left:0;width:100%;opacity:.5;"></span><span style="position:absolute;left:0.0%;top:0;width:1px;height:12px;background:#ffb020;"></span><span style="position:absolute;left:4.9%;top:0;width:1px;height:12px;background:#ffb020;"></span><span style="position:absolute;left:9.8%;top:0;width:1px;height:12px;background:#ffb020;"></span><span style="position:absolute;left:14.7%;top:0;width:1px;height:12px;background:#ffb020;"></span><span style="position:absolute;left:19.6%;top:0;width:1px;height:12px;background:#ffb020;"></span><span style="position:absolute;left:24.5%;top:0;width:1px;height:12px;background:#ffb020;"></span><span style="position:absolute;left:29.4%;top:0;width:1px;height:12px;background:#ffb020;"></span><span style="position:absolute;left:34.3%;top:0;width:1px;height:12px;background:#ffb020;"></span><span style="position:absolute;left:39.2%;top:0;width:1px;height:12px;background:#ffb020;"></span><span style="position:absolute;left:44.1%;top:0;width:1px;height:12px;background:#ffb020;"></span><span style="position:absolute;left:49.0%;top:0;width:1px;height:12px;background:#ffb020;"></span><span style="position:absolute;left:53.9%;top:0;width:1px;height:12px;background:#ffb020;"></span><span style="position:absolute;left:58.8%;top:0;width:1px;height:12px;background:#ffb020;"></span><span style="position:absolute;left:63.7%;top:0;width:1px;height:12px;background:#ffb020;"></span><span style="position:absolute;left:68.6%;top:0;width:1px;height:12px;background:#ffb020;"></span><span style="position:absolute;left:73.5%;top:0;width:1px;height:12px;background:#ffb020;"></span><span style="position:absolute;left:78.4%;top:0;width:1px;height:12px;background:#ffb020;"></span><span style="position:absolute;left:83.3%;top:0;width:1px;height:12px;background:#ffb020;"></span><span style="position:absolute;left:88.2%;top:0;width:1px;height:12px;background:#ffb020;"></span><span style="position:absolute;left:93.1%;top:0;width:1px;height:12px;background:#ffb020;"></span><span style="position:absolute;left:98.0%;top:0;width:1px;height:12px;background:#ffb020;"></span></div></div>
+        <div class="lane"><span class="tag" style="width:34px;">SUB</span><div class="bar"><span class="blk" style="left:0;width:41%;"></span><span class="blk" style="left:42%;width:29%;"></span><span class="blk" style="left:72%;width:28%;"></span></div></div>
+      </div></div>
+    </div>
+    <div class="panel" style="display:flex;flex-direction:column;gap:10px;padding:14px;overflow:hidden;">
+      <div class="h"><span class="tag">SEC 05d · MUSIC · SFX · BEAT</span><span class="t" style="font-size:15px;">เพลง · 2 แทร็ก</span></div>
+      <div class="well" style="padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div style="display:flex;flex-direction:column;gap:8px;"><div style="display:flex;align-items:center;gap:8px;"><span class="led on"></span><span class="tag">TR 1 · BGM</span><span style="font-size:12px;">Neon Run</span></div><div style="display:flex;gap:10px;justify-content:space-around;"><div style="display:flex;flex-direction:column;align-items:center;gap:4px;"><span class="knob sm rm60"></span><span class="tag">GAIN −18</span></div><div style="display:flex;flex-direction:column;align-items:center;gap:4px;"><span class="knob sm r45"></span><span class="tag">DUCK 6</span></div><div style="display:flex;flex-direction:column;align-items:center;gap:4px;"><span class="knob sm "></span><span class="tag">FADE 1.0</span></div></div><div style="display:flex;gap:4px;"><span class="btn sm on">LOOP</span><span class="btn sm">BEAT LOCK</span></div></div>
+        <div style="display:flex;flex-direction:column;gap:8px;"><div style="display:flex;align-items:center;gap:8px;"><span class="led dim"></span><span class="tag">TR 2 · SFX</span><span style="font-size:12px;">AI · 2 จุด</span></div><div style="display:flex;gap:10px;justify-content:space-around;"><div style="display:flex;flex-direction:column;align-items:center;gap:4px;"><span class="knob sm "></span><span class="tag">GAIN −6</span></div><div style="display:flex;flex-direction:column;align-items:center;gap:4px;"><span class="knob sm r90"></span><span class="tag">SNAP CUT</span></div></div><div style="display:flex;gap:4px;"><span class="btn sm">whoosh</span><span class="btn sm">pop</span><span class="btn sm">ding</span><span class="btn sm">+3</span></div></div>
+      </div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;"><div style="display:flex;gap:4px;flex-wrap:wrap;"><span class="btn sm on">สนุก/มีพลัง</span><span class="btn sm">ชิล</span><span class="btn sm">ดราม่า</span><span class="btn sm">โลไฟ</span><span class="btn sm">ซินธ์</span><span class="btn sm">อะคูสติก</span><span class="btn sm">+5</span></div></div>
+      <div class="well" style="display:flex;flex-direction:column;padding:2px 0;">
+        <div style="display:grid;grid-template-columns:8px 1fr auto auto auto;gap:10px;align-items:center;padding:5px 10px;border-top:1px solid #0f100e;"><span class="led"></span><span style="font-size:12px;">Uplift Drive</span><span class="mono kv" style="font-size:10px;">98 BPM · 0:32</span><span class="btn sm">▶</span><span class="btn sm">＋</span></div><div style="display:grid;grid-template-columns:8px 1fr auto auto auto;gap:10px;align-items:center;padding:5px 10px;border-top:1px solid #0f100e;"><span class="led on"></span><span style="font-size:12px;">มีพลัง · Neon Run</span><span class="mono kv" style="font-size:10px;">98 BPM · 0:30</span><span class="btn sm">▶</span><span class="btn sm">＋</span></div><div style="display:grid;grid-template-columns:8px 1fr auto auto auto;gap:10px;align-items:center;padding:5px 10px;border-top:1px solid #0f100e;"><span class="led"></span><span style="font-size:12px;">Big Step</span><span class="mono kv" style="font-size:10px;">110 BPM · 0:28</span><span class="btn sm">▶</span><span class="btn sm">＋</span></div><div style="display:grid;grid-template-columns:8px 1fr auto auto auto;gap:10px;align-items:center;padding:5px 10px;border-top:1px solid #0f100e;"><span class="led"></span><span style="font-size:12px;">Sunrise Pop</span><span class="mono kv" style="font-size:10px;">104 BPM · 0:31</span><span class="btn sm">▶</span><span class="btn sm">＋</span></div>
+        <div style="display:flex;gap:6px;padding:6px 10px;border-top:1px solid #0f100e;align-items:center;"><span class="well mono" style="flex:1;padding:3px 8px;font-size:10px;color:#7f847a;">yt-dlp ▸ https://youtu.be/…</span><span class="btn sm">ดึง</span><span class="btn sm">⬆ mp3/m4a/wav</span></div>
+      </div>
+      <div class="h"><span class="tag">BEATS · beat.py</span><div style="flex:1;"></div><span class="btn sm">วิเคราะห์ใหม่</span></div>
+      <div class="well" style="padding:8px 12px;display:flex;align-items:center;gap:14px;"><span class="seg7" style="font-size:22px;">98.0</span><span class="tag">BPM</span><div class="stat" style="flex:1;"><span>OFFSET</span><span>0.42 s</span></div><div class="stat" style="flex:1;"><span>CUTS ON BEAT</span><span>2 / 5</span></div></div>
+      <div style="display:flex;gap:6px;align-items:center;"><span class="btn sm on">ดูดรอยตัดเข้าบีต · ±0.25 s</span><span class="btn sm">ย้อนกลับ</span><span class="mono kv" style="font-size:10px;">รับเฉพาะช็อตที่อยู่บนจอตอนนี้ · คืน start/end ใหม่</span></div>
+      <span class="kv" style="font-size:10.5px;line-height:14px;">คลิปอ้างอิง 7 ตัวไม่ได้ตัดตามบีต (4/21–8/17 = สุ่ม) — ปุ่มนี้เป็นทางเลือก ไม่ใช่ค่าตั้งต้น</span>
+      <div class="h"><span class="tag">MIXER · MASTER −14 LUFS</span><div style="flex:1;"></div></div>
+      <div class="well" style="padding:8px 12px;display:flex;flex-direction:column;gap:5px;"><div style="display:grid;grid-template-columns:40px 1fr 40px;gap:10px;align-items:center;"><span class="tag">TALK</span><span class="meter"><i class=l></i><i class=l></i><i class=l></i><i class=l></i><i class=l></i><i class=l></i><i class=l></i><i class=l></i><i class=l></i><i class=l></i><i class=l></i><i class=l></i><i class=l></i><i class=l></i><i class=l></i><i></i><i></i><i></i><i></i><i></i></span><span class="mono kv" style="font-size:10px;text-align:right;">0</span></div><div style="display:grid;grid-template-columns:40px 1fr 40px;gap:10px;align-items:center;"><span class="tag">TR1</span><span class="meter"><i class=l></i><i class=l></i><i class=l></i><i class=l></i><i class=l></i><i class=l></i><i class=l></i><i class=l></i><i class=l></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="mono kv" style="font-size:10px;text-align:right;">−18</span></div><div style="display:grid;grid-template-columns:40px 1fr 40px;gap:10px;align-items:center;"><span class="tag">TR2</span><span class="meter"><i class=l></i><i class=l></i><i class=l></i><i class=l></i><i class=l></i><i class=l></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="mono kv" style="font-size:10px;text-align:right;">−6</span></div></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

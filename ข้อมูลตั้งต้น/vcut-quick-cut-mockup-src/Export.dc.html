@@ -1,0 +1,102 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; background: #232323; color: #ececec; font-family: "Noto Sans Thai", "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #3b82f6; } a:hover { color: #2563eb; }
+    .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+    .sec { font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #6e6e6e; }
+    .row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px; background: #363636; font-size: 12px; color: #ececec; }
+    .cb { width: 15px; height: 15px; border-radius: 4px; border: 1px solid #555; background: #3b82f6; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .cb-off { background: transparent; }
+    .sub { font-size: 10.5px; color: #9c9c9c; }
+    .tg { width: 32px; height: 18px; border-radius: 999px; background: #3f3f3f; position: relative; flex-shrink: 0; }
+    .tg-on { background: #3b82f6; }
+    .tg span { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 999px; background: #fff; }
+    .tg-on span { left: 16px; }
+  </style>
+</helmet>
+<div style="width: 1440px; height: 900px; background: #232323; display: flex; flex-direction: column; overflow: hidden; position: relative;">
+
+  <!-- หน้า ④ จาง ๆ อยู่ข้างหลัง -->
+  <div style="position: absolute; inset: 0; opacity: 0.35; display: flex; flex-direction: column;">
+    <div style="height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid rgba(71,71,71,0.6);">
+      <div style="width: 28px; height: 28px; border-radius: 8px; background: #ffffff;"></div>
+      <span style="font-size: 13px; font-weight: 500; color: #ececec;">IMG_1234</span>
+      <div style="flex: 1;"></div>
+      <span style="font-size: 12px; color: #9c9c9c;">✓ ใส่วิดีโอ — ✓ เลือกสไตล์ — ✓ ตัดให้เลย — ④ เลือกแบบ — 5 แต่งหนัง</span>
+    </div>
+    <div style="flex: 1; display: flex; gap: 8px; padding: 8px;">
+      <div style="width: 470px; border: 1px solid #474747; border-radius: 12px; background: #2e2e2e; padding: 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-content: start;">
+        <img src="f14.jpg" style="width: 100%; border-radius: 8px; display: block;"><img src="f57.jpg" style="width: 100%; border-radius: 8px; display: block;"><img src="f88.jpg" style="width: 100%; border-radius: 8px; display: block;"><img src="f116.jpg" style="width: 100%; border-radius: 8px; display: block;">
+      </div>
+      <div style="flex: 1; border: 1px solid #474747; border-radius: 12px; background: #2e2e2e;"></div>
+      <div style="width: 360px; border: 1px solid #474747; border-radius: 12px; background: #2e2e2e;"></div>
+    </div>
+  </div>
+  <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.45);"></div>
+
+  <!-- กล่องส่งออก -->
+  <div style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 640px; border: 1px solid #474747; border-radius: 16px; background: #2e2e2e; box-shadow: 0 24px 60px rgba(0,0,0,0.5); display: flex; flex-direction: column; overflow: hidden;">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid #474747;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg>
+      <span style="font-size: 14px; font-weight: 600; color: #ececec;">ส่งออก</span>
+      <span style="font-size: 11px; color: #6e6e6e;">IMG_1234 · สไตล์ A</span>
+      <div style="flex: 1;"></div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9c9c9c" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+    </div>
+
+    <div style="display: flex; gap: 18px; padding: 16px 18px;">
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
+        <span class="sec">แบบที่จะส่งออก</span>
+        <div class="row"><span class="cb cb-off"></span><span style="flex: 1;">A · ตัดชิดทั้งคลิป</span><span class="sub mono">1:43 · 144 MB</span></div>
+        <div class="row" style="box-shadow: inset 0 0 0 1px #3b82f6;"><span class="cb"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></span><span style="flex: 1;">B · ย่อ 45 วิ ตามกฎ</span><span class="sub mono">0:44 · 58 MB</span></div>
+        <div class="row" style="box-shadow: inset 0 0 0 1px #3b82f6;"><span class="cb"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></span><span style="flex: 1;">C · ยิงรัว + ซูมไล่</span><span class="sub mono">0:45 · 61 MB</span></div>
+        <div class="row"><span class="cb cb-off"></span><span style="flex: 1;">D · ช้า มีซับ</span><span class="sub mono">0:58 · 74 MB</span></div>
+      </div>
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
+        <span class="sec">ไฟล์ที่จะได้ต่อแบบ</span>
+        <div class="row"><span class="cb cb-off"></span><div style="flex: 1; display: flex; flex-direction: column;"><span>ภาพ+เสียงล้วน</span><span class="sub">ขั้น ③ · final.mp4 · ต่อจาก cache ทันที</span></div></div>
+        <div class="row"><span class="cb cb-off"></span><div style="flex: 1; display: flex; flex-direction: column;"><span>+ ซับ</span><span class="sub">ขั้น ④ · final-text.mp4</span></div></div>
+        <div class="row" style="box-shadow: inset 0 0 0 1px #3b82f6;"><span class="cb"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></span><div style="flex: 1; display: flex; flex-direction: column;"><span>+ ข้อความ · สติกเกอร์ · เพลง</span><span class="sub">ขั้น ⑤ · final-fx.mp4 · ไฟล์ที่ลง TikTok</span></div></div>
+        <div style="font-size: 10.5px; line-height: 15px; color: #6e6e6e;">ทั้งสามไฟล์อยู่คู่กันได้ ไม่เขียนทับกัน — เปิดเทียบได้ว่าชั้นไหนเปลี่ยนอะไร</div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px; padding: 0 18px 14px 18px;">
+      <span class="sec">ปลายทาง</span>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span class="mono" style="flex: 1; padding: 7px 10px; border-radius: 8px; border: 1px solid #474747; background: #363636; font-size: 12px; color: #ececec;">~/Movies/vcut/IMG_1234/</span>
+        <span style="padding: 7px 12px; border-radius: 8px; background: #3f3f3f; font-size: 12px; color: #ececec;">เปลี่ยน…</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 18px; font-size: 11.5px; color: #ececec;">
+        <span style="display: flex; align-items: center; gap: 6px;"><span class="tg tg-on"><span></span></span>เปิด Finder เมื่อเสร็จ</span>
+        <span style="display: flex; align-items: center; gap: 6px;"><span class="tg tg-on"><span></span></span>เก็บ edl.json + fx.json คู่ไฟล์</span>
+        <span style="display: flex; align-items: center; gap: 6px;"><span class="tg"><span></span></span>ลบ cache หลังส่งออก <span style="color: #6e6e6e;">(0.6 GB)</span></span>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-top: 1px solid #474747; background: #363636;">
+      <div style="display: flex; flex-direction: column;">
+        <span style="font-size: 12px; color: #ececec;">2 แบบ × ขั้น ⑤ = 2 ไฟล์ · 119 MB</span>
+        <span class="mono" style="font-size: 10.5px; color: #9c9c9c;">C ยังไม่เคยทำขั้น ⑤ → เข้ารหัส ~45 วิ · B พร้อมแล้ว</span>
+      </div>
+      <div style="flex: 1;"></div>
+      <span style="padding: 8px 14px; border-radius: 10px; font-size: 12.5px; color: #9c9c9c;">ยกเลิก</span>
+      <div style="display: flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 10px; background: #3b82f6; color: #fff; font-size: 12.5px; font-weight: 500;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+        ส่งออก 2 ไฟล์ · ~1 นาที
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

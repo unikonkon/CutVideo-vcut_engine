@@ -1,0 +1,140 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; background: #232323; color: #ececec; font-family: "Noto Sans Thai", "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #3b82f6; } a:hover { color: #2563eb; }
+    .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+    .sec { font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #6e6e6e; }
+    .tab { padding: 6px 10px; border-radius: 8px; font-size: 11.5px; color: #9c9c9c; white-space: nowrap; display: flex; align-items: center; gap: 5px; }
+    .tab-on { background: #3f3f3f; box-shadow: inset 0 0 0 1px #555; color: #ececec; }
+    .n { padding: 0 5px; border-radius: 999px; background: #474747; font-size: 9.5px; color: #ccc; }
+    .fld { display: flex; flex-direction: column; gap: 3px; }
+    .fld label { font-size: 11px; color: #9c9c9c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .fld div { padding: 5px 8px; border-radius: 8px; border: 1px solid #474747; background: #2e2e2e; font-size: 12px; color: #ececec; }
+    .grp { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 10px; background: #363636; }
+    .gh { display: flex; align-items: center; gap: 8px; }
+    .gh b { font-size: 12px; font-weight: 500; color: #ececec; }
+    .tier { padding: 1px 7px; border-radius: 999px; font-size: 10px; }
+    .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .btn { display: flex; align-items: center; gap: 5px; padding: 6px 10px; border-radius: 8px; background: #3f3f3f; font-size: 11.5px; color: #ececec; white-space: nowrap; }
+  </style>
+</helmet>
+<div style="width: 1440px; height: 900px; background: #232323; display: flex; flex-direction: column; overflow: hidden; position: relative;">
+
+  <!-- หน้า ② จาง ๆ ข้างหลัง -->
+  <div style="position: absolute; inset: 0; opacity: 0.3; display: flex; flex-direction: column;">
+    <div style="height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid rgba(71,71,71,0.6);">
+      <div style="width: 28px; height: 28px; border-radius: 8px; background: #ffffff;"></div>
+      <span style="font-size: 13px; font-weight: 500; color: #ececec;">IMG_1234</span>
+      <div style="flex: 1;"></div>
+      <span style="font-size: 12px; color: #9c9c9c;">✓ ใส่วิดีโอ — ② เลือกสไตล์ · ตัด — 3 เลือกแบบ · ส่งออก</span>
+    </div>
+    <div style="flex: 1; display: flex; gap: 8px; padding: 8px;">
+      <div style="flex: 1; border: 1px solid #474747; border-radius: 12px; background: #2e2e2e; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;"><div style="height: 130px; border-radius: 12px; background: #363636;"></div><div style="height: 130px; border-radius: 12px; background: #363636;"></div><div style="height: 130px; border-radius: 12px; background: #363636;"></div><div style="height: 130px; border-radius: 12px; background: #363636;"></div></div>
+        <div style="height: 60px; border-radius: 10px; background: #363636;"></div>
+        <div style="display: flex; flex-direction: column; gap: 4px;"><div style="height: 34px; border-radius: 10px; background: #363636;"></div><div style="height: 34px; border-radius: 10px; background: #363636;"></div><div style="height: 34px; border-radius: 10px; background: #363636;"></div><div style="height: 34px; border-radius: 10px; background: #363636;"></div><div style="height: 34px; border-radius: 10px; background: #363636;"></div></div>
+      </div>
+      <div style="width: 340px; border: 1px solid #474747; border-radius: 12px; background: #2e2e2e;"></div>
+    </div>
+  </div>
+  <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.4);"></div>
+
+  <!-- ลิ้นชัก ขั้นสูง -->
+  <div style="position: absolute; right: 0; top: 0; bottom: 0; width: 760px; background: #2e2e2e; border-left: 1px solid #474747; box-shadow: -24px 0 60px rgba(0,0,0,0.45); display: flex; flex-direction: column; overflow: hidden;">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #474747;">
+      <span style="font-size: 14px; font-weight: 600; color: #ececec;">ขั้นสูง</span>
+      <span style="font-size: 11px; color: #6e6e6e;">ทุกอย่างที่เอนจินทำได้ — ค่าที่แก้บันทึกลง projects/IMG_1234.toml เหมือนแท็บตั้งค่าเดิม</span>
+      <div style="flex: 1;"></div>
+      <span style="padding: 2px 8px; border-radius: 999px; background: rgba(245,158,11,0.15); font-size: 11px; color: #f59e0b;">แก้ไว้ 2 ค่า · ยังไม่บันทึก</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9c9c9c" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+    </div>
+
+    <div style="display: flex; gap: 4px; padding: 10px 16px; border-bottom: 1px solid #474747; overflow: hidden;">
+      <span class="tab tab-on">ตั้งค่า <span class="n">135</span></span>
+      <span class="tab">วิธีเลือกชิ้น <span class="n">7</span></span>
+      <span class="tab">ลำดับ <span class="n">6</span></span>
+      <span class="tab">AI <span class="n">4 งาน</span></span>
+      <span class="tab">รีเซ็ต / ประวัติ <span class="n">3</span></span>
+      <span class="tab">cache / สถานะ</span>
+      <span class="tab">เพิ่มเติม</span>
+    </div>
+
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 12px 16px; overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div style="flex: 1; display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px; border: 1px solid #474747; background: #363636; font-size: 12px; color: #6e6e6e;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          ค้นหาค่า… เช่น min_shot · lufs · noise
+        </div>
+        <span class="btn" style="background: rgba(59,130,246,0.2); color: #3b82f6;">เฉพาะที่ตั้งเอง (6)</span>
+        <span class="btn">ทั้งหมด</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: #6e6e6e;">
+        ราคาของการแก้:
+        <span class="tier" style="background: rgba(34,197,94,0.15); color: #22c55e;">ไม่ต้องทำใหม่</span>
+        <span class="tier" style="background: rgba(59,130,246,0.15); color: #3b82f6;">ต่อไฟล์ใหม่</span>
+        <span class="tier" style="background: rgba(245,158,11,0.15); color: #f59e0b;">หาเงียบ/ถอดเสียงใหม่</span>
+        <span class="tier" style="background: rgba(239,68,68,0.15); color: #ef4444;">render ใหม่ทุกชิ้น</span>
+      </div>
+
+      <div class="grp">
+        <div class="gh"><b>② เตรียมคลัง — ช่วงพูด · ตัดชน · วิว</b><span class="tier" style="background: rgba(59,130,246,0.15); color: #3b82f6;">decide + ต่อไฟล์ใหม่</span><div style="flex: 1;"></div><span style="font-size: 10.5px; color: #6e6e6e;">18 ค่า</span></div>
+        <div class="grid3">
+          <div class="fld"><label>talk.min_shot · ช็อตพูดสั้นสุด</label><div>0.80</div></div>
+          <div class="fld"><label>talk.gap_merge · เชื่อมช่องเงียบสั้นกว่า</label><div>0.35</div></div>
+          <div class="fld"><label>talk.margin_pre / post</label><div>0.12 / 0.20</div></div>
+          <div class="fld"><label>jumpcut.noise_db · เกณฑ์เงียบ</label><div style="box-shadow: inset 0 0 0 1px #f59e0b;">auto → −15</div></div>
+          <div class="fld"><label>jumpcut.min_silence / pad</label><div>0.25 / 0.05</div></div>
+          <div class="fld"><label>broll.run_max · วิวติดกันได้</label><div>7</div></div>
+        </div>
+      </div>
+
+      <div class="grp">
+        <div class="gh"><b>③ รวมร่าง — เป้าความยาว · รูปแบบ</b><span class="tier" style="background: rgba(59,130,246,0.15); color: #3b82f6;">ต่อไฟล์ใหม่</span><div style="flex: 1;"></div><span style="font-size: 10.5px; color: #6e6e6e;">12 ค่า</span></div>
+        <div class="grid3">
+          <div class="fld"><label>compose.mode</label><div>fit ▾ <span style="color: #6e6e6e;">(ใหม่ · G1)</span></div></div>
+          <div class="fld"><label>compose.target_minutes</label><div style="box-shadow: inset 0 0 0 1px #f59e0b;">0.75</div></div>
+          <div class="fld"><label>compose.pattern</label><div>TALK, BROLL</div></div>
+        </div>
+      </div>
+
+      <div class="grp">
+        <div class="gh"><b>④ ตัดชิ้น · ต่อไฟล์ — ผืน · เสียง · เข้ารหัส</b><span class="tier" style="background: rgba(239,68,68,0.15); color: #ef4444;">render ใหม่ทุกชิ้น</span><div style="flex: 1;"></div><span style="font-size: 10.5px; color: #6e6e6e;">31 ค่า</span></div>
+        <div class="grid3">
+          <div class="fld"><label>video.width × height</label><div>1080 × 1920</div></div>
+          <div class="fld"><label>video.vertical_mode</label><div>blur_pad ▾</div></div>
+          <div class="fld"><label>audio.master_lufs</label><div>−14.0</div></div>
+          <div class="fld"><label>audio.same_level / match_clips</label><div>เปิด / ปิด</div></div>
+          <div class="fld"><label>encode.vcodec · bitrate</label><div>h264_videotoolbox · 12M</div></div>
+          <div class="fld"><label>render.workers</label><div>2</div></div>
+        </div>
+      </div>
+
+      <div class="grp" style="opacity: 0.8;">
+        <div class="gh"><b>① อ่านคลิป · ② ถอดเสียง · ⑤ แต่งหนัง …</b><span class="tier" style="background: rgba(245,158,11,0.15); color: #f59e0b;">ถอดเสียงใหม่</span><div style="flex: 1;"></div><span style="font-size: 10.5px; color: #6e6e6e;">อีก 74 ค่า ▾</span></div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid #474747; background: #363636;">
+      <span class="btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>รีเซ็ตขั้นนี้</span>
+      <span class="btn">ประวัติ (3)</span>
+      <span class="btn">ล้าง cache 0.6 GB</span>
+      <span class="btn">สถานะโปรเจกต์</span>
+      <span class="btn" style="border: 1px solid #474747; background: transparent;">เปิดไทม์ไลน์ในโหมดเต็ม</span>
+      <div style="flex: 1;"></div>
+      <span style="padding: 7px 12px; border-radius: 8px; font-size: 12px; color: #9c9c9c;">ทิ้ง</span>
+      <span style="display: flex; align-items: center; gap: 5px; padding: 7px 14px; border-radius: 8px; background: #3b82f6; font-size: 12px; font-weight: 500; color: #fff;">บันทึก 2 ค่า</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

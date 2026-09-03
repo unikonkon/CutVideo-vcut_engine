@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;800&display=swap">
+  <style>
+    body { margin: 0; background: #232323; color: #ececec; font-family: "Noto Sans Thai", "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #3b82f6; } a:hover { color: #2563eb; }
+    .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+    .sec { font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #6e6e6e; }
+    .chip { padding: 4px 9px; border-radius: 8px; font-size: 11px; background: #363636; color: #9c9c9c; white-space: nowrap; }
+    .chip-on { background: rgba(59,130,246,0.2); color: #3b82f6; box-shadow: inset 0 0 0 1px #3b82f6; }
+    .ln { display: grid; grid-template-columns: 24px 88px 1fr 90px; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; font-size: 12px; color: #ececec; }
+    .ln .t { font-size: 10.5px; color: #9c9c9c; }
+    .cb { width: 14px; height: 14px; border-radius: 4px; border: 1px solid #555; background: #3b82f6; display: flex; align-items: center; justify-content: center; }
+    .cb-off { background: transparent; }
+    .style { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 10px; background: #363636; box-shadow: inset 0 0 0 1px #474747; }
+    .style .pv { height: 46px; border-radius: 6px; background: #1a1a1a; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  </style>
+</helmet>
+<div style="width: 1440px; height: 900px; background: #232323; display: flex; flex-direction: column; overflow: hidden;">
+
+  <div style="height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid rgba(71,71,71,0.6); flex-shrink: 0;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <div style="width: 28px; height: 28px; border-radius: 8px; background: #ffffff; display: flex; align-items: center; justify-content: center;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
+      </div>
+      <span style="font-size: 13px; font-weight: 500; color: #ececec;">IMG_1234</span>
+    </div>
+    <div style="width: 1px; height: 20px; background: #474747; margin: 0 4px;"></div>
+    <div style="display: flex; align-items: center; gap: 2px; padding: 2px; border-radius: 12px; background: rgba(46,46,46,0.7);">
+      <div style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 10px; background: #3f3f3f; box-shadow: inset 0 0 0 1px #555555; font-size: 12px; font-weight: 500; color: #ececec;">ตัดง่าย</div>
+      <div style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 10px; font-size: 12px; color: #6e6e6e;">โหมดเต็ม · 8 แท็บ</div>
+    </div>
+    <div style="flex: 1;"></div>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span style="width: 22px; height: 22px; border-radius: 7px; background: #22c55e; color: #fff; font-size: 11.5px; font-weight: 600; display: flex; align-items: center; justify-content: center;">✓</span><span style="font-size: 12px; color: #9c9c9c;">ใส่วิดีโอ</span>
+      <span style="width: 20px; height: 1px; background: #474747;"></span>
+      <span style="width: 22px; height: 22px; border-radius: 7px; background: #22c55e; color: #fff; font-size: 11.5px; font-weight: 600; display: flex; align-items: center; justify-content: center;">✓</span><span style="font-size: 12px; color: #9c9c9c;">เลือกสไตล์</span>
+      <span style="width: 20px; height: 1px; background: #474747;"></span>
+      <span style="width: 22px; height: 22px; border-radius: 7px; background: #22c55e; color: #fff; font-size: 11.5px; font-weight: 600; display: flex; align-items: center; justify-content: center;">✓</span><span style="font-size: 12px; color: #9c9c9c;">ตัดให้เลย</span>
+      <span style="width: 20px; height: 1px; background: #474747;"></span>
+      <span style="width: 22px; height: 22px; border-radius: 7px; background: #22c55e; color: #fff; font-size: 11.5px; font-weight: 600; display: flex; align-items: center; justify-content: center;">✓</span><span style="font-size: 12px; color: #9c9c9c;">เลือกแบบ</span>
+      <span style="width: 20px; height: 1px; background: #474747;"></span>
+      <span style="width: 22px; height: 22px; border-radius: 7px; background: #3b82f6; color: #fff; font-size: 11.5px; font-weight: 600; display: flex; align-items: center; justify-content: center;">5</span><span style="font-size: 12px; font-weight: 500; color: #ececec;">แต่งหนัง · ซับ</span>
+    </div>
+    <div style="width: 1px; height: 20px; background: #474747; margin: 0 6px;"></div>
+    <div style="display: flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 10px; background: #3b82f6; color: #fff; font-size: 12.5px; font-weight: 500;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.22-8.56"/><path d="M21 3v6h-6"/></svg>
+      เผาซับลงภาพ · ~2 นาที
+    </div>
+  </div>
+
+  <div style="flex: 1; display: flex; gap: 8px; padding: 8px; min-height: 0;">
+
+    <!-- ซ้าย: บรรทัดซับ -->
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid #474747; border-radius: 12px; background: #2e2e2e; min-width: 0; overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 13px; font-weight: 600; color: #ececec;">ซับจากบทพูด — แก้ก่อนเผา</span>
+        <span style="font-size: 10.5px; color: #6e6e6e;">whisper large-v3-turbo · 12 บรรทัดในแบบ B</span>
+        <div style="flex: 1;"></div>
+        <span class="chip chip-on">ทั้งหมด 12</span><span class="chip" style="color: #f59e0b;">ไม่มั่นใจ 2</span><span class="chip">ตัดออก 0</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 10px; background: rgba(245,158,11,0.1); font-size: 11.5px; color: #f59e0b;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        ซับถูกเผาลงภาพ กู้ไม่ได้ — 2 บรรทัดที่ whisper ไม่มั่นใจถูกไฮไลต์ไว้ กดแก้ก่อน
+      </div>
+
+      <div style="display: grid; grid-template-columns: 24px 88px 1fr 90px; gap: 10px; padding: 0 8px; font-size: 10.5px; color: #6e6e6e;"><span></span><span>เวลา</span><span>ข้อความ</span><span>ความมั่นใจ</span></div>
+      <div style="display: flex; flex-direction: column; gap: 2px; overflow: hidden;">
+        <div class="ln" style="background: #363636;"><span class="cb"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></span><span class="t mono">0.00–3.00</span><span>เดินลุยน้ำชิวชิวทางสะดวกมีเซเว็น</span><span class="t">สูง</span></div>
+        <div class="ln"><span class="cb"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></span><span class="t mono">3.00–4.00</span><span>ไปออกสะเต็บท่ามกลางสายฝน</span><span class="t">สูง</span></div>
+        <div class="ln"><span class="cb"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></span><span class="t mono">4.00–6.00</span><span>อยากไปฮีลใจกับเพื่อนในวันที่ท้อ</span><span class="t">สูง</span></div>
+        <div class="ln"><span class="cb"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></span><span class="t mono">6.00–9.00</span><span>ทำได้แค่เดินขึ้นเขาเพราะเดินข้างเขาไม่ได้</span><span class="t">สูง</span></div>
+        <!-- บรรทัดที่กำลังแก้ -->
+        <div class="ln" style="background: rgba(245,158,11,0.08); box-shadow: inset 0 0 0 1px #f59e0b;"><span class="cb"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></span><span class="t mono">13.00–15.00</span>
+          <span style="display: flex; align-items: center; gap: 8px;"><span style="flex: 1; padding: 5px 8px; border-radius: 8px; border: 1px solid #3b82f6; background: #2e2e2e; font-size: 12px; color: #ececec;">ได้กลิ่นการผจญภัยแล้วโว้ย<span style="display: inline-block; width: 1px; height: 13px; background: #3b82f6; margin-left: 1px; vertical-align: middle;"></span></span><span style="font-size: 10.5px; color: #6e6e6e; white-space: nowrap;">เดิม: "การประจนภัย"</span></span>
+          <span class="t" style="color: #f59e0b;">ต่ำ · แก้แล้ว</span></div>
+        <div class="ln"><span class="cb"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></span><span class="t mono">15.00–18.00</span><span>เรามาพักกันที่ Mango Walle เขาค้อ จังหวัดเพชรบูรณ์</span><span class="t" style="color: #f59e0b;">ต่ำ</span></div>
+        <div class="ln"><span class="cb"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></span><span class="t mono">53.00–58.00</span><span>น้ำตกที่ไกลยังไม่ไกลเท่า เท่ากับบันไดที่กูต้องเจอเนี่ย</span><span class="t">สูง</span></div>
+        <div class="ln"><span class="cb"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></span><span class="t mono">58.00–62.00</span><span>เหมือนเป็นชะตากรรมที่ไม่อาจหลีกเลี่ยงได้ จุดนี้มันเป็นหน้าผา</span><span class="t">สูง</span></div>
+        <div class="ln"><span class="cb"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></span><span class="t mono">62.00–66.00</span><span>และในที่สุดก็มาถึงน้ำตกตาดหมอก ของจริงคือมันใหญ่มาก</span><span class="t">สูง</span></div>
+        <div class="ln"><span class="cb"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></span><span class="t mono">87.00–94.00</span><span>แต่ก็นั่นล่ะครับ มันก็ไม่ได้เป็นอย่างที่เราคิดเอาไว้</span><span class="t">สูง</span></div>
+        <div class="ln"><span class="cb"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></span><span class="t mono">94.00–101.00</span><span>ยังคอยช่วยเหลือกันเหมือนเดิม จากทริปที่เราคิดว่ามันน่าจะแย่</span><span class="t">สูง</span></div>
+        <div class="ln" style="opacity: 0.55;"><span class="cb cb-off"></span><span class="t mono">113.00–115.00</span><span style="text-decoration: line-through;">ก็คงทำไมเพื่ออะไรเนี่ย</span><span class="t">ตัดออก</span></div>
+      </div>
+      <div style="flex: 1;"></div>
+      <div style="display: flex; align-items: center; gap: 12px; font-size: 11px; color: #6e6e6e;">
+        <span>ติ๊กออก = ไม่ขึ้นจอ (ยังอยู่ในบทพูด) · แก้ข้อความไม่กระทบเวลา · เปิดไฟล์บทพูด .srt ได้ในโหมดเต็ม</span>
+      </div>
+    </div>
+
+    <!-- ขวา: สไตล์ซับ + จอตัวอย่าง -->
+    <div style="width: 420px; display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid #474747; border-radius: 12px; background: #2e2e2e; flex-shrink: 0;">
+      <span class="sec">หน้าตาซับ — สไตล์เดียวทั้งเรื่อง</span>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;">
+        <div class="style" style="box-shadow: inset 0 0 0 1.5px #3b82f6;"><div class="pv"><span style="font-size: 15px; font-weight: 800; color: #fff; text-shadow: 1.5px 1.5px 0 #000, -1.5px -1.5px 0 #000, 1.5px -1.5px 0 #000, -1.5px 1.5px 0 #000;">TikTok หนา</span></div><span style="font-size: 11px; color: #ececec;">ขาวขอบดำ</span></div>
+        <div class="style"><div class="pv"><span style="font-size: 15px; font-weight: 800; color: #ffd400; text-shadow: 1.5px 1.5px 0 #000, -1.5px -1.5px 0 #000;">เหลืองเด่น</span></div><span style="font-size: 11px; color: #9c9c9c;">เหลืองขอบดำ</span></div>
+        <div class="style"><div class="pv"><span style="padding: 3px 8px; border-radius: 4px; background: rgba(0,0,0,0.75); font-size: 13px; color: #fff;">กล่องดำ</span></div><span style="font-size: 11px; color: #9c9c9c;">พื้นทึบ</span></div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 11px; color: #9c9c9c; width: 70px;">ตำแหน่ง</span>
+        <span class="chip">บน</span><span class="chip chip-on">กลางล่าง</span><span class="chip">ล่างสุด</span>
+        <div style="flex: 1;"></div>
+        <span style="font-size: 11px; color: #9c9c9c;">ขนาด</span><span class="mono" style="padding: 4px 8px; border-radius: 8px; border: 1px solid #474747; background: #363636; font-size: 12px; color: #ececec;">54</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 11px; color: #9c9c9c; width: 70px;">ทีละคำ</span>
+        <span class="chip chip-on">ทั้งบรรทัด</span><span class="chip">ไฮไลต์คำที่พูด</span>
+        <span style="font-size: 10.5px; color: #6e6e6e;">whisper คืนเวลาระดับวินาที — ไฮไลต์คำต้องเดา</span>
+      </div>
+
+      <div style="flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; padding-top: 4px;">
+        <div style="position: relative; height: 100%; aspect-ratio: 9 / 16; border-radius: 6px; overflow: hidden; background: #000;">
+          <img src="f14.jpg" style="width: 100%; height: 100%; object-fit: cover; display: block;">
+          <div style="position: absolute; left: 12px; right: 12px; bottom: 16%; text-align: center; font-size: 15px; line-height: 20px; font-weight: 800; color: #fff; text-shadow: 2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;">ได้กลิ่นการผจญภัยแล้วโว้ย</div>
+          <div style="position: absolute; left: 10px; top: 10px; padding: 2px 8px; border-radius: 6px; background: rgba(0,0,0,0.55); font-size: 10.5px; color: #fff;">13.0–15.0 วิ · Sukhumvit Set 54</div>
+        </div>
+      </div>
+      <div style="font-size: 10.5px; line-height: 15px; color: #6e6e6e;">ซับคือขั้น ④ (final-text) — แยกจากข้อความ HOOK ของขั้น ⑤ · ขั้น ⑤ ต่อยอดจากไฟล์นี้อีกที</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

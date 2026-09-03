@@ -1,0 +1,190 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;800&display=swap">
+  <style>
+    body { margin: 0; background: #232323; color: #ececec; font-family: "Noto Sans Thai", "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #3b82f6; } a:hover { color: #2563eb; }
+    .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+    .sec { font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #6e6e6e; }
+    .chip { padding: 4px 9px; border-radius: 8px; font-size: 11px; background: #363636; color: #9c9c9c; white-space: nowrap; }
+    .chip-on { background: rgba(59,130,246,0.2); color: #3b82f6; box-shadow: inset 0 0 0 1px #3b82f6; }
+    .layer { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; font-size: 12px; color: #ececec; }
+    .layer-on { background: #363636; box-shadow: inset 0 0 0 1px #3b82f6; }
+    .cnt { font-size: 10.5px; color: #9c9c9c; }
+    .tr { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; font-size: 11.5px; color: #ececec; }
+    .tr-on { background: rgba(59,130,246,0.12); box-shadow: inset 0 0 0 1px #3b82f6; }
+    .tg { width: 32px; height: 18px; border-radius: 999px; background: #3f3f3f; position: relative; flex-shrink: 0; }
+    .tg-on { background: #3b82f6; }
+    .tg span { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 999px; background: #fff; }
+    .tg-on span { left: 16px; }
+    .sl { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #9c9c9c; }
+    .sl .rail { flex: 1; height: 4px; border-radius: 999px; background: #3f3f3f; position: relative; }
+    .sl .rail span { position: absolute; top: -4px; width: 12px; height: 12px; border-radius: 999px; background: #3b82f6; }
+    .lane { display: flex; align-items: center; gap: 6px; height: 22px; }
+    .lane .ic { width: 22px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .lane .bar { flex: 1; position: relative; height: 16px; }
+    .blk { position: absolute; top: 0; height: 16px; border-radius: 4px; }
+    .fader { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .fader .rail { width: 6px; height: 70px; border-radius: 999px; background: #3f3f3f; position: relative; }
+    .fader .rail span { position: absolute; left: -6px; width: 18px; height: 10px; border-radius: 3px; background: #ececec; }
+  </style>
+</helmet>
+<div style="width: 1440px; height: 900px; background: #232323; display: flex; flex-direction: column; overflow: hidden;">
+
+  <div style="height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid rgba(71,71,71,0.6); flex-shrink: 0;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <div style="width: 28px; height: 28px; border-radius: 8px; background: #ffffff; display: flex; align-items: center; justify-content: center;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
+      </div>
+      <span style="font-size: 13px; font-weight: 500; color: #ececec;">IMG_1234</span>
+      <span style="padding: 2px 8px; border-radius: 999px; background: rgba(245,158,11,0.15); font-size: 11px; color: #f59e0b;">ยังไม่ได้ทำใหม่ · 4 การเปลี่ยนแปลง</span>
+    </div>
+    <div style="width: 1px; height: 20px; background: #474747; margin: 0 4px;"></div>
+    <div style="display: flex; align-items: center; gap: 2px; padding: 2px; border-radius: 12px; background: rgba(46,46,46,0.7);">
+      <div style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 10px; background: #3f3f3f; box-shadow: inset 0 0 0 1px #555555; font-size: 12px; font-weight: 500; color: #ececec;">ตัดง่าย</div>
+      <div style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 10px; font-size: 12px; color: #6e6e6e;">โหมดเต็ม · 8 แท็บ</div>
+    </div>
+    <div style="flex: 1;"></div>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span style="width: 22px; height: 22px; border-radius: 7px; background: #22c55e; color: #fff; font-size: 11.5px; font-weight: 600; display: flex; align-items: center; justify-content: center;">✓</span><span style="font-size: 12px; color: #9c9c9c;">ใส่วิดีโอ</span>
+      <span style="width: 20px; height: 1px; background: #474747;"></span>
+      <span style="width: 22px; height: 22px; border-radius: 7px; background: #22c55e; color: #fff; font-size: 11.5px; font-weight: 600; display: flex; align-items: center; justify-content: center;">✓</span><span style="font-size: 12px; color: #9c9c9c;">เลือกสไตล์</span>
+      <span style="width: 20px; height: 1px; background: #474747;"></span>
+      <span style="width: 22px; height: 22px; border-radius: 7px; background: #22c55e; color: #fff; font-size: 11.5px; font-weight: 600; display: flex; align-items: center; justify-content: center;">✓</span><span style="font-size: 12px; color: #9c9c9c;">ตัดให้เลย</span>
+      <span style="width: 20px; height: 1px; background: #474747;"></span>
+      <span style="width: 22px; height: 22px; border-radius: 7px; background: #22c55e; color: #fff; font-size: 11.5px; font-weight: 600; display: flex; align-items: center; justify-content: center;">✓</span><span style="font-size: 12px; color: #9c9c9c;">เลือกแบบ</span>
+      <span style="width: 20px; height: 1px; background: #474747;"></span>
+      <span style="width: 22px; height: 22px; border-radius: 7px; background: #3b82f6; color: #fff; font-size: 11.5px; font-weight: 600; display: flex; align-items: center; justify-content: center;">5</span><span style="font-size: 12px; font-weight: 500; color: #ececec;">แต่งหนัง</span>
+    </div>
+    <div style="width: 1px; height: 20px; background: #474747; margin: 0 6px;"></div>
+    <div style="display: flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 10px; background: #3b82f6; color: #fff; font-size: 12.5px; font-weight: 500;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.22-8.56"/><path d="M21 3v6h-6"/></svg>
+      ทำขั้น ⑤ ใหม่ · ~45 วิ
+    </div>
+  </div>
+
+  <div style="flex: 1; display: flex; gap: 8px; padding: 8px; min-height: 0;">
+
+    <!-- ซ้าย -->
+    <div style="width: 270px; display: flex; flex-direction: column; gap: 10px; padding: 14px 12px; border: 1px solid #474747; border-radius: 12px; background: #2e2e2e; flex-shrink: 0;">
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <span style="font-size: 13px; font-weight: 600; color: #ececec;">B · ย่อ 45 วิ ตามกฎ</span>
+        <span class="mono" style="font-size: 11px; color: #9c9c9c;">44.2 วิ · 6 ช็อต</span>
+      </div>
+      <span class="sec">ชั้นในแบบนี้ — กดเพื่อแก้</span>
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <div class="layer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg><span style="flex: 1;">ข้อความ</span><span class="cnt">HOOK · การ์ดปิด</span></div>
+        <div class="layer layer-on"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><span style="flex: 1;">เพลง · 2 แทร็ก</span><span class="cnt" style="color: #3b82f6;">อัปบีต · SFX 2</span></div>
+        <div class="layer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></svg><span style="flex: 1;">สติกเกอร์ / ภาพซ้อน</span><span class="cnt">1</span></div>
+        <div class="layer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15h4"/><path d="M15 15h2"/><path d="M7 11h2"/><path d="M13 11h4"/></svg><span style="flex: 1;">ซับจากบทพูด</span><span class="cnt">12 บรรทัด</span></div>
+        <div class="layer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9c9c9c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3"/><path d="M12 19v3"/><path d="M2 12h3"/><path d="M19 12h3"/></svg><span style="flex: 1;">โทนสี / ซูม / ความเร็ว</span><span class="cnt">punch · zoom 3</span></div>
+      </div>
+
+      <div style="height: 1px; background: #474747;"></div>
+      <span class="sec">มิกเซอร์ — ดังเทียบกัน</span>
+      <div style="display: flex; justify-content: space-around; padding: 6px 0;">
+        <div class="fader"><div class="rail"><span style="top: 14px;"></span></div><span class="mono" style="font-size: 10.5px; color: #ececec;">0 dB</span><span style="font-size: 10.5px; color: #9c9c9c;">พูด</span></div>
+        <div class="fader"><div class="rail"><span style="top: 44px;"></span></div><span class="mono" style="font-size: 10.5px; color: #ececec;">−18</span><span style="font-size: 10.5px; color: #9c9c9c;">เพลง</span></div>
+        <div class="fader"><div class="rail"><span style="top: 30px;"></span></div><span class="mono" style="font-size: 10.5px; color: #ececec;">−8</span><span style="font-size: 10.5px; color: #9c9c9c;">SFX</span></div>
+      </div>
+      <div style="font-size: 10.5px; line-height: 15px; color: #6e6e6e;">ความดังรวมถูกดึงเข้า −14 LUFS ท้ายสายเสมอ — หมุนเฟดเดอร์คือ "ดังเทียบกัน" ไม่ใช่ดังรวม</div>
+
+      <div style="flex: 1;"></div>
+      <div style="display: flex; flex-direction: column; gap: 4px; padding: 10px; border-radius: 10px; border: 1px dashed #555555; font-size: 11px; color: #9c9c9c;">
+        <div style="display: flex; justify-content: space-between;"><span>ขั้น ⑤ เข้ารหัสใหม่ทั้งเรื่อง</span><span class="mono" style="color: #ececec;">~45 วิ</span></div>
+        <div style="display: flex; justify-content: space-between;"><span>ฟังก่อน render ได้ในเบราว์เซอร์</span><span class="mono" style="color: #22c55e;">สด</span></div>
+      </div>
+    </div>
+
+    <!-- กลาง -->
+    <div style="flex: 1; display: flex; flex-direction: column; border: 1px solid #474747; border-radius: 12px; background: #2e2e2e; min-width: 0; overflow: hidden;">
+      <div style="flex: 1; display: flex; align-items: center; justify-content: center; padding: 14px; min-height: 0;">
+        <div style="position: relative; height: 100%; aspect-ratio: 9 / 16; border-radius: 6px; overflow: hidden; background: #000;">
+          <img src="f88.jpg" style="width: 100%; height: 100%; object-fit: cover; display: block;">
+          <div style="position: absolute; left: 70%; top: 6.5%; width: 20%; aspect-ratio: 1 / 1;"><img src="st-4k.png" style="width: 100%; height: 100%; object-fit: contain; display: block;"></div>
+          <div style="position: absolute; left: 10px; top: 10px; padding: 2px 8px; border-radius: 6px; background: rgba(0,0,0,0.55); font-size: 10.5px; color: #fff;">กำลังฟัง · เพลงหลบเสียงพูดอยู่ −6 dB</div>
+          <!-- คลื่นเสียงจำลอง -->
+          <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 56px; background: linear-gradient(transparent, rgba(0,0,0,0.7)); display: flex; align-items: flex-end; gap: 2px; padding: 0 8px 8px 8px;">
+            <span style="flex:1;height:30%;background:#8b5cf6;opacity:.8;border-radius:1px"></span><span style="flex:1;height:55%;background:#8b5cf6;opacity:.8;border-radius:1px"></span><span style="flex:1;height:40%;background:#8b5cf6;opacity:.8;border-radius:1px"></span><span style="flex:1;height:70%;background:#8b5cf6;opacity:.8;border-radius:1px"></span><span style="flex:1;height:25%;background:#8b5cf6;opacity:.8;border-radius:1px"></span><span style="flex:1;height:60%;background:#8b5cf6;opacity:.8;border-radius:1px"></span><span style="flex:1;height:35%;background:#8b5cf6;opacity:.8;border-radius:1px"></span><span style="flex:1;height:80%;background:#8b5cf6;opacity:.8;border-radius:1px"></span><span style="flex:1;height:45%;background:#8b5cf6;opacity:.8;border-radius:1px"></span><span style="flex:1;height:20%;background:#8b5cf6;opacity:.8;border-radius:1px"></span><span style="flex:1;height:50%;background:#8b5cf6;opacity:.8;border-radius:1px"></span><span style="flex:1;height:65%;background:#8b5cf6;opacity:.8;border-radius:1px"></span><span style="flex:1;height:30%;background:#8b5cf6;opacity:.8;border-radius:1px"></span><span style="flex:1;height:75%;background:#8b5cf6;opacity:.8;border-radius:1px"></span><span style="flex:1;height:40%;background:#8b5cf6;opacity:.8;border-radius:1px"></span><span style="flex:1;height:55%;background:#8b5cf6;opacity:.8;border-radius:1px"></span><span style="flex:1;height:25%;background:#8b5cf6;opacity:.8;border-radius:1px"></span><span style="flex:1;height:60%;background:#8b5cf6;opacity:.8;border-radius:1px"></span>
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-top: 1px solid rgba(71,71,71,0.6);">
+        <span class="mono" style="font-size: 12px; color: #3b82f6;">00:00:12:20</span>
+        <span class="mono" style="font-size: 12px; color: #9c9c9c;">/ 00:00:44:06</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="#ececec"><rect x="5" y="4" width="4" height="16" rx="1"/><rect x="15" y="4" width="4" height="16" rx="1"/></svg>
+        <div style="flex: 1;"></div>
+        <span style="display: flex; align-items: center; gap: 4px; font-size: 11px; color: #9c9c9c;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></svg> เส้นจังหวะ 98 BPM</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 4px; padding: 6px 16px 12px 16px;">
+        <div class="lane"><span class="ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round"><path d="M12 19V5"/><path d="M8 9v6"/><path d="M16 9v6"/><path d="M4 11v2"/><path d="M20 11v2"/></svg></span><div class="bar"><span class="blk" style="left: 0%; width: 41%; background: rgba(59,130,246,0.4);"></span><span class="blk" style="left: 42%; width: 29%; background: rgba(59,130,246,0.4);"></span><span class="blk" style="left: 72%; width: 28%; background: rgba(59,130,246,0.4);"></span></div></div>
+        <div class="lane"><span class="ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span><div class="bar"><span class="blk" style="left: 0%; width: 100%; background: rgba(139,92,246,0.45); box-shadow: inset 0 0 0 1px #8b5cf6;"></span><span style="position: absolute; left: 6px; top: 1px; font-size: 10px; color: #fff;">bgm-up-energy · วนซ้ำ · หลบ −6 dB · เฟดออก 2 วิ</span></div></div>
+        <div class="lane"><span class="ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></svg></span><div class="bar"><span class="blk" style="left: 40.5%; width: 2%; background: #f59e0b;"></span><span class="blk" style="left: 71%; width: 2%; background: #f59e0b;"></span><span style="position: absolute; left: 44%; top: 1px; font-size: 10px; color: #9c9c9c;">whoosh</span><span style="position: absolute; left: 74%; top: 1px; font-size: 10px; color: #9c9c9c;">whoosh</span></div></div>
+        <div style="position: relative; height: 8px; margin-left: 28px;"><span style="position: absolute; left: 28.9%; top: -84px; width: 2px; height: 92px; background: #ef4444;"></span></div>
+      </div>
+    </div>
+
+    <!-- ขวา: เพลง 2 แทร็ก -->
+    <div style="width: 380px; display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid #474747; border-radius: 12px; background: #2e2e2e; flex-shrink: 0; overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        <span style="font-size: 13px; font-weight: 600; color: #ececec;">เพลงประกอบ</span>
+        <span style="font-size: 10.5px; color: #6e6e6e;">2 แทร็ก</span>
+      </div>
+
+      <!-- แทร็ก 1 -->
+      <div style="display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 10px; background: #363636;">
+        <div style="display: flex; align-items: center; gap: 6px;"><span style="font-size: 12px; font-weight: 500; color: #ececec;">แทร็ก 1 · เพลงคลอ</span><span style="font-size: 10.5px; color: #6e6e6e;">วนซ้ำ · หลบเสียงพูด · ยาวจนจบ</span></div>
+        <div style="display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: #2e2e2e;">
+          <span style="flex: 1; text-align: center; padding: 4px 0; border-radius: 6px; background: #3f3f3f; box-shadow: inset 0 0 0 1px #555; font-size: 11px; color: #ececec;">คลัง 53 ลูป</span>
+          <span style="flex: 1; text-align: center; padding: 4px 0; border-radius: 6px; font-size: 11px; color: #9c9c9c;">อัปโหลด</span>
+          <span style="flex: 1; text-align: center; padding: 4px 0; border-radius: 6px; font-size: 11px; color: #9c9c9c;">ลิงก์ YouTube</span>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 4px;"><span class="chip chip-on">สนุก / มีพลัง</span><span class="chip">ชิล / โลไฟ</span><span class="chip">อบอุ่น</span><span class="chip">ลุ้นระทึก</span><span class="chip">เดินทาง</span><span class="chip">+6</span></div>
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <div class="tr tr-on"><svg width="12" height="12" viewBox="0 0 24 24" fill="#3b82f6"><path d="M6 4l14 8-14 8z"/></svg><span style="flex: 1;">มีพลัง</span><span class="mono" style="font-size: 10.5px; color: #9c9c9c;">15.0 วิ · 98 BPM</span></div>
+          <div class="tr"><svg width="12" height="12" viewBox="0 0 24 24" fill="#9c9c9c"><path d="M6 4l14 8-14 8z"/></svg><span style="flex: 1;">ป๊อปสดใส</span><span class="mono" style="font-size: 10.5px; color: #9c9c9c;">17.1 วิ</span></div>
+          <div class="tr"><svg width="12" height="12" viewBox="0 0 24 24" fill="#9c9c9c"><path d="M6 4l14 8-14 8z"/></svg><span style="flex: 1;">ฟังก์</span><span class="mono" style="font-size: 10.5px; color: #9c9c9c;">18.5 วิ</span></div>
+        </div>
+        <div class="sl"><span style="width: 74px;">ดัง</span><div class="rail"><span style="left: 38%;"></span></div><span class="mono" style="width: 44px; text-align: right; color: #ececec;">−18 dB</span></div>
+        <div class="sl"><span style="width: 74px;">หลบตอนพูด</span><div class="rail"><span style="left: 20%;"></span></div><span class="mono" style="width: 44px; text-align: right; color: #ececec;">6 dB</span></div>
+        <div style="display: flex; align-items: center; gap: 14px; font-size: 11px; color: #9c9c9c;">
+          <span style="display: flex; align-items: center; gap: 6px;"><span class="tg tg-on"><span></span></span>วนซ้ำ</span>
+          <span style="display: flex; align-items: center; gap: 6px;"><span class="tg tg-on"><span></span></span>หลบเสียงพูด</span>
+          <span>เฟด <span class="mono" style="color: #ececec;">1.0 / 2.0</span> วิ</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; border: 1px dashed #555555; font-size: 11px; color: #9c9c9c;">
+          <span class="tg"><span></span></span><span style="flex: 1;">ดูดรอยตัดเข้าจังหวะเพลง</span><span style="font-size: 10.5px; color: #6e6e6e;">คลิปพูดไม่ควรเปิด</span>
+        </div>
+      </div>
+
+      <!-- แทร็ก 2 -->
+      <div style="display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 10px; background: #363636;">
+        <div style="display: flex; align-items: center; gap: 6px;"><span style="font-size: 12px; font-weight: 500; color: #ececec;">แทร็ก 2 · เสียงเอฟเฟกต์</span><span style="font-size: 10.5px; color: #6e6e6e;">ไม่วน · ไม่หลบ · วางเป็นจุด</span></div>
+        <div style="display: flex; flex-wrap: wrap; gap: 4px;"><span class="chip chip-on">เปลี่ยนฉาก</span><span class="chip">อิมแพกต์</span><span class="chip">UI / แจ้งเตือน</span><span class="chip">การ์ตูน</span><span class="chip">บรรยากาศ</span><span class="chip">ดนตรีสั้น</span></div>
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <div class="tr"><svg width="12" height="12" viewBox="0 0 24 24" fill="#9c9c9c"><path d="M6 4l14 8-14 8z"/></svg><span style="flex: 1;">whoosh · ตรงรอยตัดชน</span><span class="mono" style="font-size: 10.5px; color: #9c9c9c;">18.0 · 31.0 วิ</span></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid #474747; font-size: 11.5px; color: #ececec;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9c9c9c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+          <span style="flex: 1;">ให้ AI วาง SFX ให้ — whoosh ตรงรอยตัด · ding ตรงตัวเลข</span>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: flex-start; gap: 6px; font-size: 10.5px; line-height: 15px; color: #f59e0b;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-top: 2px; flex-shrink: 0;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        <span>เพลงจาก YouTube มีลิขสิทธิ์ — TikTok ปิดเสียงได้ · ใช้คลัง 53 ลูป (ไม่มีลิขสิทธิ์) หรือใส่เพลงในแอป TikTok ทีหลัง</span>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

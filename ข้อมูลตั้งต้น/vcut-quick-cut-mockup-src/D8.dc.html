@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; background: #10233a; color: #dbe7f3; font-family: "Bai Jamjuree", "Helvetica Neue", Arial, sans-serif; font-size: 13px; -webkit-font-smoothing: antialiased; }
+    a { color: #ffd166; } a:hover { opacity: .8; }
+    .mono { font-family: "Bai Jamjuree", monospace; font-variant-numeric: tabular-nums; }
+    .disp { font-family: "Bai Jamjuree", sans-serif; }
+    .lbl { font-size: 10.5px; letter-spacing: .08em; color: #7f9bb8; }
+    .seg { display: flex; overflow: hidden; border-radius: 0px; }
+    .seg span { padding: 6px 12px; font-size: 12.5px; color: #7f9bb8; }
+    .seg .on { font-weight: 600; }
+    .row { display: grid; grid-template-columns: 22px 160px 1fr auto; align-items: center; gap: 14px; padding: 10px 0; border-top: 1px solid #2a4a6b; }
+    .sw { width: 12px; height: 12px; border-radius: 2px; background: #ffd166; }
+    .sw-off { background: transparent !important; box-shadow: inset 0 0 0 1.5px #7f9bb8; }
+    .kv { font-size: 12px; color: #7f9bb8; } .kv b { color: #dbe7f3; font-weight: 600; }
+    .card { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 0px; }
+    .pv { height: 92px; border-radius: calc(0px - 2px); background: #101010; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .cta { display: flex; align-items: center; justify-content: space-between; height: 52px; padding: 0 18px; font-size: 14.5px; font-weight: 600; border-radius: 0px; }
+    .big { font-size: 46px; font-weight: 600; line-height: 1; letter-spacing: -.02em; }
+    .right { background: #10233a; }
+    .edit { font-size: 12px; color: #ffd166; }
+    body{background-image:linear-gradient(#183355 1px,transparent 1px),linear-gradient(90deg,#183355 1px,transparent 1px);background-size:40px 40px}.card{border:1px solid #2a4a6b;background:rgba(16,35,58,0.85)}.card.on{border-color:#ffd166;border-width:1.5px}.seg{border:1px solid #2a4a6b}.seg .on{background:#ffd166;color:#10233a}.cta{background:#ffd166;color:#10233a}.lbl{letter-spacing:.16em;text-transform:uppercase}
+  </style>
+</helmet>
+<div style="width: 1440px; height: 900px; display: flex; flex-direction: column; overflow: hidden;">
+  <div style="height: 48px; display: flex; align-items: center; gap: 18px; padding: 0 22px; border-bottom: 1px solid #2a4a6b; flex-shrink: 0;">
+    <span class="disp" style="font-size: 15px; font-weight: 700;">vcut</span>
+    <span class="mono" style="font-size: 11.5px; color: #7f9bb8;">IMG_1234.MOV · 02:14 · แนวตั้ง</span>
+    <div style="flex: 1;"></div>
+    <div style="display: flex; gap: 22px; font-size: 12.5px;">
+      <span style="color: #7f9bb8;">01 ใส่วิดีโอ</span>
+      <span style="font-weight: 600; border-bottom: 2px solid #ffd166; padding-bottom: 2px;">02 เลือกสไตล์ · ตัด</span>
+      <span style="color: #7f9bb8; opacity: .6;">03 เลือกแบบ · ส่งออก</span>
+    </div>
+    <div style="flex: 1;"></div>
+    <span class="mono" style="font-size: 11px; color: #ffd166;">● ถอดเสียง 18/26</span>
+    <span style="font-size: 12.5px; color: #7f9bb8; text-decoration: underline; text-underline-offset: 3px;">โหมดเต็ม</span>
+  </div>
+  <div style="flex: 1; display: grid; grid-template-columns: 1fr 380px; min-height: 0;">
+    <div style="display: flex; flex-direction: column; gap: 16px; padding: 22px 28px; border-right: 1px solid #2a4a6b; overflow: hidden;">
+      <div style="display: flex; align-items: baseline; gap: 12px;"><span class="disp" style="font-size: 22px; font-weight: 700;">สไตล์</span><span class="lbl">จากคลิปอ้างอิง 7 ตัว · วัดจากไฟล์จริง</span></div>
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px;">
+        <div class="card on"><div class="pv" style="background: #7a1020;"><span style="font-size: 15px; font-weight: 700; color: #fff;">คลิป VDO ของคุณ</span></div><span style="font-size: 13.5px; font-weight: 600;">A · ปิดการขาย</span><span class="kv">ช็อต <b>1.7–2.0 วิ</b> · ช้า → รัว → ช้า</span></div>
+        <div class="card"><div class="pv"><span class="mono" style="font-size: 26px; font-weight: 700; color: #fff;">255.9K</span></div><span style="font-size: 13.5px; font-weight: 600;">B · โชว์หลักฐาน</span><span class="kv">ช็อต <b>2.4 วิ</b> · เลขนับขึ้น</span></div>
+        <div class="card"><div class="pv"><svg width="120" height="30" viewBox="0 0 120 30" fill="none"><path d="M6 6 C 40 6 40 24 74 24 L 114 24" stroke="#fff" stroke-width="2"/></svg></div><span style="font-size: 13.5px; font-weight: 600;">C · สอนกรอบวิธีคิด</span><span class="kv">ช็อต <b>5.0 วิ</b> · ผังนีออน</span></div>
+        <div class="card" style="opacity: .45;"><div class="pv" style="background: transparent; border: 1px dashed #2a4a6b;"></div><span style="font-size: 13.5px; font-weight: 600;">D · Before | After</span><span class="kv">ต้องมี compare</span></div>
+      </div>
+      <div style="display: flex; gap: 36px; align-items: flex-end;">
+        <div style="display: flex; flex-direction: column; gap: 6px;"><span class="lbl">ความยาว</span><div class="seg"><span>30</span><span class="on">45 วิ</span><span>60</span><span>ทั้งคลิป</span></div></div>
+        <div style="display: flex; flex-direction: column; gap: 6px;"><span class="lbl">จำนวนแบบ</span><div class="seg"><span>2</span><span>3</span><span class="on">4</span><span>5</span></div></div>
+        <div style="display: flex; flex-direction: column; gap: 8px;"><span class="lbl">AI</span><div style="display: flex; gap: 18px;"><span style="display: flex; align-items: center; gap: 8px;"><span class="sw sw-off"></span>ไฮไลต์ให้ 1 แบบ <span class="kv">3 นาที · $0.5</span></span><span style="display: flex; align-items: center; gap: 8px;"><span class="sw"></span>ดูหนังแล้วเสนอแก้</span></div></div>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 12px; margin-top: 4px;"><span class="disp" style="font-size: 17px; font-weight: 700;">ชั้นแต่งหนัง</span><span class="lbl">ค่าตั้งต้นของทุกแบบ · แก้รายแบบตอนส่งออก</span></div>
+      <div style="display: flex; flex-direction: column;">
+        <div class="row"><span class="sw"></span><span>ซับจากบทพูด</span><span class="kv">หนา ขาวขอบดำ · กลางล่าง · <b>54</b></span><span class="edit">แก้ →</span></div>
+        <div class="row"><span class="sw"></span><span>HOOK + การ์ดปิด</span><span class="kv">จากประโยคแรก · ทีละคำ · เน้นแดง · การ์ด <b>4 วิ</b></span><span class="edit">แก้ →</span></div>
+        <div class="row"><span class="sw"></span><span>เพลง · 2 แทร็ก</span><span class="kv">สนุก/มีพลัง <b>−18 dB</b> · หลบ 6 · SFX ให้ AI วาง</span><span class="edit">แก้ →</span></div>
+        <div class="row"><span class="sw sw-off"></span><span style="color: #7f9bb8;">สติกเกอร์ / ภาพซ้อน</span><span class="kv">คลัง 200 · มาสคอตยังไม่มีไฟล์</span><span class="edit">แก้ →</span></div>
+        <div class="row" style="border-bottom: 1px solid #2a4a6b;"><span class="sw"></span><span>เอฟเฟกต์รายช็อต</span><span class="kv">ยิงรัว zoom <b>1.05→1.22</b> · punch · glitch ท้าย</span><span class="edit">แก้ →</span></div>
+      </div>
+      <div style="flex: 1;"></div>
+      <div style="display: flex; align-items: center; gap: 16px;"><span style="font-size: 12.5px; text-decoration: underline; text-underline-offset: 3px;">ขั้นสูง</span><span class="lbl">ตั้งค่า 135 · เลือกชิ้น 7 · ลำดับ 6 · AI 4 · รีเซ็ต · cache · เพิ่มเติม</span></div>
+    </div>
+    <div class="right" style="display: flex; flex-direction: column; padding: 22px 24px; gap: 12px;">
+      <span class="lbl">จะได้ 4 แบบ</span>
+      <div style="display: flex; flex-direction: column;">
+        <div style="display: grid; grid-template-columns: 24px 1fr auto; gap: 12px; padding: 10px 0; border-top: 1px solid #2a4a6b; align-items: baseline;"><span class="mono" style="font-size: 12px; color: #ffd166; font-weight: 700;">A</span><span>ตัดชิดทั้งคลิป<br><span class="kv">ลบเงียบ 7 ช่วง</span></span><span class="mono" style="font-size: 14px;">1:43</span></div>
+        <div style="display: grid; grid-template-columns: 24px 1fr auto; gap: 12px; padding: 10px 0; border-top: 1px solid #2a4a6b; align-items: baseline;"><span class="mono" style="font-size: 12px; color: #ffd166; font-weight: 700;">B</span><span>ย่อ 45 วิ ตามกฎ<br><span class="kv">ประโยคคะแนนสูงก่อน</span></span><span class="mono" style="font-size: 14px;">0:45</span></div>
+        <div style="display: grid; grid-template-columns: 24px 1fr auto; gap: 12px; padding: 10px 0; border-top: 1px solid #2a4a6b; align-items: baseline;"><span class="mono" style="font-size: 12px; color: #ffd166; font-weight: 700;">C</span><span>ยิงรัว + ซูมไล่<br><span class="kv">ช็อต 0.8 วิ</span></span><span class="mono" style="font-size: 14px;">0:45</span></div>
+        <div style="display: grid; grid-template-columns: 24px 1fr auto; gap: 12px; padding: 10px 0; border-top: 1px solid #2a4a6b; border-bottom: 1px solid #2a4a6b; align-items: baseline;"><span class="mono" style="font-size: 12px; color: #ffd166; font-weight: 700;">D</span><span>ช้า มีซับ<br><span class="kv">ช็อต 2.0 วิ</span></span><span class="mono" style="font-size: 14px;">0:58</span></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #7f9bb8;">
+        <div style="display: flex; justify-content: space-between;"><span>ถอดเสียง</span><span style="color: #dbe7f3;">ทำอยู่แล้ว</span></div>
+        <div style="display: flex; justify-content: space-between;"><span>ตัด 4 แบบ</span><span class="mono" style="color: #dbe7f3;">1:10</span></div>
+        <div style="display: flex; justify-content: space-between;"><span>ซับ · ข้อความ · เพลง</span><span class="mono" style="color: #dbe7f3;">3:00</span></div>
+        <div style="display: flex; justify-content: space-between;"><span>AI ดูหนัง</span><span class="mono" style="color: #dbe7f3;">1:00 · $0.16</span></div>
+      </div>
+      <div style="flex: 1;"></div>
+      <div style="display: flex; flex-direction: column; gap: 2px;"><span class="lbl">รวมประมาณ</span><span class="mono big">05:00</span></div>
+      <div class="cta">ตัดให้เลย<span class="mono" style="font-size: 12.5px; font-weight: 500;">4 แบบ →</span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
