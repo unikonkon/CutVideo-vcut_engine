@@ -8,6 +8,7 @@
 |---|---|---|---|
 | เอนจิน (vcut view server) | `./vcut view -c projects/<ชื่อโปรเจกต์>.toml --no-open` | `8765` | http://127.0.0.1:8765 |
 | หน้าเว็บ (Next.js dev) | `npm run dev` ใน `vcut-ui/` | `3000` | http://localhost:3000 |
+| หน้าเว็บ 3 ขั้น v2 (Next.js dev) | `npm run dev` ใน `vcut-ui-v2/` | `3001` | http://localhost:3001 |
 
 ---
 

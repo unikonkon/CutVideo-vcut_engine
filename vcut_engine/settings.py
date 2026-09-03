@@ -867,6 +867,24 @@ RECIPES = [
     {"preset": "vertical-short",
      "label": "หนังแนวตั้ง · TikTok / Reels / Shorts",
      "hint": "ผืน 1080×1920 · ตัดชิด · ช็อตสั้น 1.2 วิ · ยาว 45 วิ · −14 LUFS"},
+    # สี่สไตล์ TikTok — ตัวเลขวัดจากคลิปอ้างอิง 7 ตัวใน docs/tiktok-reference/
+    # `style` คือตัวอักษรบนการ์ดของหน้าเว็บ 3 ขั้น · `shot` = ช็อตเฉลี่ยที่วัดได้
+    {"preset": "tiktok-sell", "style": "A",
+     "label": "ปิดการขาย / แนะนำช่อง",
+     "hint": "ช็อต 1.7–2.0 วิ · ช้า → รัว → ช้า · วิวติดกันได้ 7 · เป้า 36 วิ",
+     "shot": "1.7–2.0 s"},
+    {"preset": "tiktok-proof", "style": "B",
+     "label": "โชว์หลักฐาน",
+     "hint": "ช็อต 2.4 วิ · ชุดตัดถี่ตอนโชว์ · เลขนับขึ้น · เป้า 43 วิ",
+     "shot": "2.4 s"},
+    {"preset": "tiktok-teach", "style": "C",
+     "label": "สอนกรอบวิธีคิด",
+     "hint": "ช็อต 5.0 วิ · เน้นเสียงพูด TALK TALK BROLL · ผังนีออน · เป้า 1.9 นาที",
+     "shot": "5.0 s"},
+    {"preset": "tiktok-compare", "style": "D",
+     "label": "Before | After",
+     "hint": "ช็อต 1.9–2.8 วิ · ครอป 9:16 · ฝั่งตัดเท่านั้น ไม่มีเลย์เอาต์เทียบ",
+     "shot": "1.9–2.8 s"},
 ]
 
 
@@ -882,11 +900,19 @@ def recipe_view():
         p = config.PRESET_DIR / f"{r['preset']}.toml"
         if not p.exists():
             continue
+        # รวมค่าจาก preset ที่ extends ไว้ด้วย (ฐานสุด → เฉพาะเจาะจงสุด) — สูตร
+        # tiktok-* ต่อยอดจาก vertical-short ถ้าส่งแค่ค่าของไฟล์ปลายทางไป ผืน
+        # 1080×1920 กับ jumpcut ที่อยู่ในฐานจะไม่ถูกเขียนลงโปรเจกต์ แล้วสูตร
+        # "TikTok" ที่กดจากหน้าเว็บจะได้หนังแนวนอนโดยไม่มีอะไรฟ้อง
         try:
-            with p.open("rb") as f:
-                tree = tomllib.load(f)
-        except (OSError, ValueError):
+            tree = {}
+            for q in config._chain(p):
+                if q.resolve() == config.DEFAULT_CONFIG.resolve():
+                    continue
+                tree = config._deep_merge(tree, config._load_toml(q))
+        except (OSError, ValueError, SystemExit):
             continue
+        tree.pop("extends", None)
         flat = {}
         _flatten(tree, "", flat)
         # ชื่อโปรเจกต์เป็นของไฟล์โปรเจกต์ ไม่ใช่ของสูตร — กดใช้สูตรแล้วโปรเจกต์

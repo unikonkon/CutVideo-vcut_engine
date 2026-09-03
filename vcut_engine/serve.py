@@ -569,6 +569,106 @@ def build_plan(ctx):
             "seconds": secs, "unknown": notes}
 
 
+_TOOL_CACHE = {}
+
+
+def _tool(name, args=("-version",), pattern=r"version\s+(\S+)"):
+    """ที่อยู่ + รุ่นของเครื่องมือภายนอกหนึ่งตัว — ถามครั้งเดียวต่อโปรเซส
+
+    เอนจินไม่มีเครื่องมือเหล่านี้เป็นของตัวเอง (ดู README ข้อ 1) หน้าเว็บจึงต้อง
+    รู้ว่าเครื่องนี้มีอะไรบ้าง ก่อนที่ปุ่มจะพาไปเจอ error ตอนสั่งงาน
+    """
+    if name in _TOOL_CACHE:
+        return _TOOL_CACHE[name]
+    path = shutil.which(name)
+    out = {"ok": bool(path), "path": path or "", "version": ""}
+    if path:
+        try:
+            r = subprocess.run([path, *args], capture_output=True, text=True,
+                               timeout=8)
+            m = re.search(pattern, (r.stdout or "") + (r.stderr or ""))
+            if m:
+                out["version"] = m.group(1)
+        except (OSError, subprocess.SubprocessError):
+            pass
+    _TOOL_CACHE[name] = out
+    return out
+
+
+def _dir_bytes(d):
+    if not d.exists():
+        return 0
+    return sum(p.stat().st_size for p in d.rglob("*") if p.is_file())
+
+
+def build_info(ctx, job):
+    """ข้อมูลเครื่อง/โปรเซส สำหรับแผง "ไปป์ไลน์ · สถานะ" ของหน้าเว็บ
+
+    รวมสิ่งที่ `vcut info` พิมพ์ลงเทอร์มินัล กับที่อยู่ของเครื่องมือภายนอก
+    ทั้งสี่ตัวไว้ก้อนเดียว — ตัวเลขขนาดโฟลเดอร์ .vcut เดินไฟล์จริงทุกครั้ง
+    (โปรเจกต์จริง 0.7 GB ใช้เวลาไม่ถึง 0.1 วินาที) จึงไม่ต้องแคช
+    """
+    from . import caption as capmod
+    from . import fx as fxmod
+    from . import listen as listen_mod
+    from . import provider as prov
+    from .util import disk_free_gb
+    import os
+
+    ff = _tool("ffmpeg")
+    ff_text = capmod.text_ffmpeg(ctx, quiet=True) or ""
+    whisper_bin = str(ctx.get("listen.binary", "whisper-cli") or "whisper-cli")
+    whisper = _tool(whisper_bin, args=("--help",), pattern=r"whisper[^\n]*?(\d+\.\d+[\.\d]*)")
+    model = Path(str(ctx.get("listen.model", "") or "")).expanduser()
+    claude = _tool("claude", args=("--version",), pattern=r"(\d+\.\d+\.\d+)")
+    ytdlp = _tool("yt-dlp", args=("--version",), pattern=r"(\d{4}\.\d+\.\d+)")
+    try:
+        key = prov.key_state(ctx)
+    except Exception:  # noqa: BLE001 — แค่บอกสถานะ ไม่ให้แผงสถานะล้มเพราะ key
+        key = {}
+
+    seg_files = list(ctx.seg_dir.glob("*.mov")) if ctx.seg_dir.exists() else []
+    out_dir = ctx.out.parent
+    outs = []
+    for label, pth in (("assemble", ctx.out), ("caption", capmod.out_path(ctx)),
+                       ("fx", fxmod.out_path(ctx, quiet=True))):
+        outs.append({"step": label, "name": pth.name, "path": str(pth),
+                     "exists": pth.exists(),
+                     "size": pth.stat().st_size if pth.exists() else 0,
+                     "mtime": pth.stat().st_mtime if pth.exists() else 0})
+    return {
+        "pid": os.getpid(),
+        "python": sys.version.split()[0],
+        "host": "127.0.0.1",
+        "port": getattr(ctx, "port", 0),
+        "started": getattr(ctx, "started", 0),
+        "uptime": time.time() - getattr(ctx, "started", time.time()),
+        "job": {"running": job.running, "step": job.step},
+        "tools": {
+            "ffmpeg": {**ff, "ass": bool(ff_text), "text_path": ff_text},
+            "ffprobe": _tool("ffprobe"),
+            "whisper": {**whisper, "binary": whisper_bin,
+                        "model": str(model), "model_ok": model.is_file(),
+                        "model_name": model.name},
+            "claude": claude,
+            "yt_dlp": ytdlp,
+            "gemini": key,
+        },
+        "project": {
+            "name": ctx.get("project.name", ""),
+            "path": project_rel(ctx),
+            "config": [Path(p).name for p in ctx.get("_meta.config_files", [])],
+            "source": str(ctx.source), "source_ok": ctx.source.is_dir(),
+            "work": str(ctx.work), "work_bytes": _dir_bytes(ctx.work),
+            "segments": len(seg_files),
+            "segments_bytes": sum(f.stat().st_size for f in seg_files),
+            "out_dir": str(out_dir),
+            "outs": outs,
+            "disk_free_gb": disk_free_gb(ctx.work),
+        },
+    }
+
+
 def project_rel(ctx):
     """ที่อยู่ไฟล์โปรเจกต์แบบเทียบกับรากโปรเจกต์ — คืน "" ถ้าอยู่นอกราก"""
     if not ctx.config_name:
@@ -1319,6 +1419,20 @@ def make_handler(ctx, job):
                 from . import fx as fxmod
                 return self._range_file(fxmod.out_path(ctx))
 
+            if p == "/out-text":
+                # ไฟล์ของขั้น 4 (final-text.mp4) — ตัวเล่นของหน้า 3 ขั้นสลับดู
+                # ③ / ④ / ⑤ ได้จากปุ่มเดียวกัน
+                from . import caption as capmod
+                return self._range_file(capmod.out_path(ctx))
+
+            if p == "/api/gc":
+                # ถามก่อนลบ — ไม่แตะไฟล์ (ดู cleanup.preview)
+                from . import cleanup
+                return self._json(cleanup.preview(ctx))
+
+            if p == "/api/info":
+                return self._json(build_info(ctx, job))
+
             if p.startswith("/live/"):
                 token = p[len("/live/"):]
                 if not SAFE_NAME.match(token):
@@ -1592,6 +1706,14 @@ def make_handler(ctx, job):
             if p == "/api/job/stop":
                 return self._json({"ok": job.stop(), "step": job.step})
 
+            if p == "/api/gc":
+                # ลบ segment ระหว่างที่ render วิ่งอยู่ = งานที่กำลังทำพังกลางคัน
+                if job.running:
+                    return self._json({"error": "มีงานกำลังรันอยู่ — หยุดก่อน"}, 409)
+                from . import cleanup
+                out = cleanup.apply(ctx)
+                return self._json({"ok": True, **out, "after": cleanup.preview(ctx)})
+
             if p == "/api/beat/snap":
                 # รับ *ช็อตที่อยู่บนจอตอนนี้* ไม่ใช่อ่านจาก edl.json — คนกดปุ่มนี้
                 # หลังลากไทม์ไลน์แล้วยังไม่บันทึกได้เสมอ  รับเฉพาะสี่ค่าที่ใช้จริง
@@ -1674,6 +1796,8 @@ def run(ctx, port=8765, open_browser=True, config_args=None,
     ctx.argv_tail = list(config_args or [])
     ctx.config_name = config_name
     ctx.sets = list(sets or [])
+    ctx.port = port
+    ctx.started = time.time()
 
     if not list(ctx.thumb_dir.glob("*.jpg")):
         warn("ยังไม่มีภาพตัวอย่าง — สั่ง 'ภาพตัวอย่าง' ในขั้น 1 ก่อนจะได้มีรูปให้ดู")

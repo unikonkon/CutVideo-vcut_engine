@@ -1,0 +1,37 @@
+# TikTok · A · ปิดการขาย / แนะนำช่อง — ช็อต 1.7–2.0 วิ · ช้า → รัว → ช้า
+#
+# ตัวเลขวัดจากคลิปอ้างอิง 01 · 02 · 03 (docs/tiktok-reference/) ต่อยอดจาก
+# vertical-short: ตัดชิดกว่า · ช็อตพูดสั้นลงเหลือ 0.8 วิ เพื่อให้เกิด "ชุดยิงรัว"
+# ช่วงกลางเรื่อง · วิวติดกันได้ถึง 7 ชิ้น · เป้า 36 วิ
+#
+# ใช้จากเทอร์มินัล:  ./vcut run -c tiktok-sell
+# ใช้จากหน้าเว็บ:    การ์ดสไตล์ "A · ปิดการขาย / แนะนำช่อง"
+extends = "vertical-short"
+
+[project]
+name = "tiktok-sell"
+
+[jumpcut]                    # ต้นฉบับไม่เหลือเงียบเลย = ตัดชิดสุด
+min_silence = 0.25
+pad         = 0.05
+min_piece   = 0.40
+
+[talk]
+margin_pre  = 0.12
+margin_post = 0.20
+gap_merge   = 0.35
+min_shot    = 0.80           # ต่ำกว่า vertical-short เพื่อให้ได้ชุดตัดถี่ช่วงกลาง
+
+[broll]
+durations = [1.5, 1.0, 0.6]  # ช่วงยิงตัวอย่างรัว
+run_max   = 7                # ต้นฉบับปล่อยติดกัน 7 ชิ้น
+
+[compose]
+mode           = "pattern"
+pattern        = ["TALK", "BROLL"]
+target_minutes = 0.60
+
+[audio]
+same_level  = true
+master_lufs = -14.0          # ต้นฉบับ −9.8 — อย่าไล่ตาม แพลตฟอร์มกดลงเอง
+tp_ceiling  = -1.0

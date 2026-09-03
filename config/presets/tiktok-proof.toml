@@ -1,0 +1,37 @@
+# TikTok · B · โชว์หลักฐาน / สร้างความน่าเชื่อถือ — ช็อต 2.4 วิ · เลขนับขึ้น
+#
+# ตัวเลขวัดจากคลิปอ้างอิง 04 (docs/tiktok-reference/) — คลิปเดียวในเจ็ดตัวที่
+# ความดังตรงเป้า TikTok พอดี (−14.7 LUFS · peak 0.0) จึงเป็นตัวที่ลอกได้ทั้งใบ
+# จังหวะช้ากว่าแบบ A เล็กน้อย แต่มี "ชุดตัดถี่ 7 ช็อตใน 3.6 วิ" ตอนโชว์หลักฐาน
+#
+# ใช้จากเทอร์มินัล:  ./vcut run -c tiktok-proof
+# ใช้จากหน้าเว็บ:    การ์ดสไตล์ "B · โชว์หลักฐาน"
+extends = "vertical-short"
+
+[project]
+name = "tiktok-proof"
+
+[jumpcut]
+min_silence = 0.26
+pad         = 0.05
+min_piece   = 0.40
+
+[talk]
+margin_pre  = 0.14
+margin_post = 0.22
+gap_merge   = 0.38
+min_shot    = 1.00
+
+[broll]
+durations = [2.0, 1.2, 0.6]
+run_max   = 7                # ชุดยิงรัวตอนโชว์หลักฐาน
+
+[compose]
+mode           = "pattern"
+pattern        = ["TALK", "BROLL"]
+target_minutes = 0.72
+
+[audio]
+same_level  = true
+master_lufs = -14.0          # ตรงกับต้นฉบับพอดี
+tp_ceiling  = -1.0

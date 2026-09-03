@@ -21,7 +21,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import (ai, assemble, caption, compose, config, decide, finish,
+from . import (ai, assemble, caption, cleanup, compose, config, decide, finish,
                fx, listen, prepare, render, reset, review, scan, serve, settings,
                silence, thumbs)
 from .util import (c, die, disk_free_gb, hhmmss, info, read_json,
@@ -220,116 +220,25 @@ def cmd_info(ctx):
     info(f"  ดิสก์ว่าง  {disk_free_gb(ctx.work):.1f} GB")
 
 
-def _wanted_segments(ctx):
-    """ชื่อไฟล์ segment ที่ EDL + config ปัจจุบันต้องใช้
-
-    คำนวณ hash ใหม่แทนที่จะเชื่อรายชื่อใน render.json เพราะไฟล์นั้นถูกเขียนไว้
-    ตอน render รอบก่อน ซึ่งอาจใช้สูตรคนละแบบกับตอนนี้ — ถ้าเชื่อมัน ไฟล์สูตร
-    เก่าจะถูกนับว่า "ยังใช้อยู่" ตลอดไป และ gc จะไม่ลบอะไรเลย
-
-    ชิ้นที่ยังไม่เคยวัดความดังคำนวณ hash ไม่ได้ ถ้ามีแบบนั้นปนอยู่ก็เก็บรายชื่อ
-    จาก render.json ไว้ด้วย ดีกว่าลบเกินจนต้อง render ใหม่ทั้งกองโดยไม่ตั้งใจ
-
-    **ต้องถามความดังผ่าน render.seg_loud() ไม่ใช่เปิด loudness.json อ่านเอง**
-    เปิด [audio] match_clips ไว้เมื่อไร ชิ้นจะพก loud_ref (ค่าของทั้งคลิป) มาเอง
-    และ render ใช้ค่านั้นคิด gain — ส่วน loudness.json เก็บค่าที่วัดทีละท่อนซึ่ง
-    อาจค้างจากรอบก่อนหน้าที่ยังไม่ได้เปิดสวิตช์ อ่านผิดตัวแล้ว gain ผิด → กุญแจ
-    ผิด → ไฟล์จริงไม่อยู่ในรายการ "ยังใช้อยู่" แล้ว gc ลบชิ้นที่ยังต้องใช้ทิ้ง
-    (วัดกับโปรเจกต์จริง: 174 จาก 208 ชิ้นคิด gain ออกมาไม่ตรงกับที่ render ใช้)
-    """
-    rman = read_json(ctx.work / "render.json", {}) or {}
-    listed = {s["file"] for s in rman.get("segments", [])}
-    edl = read_json(ctx.edl)
-    if not edl:
-        return listed
-    loud = read_json(ctx.work / "loudness.json", {}) or {}
-    a = ctx.get("audio", {})
-    keep, unknown = set(), 0
-    for raw in edl.get("timeline", []):
-        seg = {**raw, "_lkey": f"{raw['name']}@{raw['start']:.3f}+{raw['dur']:.3f}"}
-        if not seg.get("loud_ref") and seg["_lkey"] not in loud:
-            unknown += 1
-            continue
-        I, TP = render.seg_loud(seg, loud)
-        gain, _ = render.compute_gain(I, TP, float(seg["target_lufs"]), a)
-        keep.add(f"{render.seg_key(seg, ctx, gain)}.mov")
-    return keep | listed if unknown else keep
-
-
-def _wanted_fx(ctx):
-    """ชื่อไฟล์ในโฟลเดอร์ fxseg ที่ fx.json ปัจจุบันต้องใช้
-
-    คำนวณใหม่ด้วยเหตุผลเดียวกับ _wanted_segments — เชื่อรายชื่อใน fx-render.json
-    ที่เขียนไว้รอบก่อนไม่ได้ ถ้าสูตรคิดกุญแจเปลี่ยนไป ไฟล์รุ่นเก่าจะถูกนับว่า
-    "ยังใช้อยู่" ตลอดกาลแล้ว gc จะไม่ลบอะไรเลย
-    """
-    try:
-        man = fx.plan(ctx)
-    except SystemExit:
-        # ยังไม่มี render.json หรือ fx.json ตั้งของที่ทำไม่ได้ไว้ — ตอบไม่ได้ว่า
-        # ต้องเก็บอะไร คืน None แล้วให้ผู้เรียก *ข้ามการเก็บกวาดไปเลย*
-        # (คืนเซ็ตว่างไม่ได้ — มันแปลว่า "ไม่ต้องเก็บอะไรเลย" = ลบทิ้งทั้งโฟลเดอร์)
-        return None
-    return {s["out"] for s in man["segments"] if s["fx"]}
-
-
 def cmd_gc(ctx, args):
     if args.all:
         if ctx.work.exists():
             shutil.rmtree(ctx.work)
             info(f"  ลบ {ctx.work} ทั้งหมดแล้ว")
         return
-    # ไฟล์ระหว่างเขียนของขั้น 1 กับขั้น 2 — ต้องกวาดก่อนเช็ค segment cache
-    # เพราะตอนที่ขั้น 1/2 ถูกกดหยุดค้างไว้ ยังไม่มีโฟลเดอร์ segment ด้วยซ้ำ
-    # ถ้าไปกวาดทีหลังจะเจอ `return` ข้างล่างตัดหน้าไปก่อนตลอด แล้วของขาด ๆ
-    # (wav ของทั้งคลิปมีเป็น GB) ก็ไม่มีใครเก็บให้เลย
-    n_part = sum(sweep_dir(d) for d in
-                 (ctx.thumb_dir, ctx.thumb_dir / "sheets", ctx.audio_dir,
-                  ctx.work / "whisper", ctx.work / "preview")
-                 if d.exists())
-    if n_part:
-        info(f"  ลบไฟล์ระหว่างเขียนที่ตกค้างจากขั้น 1/2 {n_part} ไฟล์")
-    if not ctx.seg_dir.exists():
+    # ตรรกะจริงอยู่ที่ cleanup.py — หน้าเว็บ (/api/gc) ใช้ตัวเดียวกัน
+    r = cleanup.apply(ctx)
+    if r["partial"]:
+        info(f"  ลบไฟล์ระหว่างเขียนที่ตกค้างจากขั้น 1/2 {r['partial']} ไฟล์")
+    if not r["has_cache"]:
         info("  ไม่มี segment cache")
         return
-    keep = _wanted_segments(ctx)
-    freed, n = 0, 0
-    for f in render.seg_files(ctx):
-        if f.name not in keep:
-            freed += f.stat().st_size
-            f.unlink()
-            n += 1
-    # ไฟล์ระหว่างเขียนที่ตกค้าง — เฉพาะของโพรเซสที่ตายไปแล้ว ไม่แตะของที่กำลัง
-    # ตัดอยู่จริงในอีกหน้าต่าง (ดู util.sweep_dir)
-    sweep_dir(ctx.seg_dir)
-    # สำเนาสำหรับหน้าเว็บของชิ้นที่ไม่ได้ใช้แล้ว
-    web = ctx.work / "segweb"
-    if web.exists():
-        stems = {Path(k).stem for k in keep}
-        for f in web.glob("*.mp4"):
-            if f.stem not in stems:
-                freed += f.stat().st_size
-                f.unlink()
-    # ชิ้นที่ขั้น 5 แต่งไว้ — ทุกครั้งที่มีคนขยับความเร็ว/ซูม/โทนสี กุญแจเปลี่ยน
-    # แล้วไฟล์เก่ากลายเป็นขยะทันที ถ้าไม่เก็บกวาดที่นี่ด้วยดิสก์จะโตขึ้นเงียบ ๆ
-    n_fx, keep_fx = 0, _wanted_fx(ctx)
-    fxdir = fx.seg_dir(ctx)
-    if keep_fx is not None and fxdir.exists():
-        for f in fxdir.iterdir():
-            if f.suffix.lower() == ".mov" and ".part." not in f.name \
-                    and f.name not in keep_fx:
-                freed += f.stat().st_size
-                f.unlink()
-                n_fx += 1
-        sweep_dir(fxdir)
-
-    have = len(render.seg_files(ctx))
-    if n_fx:
-        info(f"  ลบชิ้นที่แต่งไว้แต่ไม่ได้ใช้แล้ว {n_fx} ไฟล์ (ขั้น 5)")
-    info(f"  ลบ segment ที่ไม่ได้ใช้ {n} ไฟล์  คืนพื้นที่ {freed / 1e9:.2f} GB")
-    info(f"  EDL ปัจจุบันต้องใช้ {len(keep)} ไฟล์ · มีอยู่แล้ว {have} ไฟล์"
-         + (c(f" · ต้อง render อีก {len(keep) - have} ชิ้น", "y")
-            if len(keep) > have else ""))
+    if r["fx"]:
+        info(f"  ลบชิ้นที่แต่งไว้แต่ไม่ได้ใช้แล้ว {r['fx']} ไฟล์ (ขั้น 5)")
+    info(f"  ลบ segment ที่ไม่ได้ใช้ {r['segments']} ไฟล์  คืนพื้นที่ {r['freed_bytes'] / 1e9:.2f} GB")
+    info(f"  EDL ปัจจุบันต้องใช้ {r['in_use']} ไฟล์ · มีอยู่แล้ว {r['have']} ไฟล์"
+         + (c(f" · ต้อง render อีก {r['need_render']} ชิ้น", "y")
+            if r["need_render"] else ""))
 
 
 def cmd_presets():

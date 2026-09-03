@@ -1,0 +1,37 @@
+# TikTok · C · สอนกรอบวิธีคิด — ช็อต 5.0 วิ · เน้นเสียงพูด · ผังนีออน
+#
+# ตัวเลขวัดจากคลิปอ้างอิง 05 (docs/tiktok-reference/) — คลิปสอนไม่ควรตัดถี่
+# ช็อตพูดยาวขึ้นเท่าตัว · เชื่อมช่องเงียบกว้างขึ้น · แพตเทิร์น TALK TALK BROLL
+# เพราะภาพเป็นตัวประกอบของคำพูด ไม่ใช่ตัวเอก · ยาวได้เกือบสองนาที
+#
+# ใช้จากเทอร์มินัล:  ./vcut run -c tiktok-teach
+# ใช้จากหน้าเว็บ:    การ์ดสไตล์ "C · สอนกรอบวิธีคิด"
+extends = "vertical-short"
+
+[project]
+name = "tiktok-teach"
+
+[jumpcut]
+min_silence = 0.30
+pad         = 0.08
+min_piece   = 0.60
+
+[talk]
+margin_pre  = 0.20
+margin_post = 0.35
+gap_merge   = 0.60           # สูงกว่าสูตรอื่น — คลิปสอนไม่ควรตัดถี่
+min_shot    = 2.00           # สูงกว่าสูตรอื่นเท่าตัว
+
+[broll]
+durations = [3.0, 2.0, 1.2]
+run_max   = 2
+
+[compose]
+mode           = "pattern"
+pattern        = ["TALK", "TALK", "BROLL"]   # เน้นเสียงพูด ไม่ใช่ภาพ
+target_minutes = 1.9
+
+[audio]
+same_level  = true
+master_lufs = -14.0
+tp_ceiling  = -1.0

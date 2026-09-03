@@ -1,0 +1,43 @@
+# TikTok · D · Before | After — ช็อต 1.9–2.8 วิ · B-roll แทรกตามคำพูด
+#
+# ตัวเลขวัดจากช่อง After ของคลิปอ้างอิง 06 · 07 (docs/tiktok-reference/)
+# สูตรนี้คือ "ฝั่งตัด" เท่านั้น — เลย์เอาต์เทียบก่อน-หลัง (คำสั่ง compare) ถูกถอด
+# ออกจากเอนจินแล้ว จึงได้หนังที่ตัดตามจังหวะของช่อง After แต่ไม่มีช่อง Before
+#
+# min_shot 1.2 มาจากฟุตเทจสัมภาษณ์สองคน (บทสลับหน้าเร็ว) — ถ้าคนพูดคนเดียว
+# ให้ขยับเป็น 1.8 และ run_max = 1 ตามคลิป 07
+#
+# ใช้จากเทอร์มินัล:  ./vcut run -c tiktok-compare
+# ใช้จากหน้าเว็บ:    การ์ดสไตล์ "D · Before | After"
+extends = "vertical-short"
+
+[project]
+name = "tiktok-compare"
+
+[video]
+vertical_mode = "crop"       # ฟุตเทจสัมภาษณ์มักเป็นแนวนอน ต้องครอปเป็น 9:16
+
+[jumpcut]
+min_silence = 0.28
+pad         = 0.06
+min_piece   = 0.45
+
+[talk]
+margin_pre  = 0.15
+margin_post = 0.25
+gap_merge   = 0.40
+min_shot    = 1.20           # ตรงกับช็อตเฉลี่ย 1.92 วิ ของช่อง After
+
+[broll]
+durations = [2.0, 1.5, 1.0]
+run_max   = 2
+pick      = "center"
+
+[compose]
+mode           = "pattern"
+pattern        = ["TALK", "TALK", "BROLL"]   # B-roll แทรกทุก ~3 ช็อต ตามที่วัดได้
+target_minutes = 1.0
+
+[audio]
+same_level  = true
+master_lufs = -14.0
