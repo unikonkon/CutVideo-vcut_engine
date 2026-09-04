@@ -52,7 +52,7 @@ def settings_of(ctx):
     """
     from . import variants
     a = dict(ctx.get("autofx", {}) or {})
-    active = variants.load_index(ctx)["active"]
+    active = variants.active_of(ctx)[1]
     a.update((variants.BY_ID.get(active) or {}).get("autofx") or {})
     return a
 

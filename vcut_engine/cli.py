@@ -388,7 +388,10 @@ def cmd_variants(ctx, args):
         if args.activate:
             variants.activate(ctx, args.activate)
         v = variants.view(ctx)
-        info(f"{c('แบบที่ตัดไว้', 'b')}  {v['dir']}")
+        info(f"{c('แบบที่ตัดไว้', 'b')}  สไตล์ {v['style']}  {v['dir']}")
+        if v["styles"]:
+            info("  สไตล์ที่ตัดแล้ว: " + " · ".join(
+                f"{s['style']} {s['ok']}/{s['total']}" + (" ●" if s["active"] else "") for s in v["styles"]))
         for it in v["items"]:
             mark = c("●", "g") if it["active"] else (c("✓", "g") if it["ready"] else c("·", "d"))
             tail = (f"{it['shots']:>3} ชิ้น  {it['dur']:>6.1f} วิ"

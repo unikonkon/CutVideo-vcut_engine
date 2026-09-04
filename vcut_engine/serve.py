@@ -59,6 +59,9 @@ QUICK_JOBS = {
     "quick_ai": ["scan", "thumbs", "listen", "silence", "ai_trim", "variants", "autofx"],
     # เปลี่ยนสไตล์/ค่าตัดแล้วตัด 6 แบบใหม่โดยไม่ถอดเสียงซ้ำ
     "recut":    ["silence", "variants", "autofx"],
+    # หน้า ① ของ v6: วางไฟล์แล้วอ่านคลิป + ถอดเสียงทันที (ทุกสไตล์/ทุกแบบใช้ร่วมกัน)
+    # ยังไม่ตัด — สไตล์ยังไม่ได้เลือก
+    "ingest":   ["scan", "thumbs", "listen"],
 }
 # ปุ่ม "รัน Phase นี้" — รันทุกขั้นใน Phase เดียว โดยไม่แตะ Phase อื่น
 #
@@ -499,8 +502,11 @@ def build_state(ctx):
     return {
         "project": ctx.get("project.name", "untitled"),
         # แบบที่ active อยู่ ("" = โปรเจกต์ธรรมดาที่ไม่เคยตัดหลายแบบ)
-        "variant": variants.load_index(ctx)["active"],
+        "variant": variants.active_of(ctx)[1],
+        "variant_style": variants.active_of(ctx)[0],
         "autofx_style": str(ctx.get("autofx.style", "") or ""),
+        # สไตล์ที่เคยตัดแล้ว (แท็บในขั้น ③ ของ v6)
+        "styles_cut": variants.styles_cut(ctx),
         "out": str(ctx.out),
         "out_exists": ctx.out.exists(),
         "out_size": round(ctx.out.stat().st_size / 1e9, 2) if ctx.out.exists() else 0,
@@ -1446,8 +1452,11 @@ def make_handler(ctx, job):
                 return self._range_file(capmod.out_path(ctx))
 
             if p == "/api/variants":
+                # ?style=sell — ดูแบบของสไตล์อื่นที่ตัดไว้ (ว่าง = สไตล์ของโปรเจกต์)
                 from . import variants
-                return self._json(variants.view(ctx))
+                q = dict(x.split("=", 1) for x in u.query.split("&") if "=" in x)
+                style = unquote(str(q.get("style", "") or "")) or None
+                return self._json(variants.view(ctx, style))
 
             if p == "/api/autofx":
                 from . import autofx
@@ -1456,11 +1465,16 @@ def make_handler(ctx, job):
             if p.startswith("/variant/"):
                 # ไฟล์ตัวอย่างของแบบหนึ่ง (.vcut/variants/<id>/out.mp4) — การ์ด 6 แบบ
                 # ในหน้า 3 ขั้นกดเล่นได้ก่อนเลือก
+                # /variant/<id>/out = สไตล์ของโปรเจกต์ · /variant/<style>/<id>/out = ระบุสไตล์
                 from . import variants
-                vid = p[len("/variant/"):].split("/")[0]
+                parts = [x for x in p[len("/variant/"):].split("/") if x]
+                style = None
+                if len(parts) >= 3:
+                    style, parts = parts[0], parts[1:]
+                vid = parts[0] if parts else ""
                 if vid not in variants.BY_ID:
                     return self._send(404, b"not found", "text/plain")
-                return self._range_file(variants.dir_of(ctx, vid) / variants.OUT)
+                return self._range_file(variants.dir_of(ctx, vid, style) / variants.OUT)
 
             if p == "/api/gc":
                 # ถามก่อนลบ — ไม่แตะไฟล์ (ดู cleanup.preview)
@@ -1542,10 +1556,11 @@ def make_handler(ctx, job):
                     return self._json({"error": "มีงานกำลังรันอยู่ — รอให้เสร็จก่อน"}, 409)
                 from . import variants
                 vid = str(payload.get("id") or "")
+                style = str(payload.get("style") or "") or None
                 if vid not in variants.BY_ID:
                     return self._json({"error": f"ไม่รู้จักแบบ '{vid}'"}, 400)
                 try:
-                    return self._json({"ok": True, "variants": variants.activate(ctx, vid)})
+                    return self._json({"ok": True, "variants": variants.activate(ctx, vid, style)})
                 except SystemExit as e:
                     return self._json({"error": str(e)}, 400)
 
