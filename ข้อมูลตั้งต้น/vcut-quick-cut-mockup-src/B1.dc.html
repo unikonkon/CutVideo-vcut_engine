@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mitr:wght@200;300;400;500;600&display=swap">
+  <style>
+body{margin:0;background:#0d1f3d;color:#eef4ff;font-family:"Mitr","Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased;font-size:13.5px;line-height:1.4;font-weight:300}
+a{color:#8fd0ff}a:hover{color:#bfe4ff}
+b,strong{font-weight:500}
+.g{background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.10);border-radius:18px;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+.hl{border-top:1px solid rgba(255,255,255,.08)}
+.muted{color:#8fa3c2}
+.small{font-size:12px}
+.h1{font-size:30px;font-weight:300;letter-spacing:-.01em;line-height:1.1}
+.h2{font-size:17px;font-weight:400}
+.num{font-weight:300;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 18px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#eef4ff;font-size:13.5px;font-weight:400;white-space:nowrap}
+.btn.pri{background:#eef4ff;border-color:#eef4ff;color:#081326;font-weight:500}
+.btn.lg{height:50px;padding:0 26px;font-size:15px}
+.btn.sm{height:32px;padding:0 13px;font-size:12.5px}
+.btn.ic{width:40px;padding:0}
+.opt{display:inline-flex;gap:18px;align-items:center}
+.opt span{color:#8fa3c2;padding:4px 0;border-bottom:1.5px solid transparent;white-space:nowrap}
+.opt span.on{color:#eef4ff;border-color:#8fd0ff}
+.sw{width:34px;height:18px;border-radius:999px;background:rgba(255,255,255,.14);position:relative;flex-shrink:0}
+.sw i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:999px;background:#8fa3c2}
+.sw.on{background:#8fd0ff}.sw.on i{left:18px;background:#081326}
+.step{display:inline-flex;align-items:center;gap:9px;color:#8fa3c2;font-size:13.5px}
+.step .n{font-size:11px;letter-spacing:.12em;color:#8fa3c2}
+.step.on{color:#eef4ff}.step.on .n{color:#8fd0ff}
+.step.done{color:#eef4ff}
+.row{display:grid;grid-template-columns:18px 1fr auto;align-items:center;gap:14px;padding:12px 0}
+.row+.row{border-top:1px solid rgba(255,255,255,.08)}
+.thumb{position:relative;border-radius:14px;overflow:hidden;background:#000}.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.scrim{position:absolute;inset:0;background:linear-gradient(180deg,rgba(8,19,38,.10) 0%,rgba(8,19,38,0) 35%,rgba(8,19,38,.78) 100%)}
+.card{position:relative;border-radius:18px;overflow:hidden;background:#000;border:1px solid rgba(255,255,255,.10)}
+.card.sel{box-shadow:0 0 0 1.5px #8fd0ff,0 0 32px rgba(143,208,255,.28)}
+.card.dim{opacity:.38}
+.bar{height:3px;border-radius:999px;background:rgba(255,255,255,.14);overflow:hidden;position:relative}.bar i{position:absolute;left:0;top:0;bottom:0;background:#8fd0ff;border-radius:999px}
+.dot{width:7px;height:7px;border-radius:999px;background:rgba(255,255,255,.18);flex-shrink:0}.dot.on{background:#8fd0ff;box-shadow:0 0 8px #8fd0ff}
+.sub{position:absolute;left:8%;right:8%;bottom:14%;text-align:center;font-size:12px;font-weight:600;color:#fff;text-shadow:0 1px 0 #000,0 0 3px #000,0 0 6px #000;line-height:1.3}
+.hook{position:absolute;left:8%;right:8%;top:12%;text-align:center;font-size:13px;font-weight:600;color:#fff;text-shadow:0 1px 0 #000,0 0 4px #000}
+.hook em{font-style:normal;color:#ffd48a}
+.tab{display:inline-flex;align-items:baseline;gap:8px;color:#8fa3c2;padding:6px 0;border-bottom:1.5px solid transparent;white-space:nowrap}
+.tab.on{color:#eef4ff;border-color:#8fd0ff}
+.tab b{font-weight:400;color:inherit}
+.tab .cnt{font-size:11.5px;color:#8fa3c2}
+</style>
+</helmet>
+<div style="width:1440px;height:900px;background:linear-gradient(180deg,#081326 0%,#0d1f3d 42%,#153a63 80%,#1f5584 100%);display:flex;flex-direction:column;overflow:hidden;position:relative;">
+<div style="position:absolute;left:0;right:0;bottom:0;height:420px;background:radial-gradient(70% 60% at 50% 105%,rgba(255,196,150,.16),rgba(255,196,150,0) 70%);pointer-events:none;"></div>
+<div style="position:absolute;left:0;right:0;top:0;height:300px;background:radial-gradient(60% 50% at 50% -20%,rgba(143,208,255,.10),rgba(143,208,255,0) 70%);pointer-events:none;"></div>
+<div style="height:68px;display:flex;align-items:center;gap:22px;padding:0 36px;flex-shrink:0;position:relative;">
+    <span style="font-size:17px;font-weight:500;letter-spacing:.02em;display:inline-flex;align-items:center;gap:8px;"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#8fd0ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"/></svg>vcut</span>
+    
+    <div style="flex:1;"></div>
+    <div style="display:flex;gap:28px;"><span class="step on"><span class="n">01</span>ใส่วิดีโอ</span><span class="step"><span class="n">02</span>สไตล์</span><span class="step"><span class="n">03</span>ส่งออก</span></div>
+    <div style="flex:1;"></div>
+    <span style="width:170px;"></span>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:34px;padding:0 0 60px;position:relative;">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:10px;"><span class="h1" style="font-size:40px;">ใส่วิดีโอ</span><span class="muted">วางกี่ไฟล์ก็ได้ · MOV / MP4 · แนวตั้งหรือแนวนอนก็ได้ เอนจินปรับเป็น 9:16 ให้เอง</span></div>
+    <div class="g" style="width:820px;padding:8px;display:flex;flex-direction:column;">
+      <div style="height:210px;border-radius:12px;border:1px dashed rgba(143,208,255,.45);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;">
+        <svg width="28" height="28" viewBox="0 0 16 16" fill="none" stroke="#8fd0ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M8 11V3M4.5 6.5L8 3l3.5 3.5M3 13h10"/></svg>
+        <span style="font-size:16px;">ลากวิดีโอมาวางที่นี่</span>
+        <div style="display:flex;gap:10px;"><span class="btn"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M2.5 3h11v10h-11zM2.5 6h11M2.5 10h11M5.5 3v10M10.5 3v10"/></svg>เลือกไฟล์…</span><span class="btn" style="background:transparent;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M2 4.5h4l1.5 1.5H14v7H2z"/></svg>ลิงก์โฟลเดอร์</span></div>
+      </div>
+      <div style="padding:6px 16px 4px;display:flex;flex-direction:column;">
+        <div style="display:grid;grid-template-columns:40px 1fr 190px 24px;gap:16px;align-items:center;padding:12px 0;">
+          <div class="thumb" style="width:40px;height:40px;border-radius:10px;"><img src="f57.jpg" alt=""></div>
+          <div style="display:flex;flex-direction:column;gap:1px;"><span style="font-weight:400;">IMG_1234.MOV</span><span class="muted small">02:14 · 1126×1788 · 291 MB</span></div>
+          <div style="display:flex;flex-direction:column;gap:6px;"><span class="small" style="display:inline-flex;align-items:center;gap:7px;color:#8fd0ff;"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#8fd0ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="6" y="2" width="4" height="8" rx="2"/><path d="M4 8a4 4 0 0 0 8 0M8 12v2"/></svg>ถอดเสียง 18 / 26</span><span class="bar"><i style="width:69%;"></i></span></div>
+          <span style="display:inline-flex;justify-content:center;"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#8fa3c2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 4l8 8M12 4l-8 8"/></svg></span>
+        </div>
+        <div class="hl" style="display:grid;grid-template-columns:40px 1fr 190px 24px;gap:16px;align-items:center;padding:12px 0;">
+          <div class="thumb" style="width:40px;height:40px;border-radius:10px;"><img src="f116.jpg" alt=""></div>
+          <div style="display:flex;flex-direction:column;gap:1px;"><span style="font-weight:400;">IMG_1240.MOV</span><span class="muted small">01:03 · 1920×1080 · 140 MB · จะครอปเป็น 9:16</span></div>
+          <div style="display:flex;flex-direction:column;gap:6px;"><span class="small muted">อัปโหลด 62%</span><span class="bar"><i style="width:62%;background:#8fa3c2;"></i></span></div>
+          <span style="display:inline-flex;justify-content:center;"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#8fa3c2" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 4l8 8M12 4l-8 8"/></svg></span>
+        </div>
+      </div>
+    </div>
+    <div style="width:820px;display:flex;align-items:center;gap:16px;">
+      <span class="muted small">ถอดเสียงเริ่มเองทันทีที่วางไฟล์ ทุกสไตล์ทุกแบบใช้ร่วมกัน · ไปเลือกสไตล์ต่อได้ไม่ต้องรอ</span>
+      <div style="flex:1;"></div>
+      <span class="btn pri lg">เลือกสไตล์<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#081326" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M6 3.5l4.5 4.5L6 12.5"/></svg></span>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

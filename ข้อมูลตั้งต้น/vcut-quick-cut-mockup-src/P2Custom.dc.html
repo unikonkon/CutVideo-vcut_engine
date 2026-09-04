@@ -1,0 +1,159 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mitr:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <style>
+body{margin:0;background:#0c1c38;color:#eef4ff;font-family:"Mitr","Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased;font-size:13px;line-height:1.4;font-weight:300}
+a{color:#ffb020}a:hover{color:#ffd070}
+b,strong{font-weight:500}
+.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+.tag{font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#8fa3c2;white-space:nowrap}
+.panel{background:rgba(10,22,44,.62);border-radius:10px;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:inset 0 1px 0 rgba(255,255,255,.12),inset 0 -1px 0 rgba(0,0,0,.55),0 2px 0 rgba(2,7,16,.9),0 14px 40px rgba(0,0,0,.25)}
+.well{background:rgba(4,10,22,.72);border-radius:6px;box-shadow:inset 0 2px 5px rgba(0,0,0,.75),inset 0 0 0 1px rgba(0,0,0,.6)}
+.well.sel{box-shadow:inset 0 2px 5px rgba(0,0,0,.75),inset 0 0 0 1.5px #ffb020,0 0 18px rgba(255,176,32,.25)}
+.muted{color:#8fa3c2}
+.small{font-size:11.5px}
+.h1{font-size:26px;font-weight:300;letter-spacing:-.01em;line-height:1.1}
+.h2{font-size:15px;font-weight:400}
+.kv{font-size:12px;color:#8fa3c2}.kv b{color:#eef4ff;font-weight:400}
+.led{width:8px;height:8px;border-radius:999px;background:rgba(255,255,255,.12);box-shadow:inset 0 1px 1px rgba(0,0,0,.7);flex-shrink:0}
+.led.on{background:#ffb020;box-shadow:0 0 6px #ffb020,0 0 14px rgba(255,176,32,.55)}
+.led.dim{background:#8a6a2a;box-shadow:0 0 4px rgba(255,176,32,.35)}
+.key{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:34px;padding:0 14px;border-radius:6px;font-size:12.5px;font-weight:400;color:#eef4ff;background:linear-gradient(rgba(255,255,255,.14),rgba(255,255,255,.05));box-shadow:0 2px 0 rgba(2,7,16,.9),inset 0 1px 0 rgba(255,255,255,.14);white-space:nowrap}
+.key.on{color:#ffb020;background:linear-gradient(rgba(255,176,32,.18),rgba(255,176,32,.06));box-shadow:0 1px 0 rgba(2,7,16,.9),inset 0 2px 3px rgba(0,0,0,.5)}
+.key.off{color:#8fa3c2}
+.key.sm{height:28px;padding:0 10px;font-size:11.5px}
+.key.ghost{background:transparent;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16)}
+.seg{display:grid;gap:6px}
+.seg .key{height:44px;font-size:13.5px;padding:0 10px;width:auto}
+.seg .key.on{box-shadow:0 1px 0 rgba(2,7,16,.9),inset 0 2px 3px rgba(0,0,0,.5),inset 0 0 0 1.5px #ffb020}
+.sw{width:56px;height:30px;border-radius:5px;background:rgba(4,10,22,.72);box-shadow:inset 0 2px 4px rgba(0,0,0,.75),inset 0 0 0 1px rgba(0,0,0,.6);position:relative;flex-shrink:0;display:inline-flex;align-items:center}
+.sw i{position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:4px;background:linear-gradient(#4a5468,#2a3346);box-shadow:0 1px 0 rgba(2,7,16,.9),inset 0 1px 0 rgba(255,255,255,.14)}
+.sw.on i{left:29px;background:linear-gradient(#ffc652,#e59a10)}
+.sw::after{content:"OFF";position:absolute;right:6px;font-family:"JetBrains Mono",monospace;font-size:8.5px;letter-spacing:.08em;color:#8fa3c2}
+.sw.on::after{content:"ON";right:auto;left:7px;color:#ffb020}
+.stepper{display:grid;grid-template-columns:44px 1fr 44px;align-items:center;gap:6px}
+.stepper .key{height:44px;width:44px;padding:0;font-size:20px;font-weight:300}
+.stepper .well{height:44px;display:flex;align-items:center;justify-content:center}
+.pos{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;width:96px}
+.pos span{height:28px;border-radius:4px;background:linear-gradient(rgba(255,255,255,.12),rgba(255,255,255,.04));box-shadow:0 1px 0 rgba(2,7,16,.9)}
+.pos span.on{background:linear-gradient(rgba(255,176,32,.35),rgba(255,176,32,.15));box-shadow:inset 0 0 0 1.5px #ffb020}
+.cta{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:10px;height:52px;padding:0 26px;border-radius:8px;background:linear-gradient(#ffc652,#e59a10);color:#081326;font-size:15px;font-weight:500;box-shadow:0 3px 0 #7a5208,inset 0 1px 0 rgba(255,255,255,.45);white-space:nowrap}
+.cta.sm{height:40px;font-size:13px;padding:0 18px}
+.seg7{font-family:"JetBrains Mono",monospace;font-weight:700;color:#ffb020;text-shadow:0 0 8px rgba(255,176,32,.6);letter-spacing:.06em}
+.seg7.off{color:rgba(255,255,255,.14);text-shadow:none}
+.knob{width:34px;height:34px;border-radius:999px;background:radial-gradient(circle at 40% 35%,#4a5468,#1a2334 70%);box-shadow:0 2px 0 rgba(2,7,16,.9),inset 0 1px 0 rgba(255,255,255,.18),0 0 0 1px rgba(0,0,0,.5);position:relative;flex-shrink:0}
+.knob::after{content:"";position:absolute;left:50%;top:4px;width:2px;height:10px;background:#ffb020;margin-left:-1px;border-radius:1px;box-shadow:0 0 4px #ffb020}
+.knob.off::after{background:#8fa3c2;box-shadow:none}
+.knob.sm{width:26px;height:26px}.knob.sm::after{height:8px;top:3px}
+.knob.r45::after{transform-origin:1px 13px;transform:rotate(45deg)}.knob.r90::after{transform-origin:1px 13px;transform:rotate(90deg)}.knob.rm60::after{transform-origin:1px 13px;transform:rotate(-60deg)}.knob.r20::after{transform-origin:1px 13px;transform:rotate(20deg)}
+.knob.sm.r45::after{transform-origin:1px 10px}.knob.sm.rm60::after{transform-origin:1px 10px}.knob.sm.r90::after{transform-origin:1px 10px}
+.meter{display:flex;gap:2px}.meter i{flex:1;height:8px;background:rgba(255,255,255,.08);border-radius:1px;box-shadow:inset 0 1px 1px rgba(0,0,0,.5)}.meter i.l{background:#ffb020;box-shadow:0 0 4px rgba(255,176,32,.5)}.meter i.h{background:#8a6a2a}
+.tog{width:30px;height:16px;border-radius:3px;background:rgba(4,10,22,.72);box-shadow:inset 0 2px 3px rgba(0,0,0,.7);position:relative;flex-shrink:0}.tog i{position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:2px;background:linear-gradient(#4a5468,#2a3346);box-shadow:0 1px 0 rgba(2,7,16,.9)}.tog.on i{left:16px;background:linear-gradient(#ffc652,#e59a10)}
+.step{display:inline-flex;align-items:center;gap:8px}
+.row{display:grid;grid-template-columns:34px 1fr auto auto;align-items:center;gap:14px;padding:9px 12px}
+.row+.row{border-top:1px solid rgba(0,0,0,.5)}
+.thumb{position:relative;border-radius:4px;overflow:hidden;background:#000}.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb .tc{position:absolute;right:5px;bottom:5px;padding:0 5px;background:rgba(0,0,0,.75);font-family:"JetBrains Mono",monospace;font-size:10.5px;color:#ffb020}
+.scrim{position:absolute;inset:0;background:linear-gradient(180deg,rgba(4,10,22,.05) 0%,rgba(4,10,22,0) 40%,rgba(4,10,22,.80) 100%)}
+.stat{display:flex;justify-content:space-between;font-family:"JetBrains Mono",monospace;font-size:10.5px;color:#8fa3c2;letter-spacing:.04em}.stat span:last-child{color:#eef4ff}
+.sub{position:absolute;left:8%;right:8%;bottom:14%;text-align:center;font-size:12px;font-weight:600;color:#fff;text-shadow:0 1px 0 #000,0 0 3px #000,0 0 6px #000;line-height:1.3}
+.hook{position:absolute;left:8%;right:8%;top:12%;text-align:center;font-size:13px;font-weight:600;color:#fff;text-shadow:0 1px 0 #000,0 0 4px #000}
+.hook em{font-style:normal;color:#ffb020}
+.bar{height:4px;border-radius:2px;background:rgba(255,255,255,.10);overflow:hidden;position:relative;box-shadow:inset 0 1px 1px rgba(0,0,0,.5)}.bar i{position:absolute;left:0;top:0;bottom:0;background:#ffb020;box-shadow:0 0 6px rgba(255,176,32,.6)}
+.screw{width:6px;height:6px;border-radius:999px;background:radial-gradient(circle at 40% 35%,#5a6478,#141b2a);box-shadow:inset 0 0 0 1px rgba(0,0,0,.6);position:absolute}
+</style>
+</helmet>
+<div style="width:1440px;height:900px;background:linear-gradient(180deg,#060f22 0%,#0c1c38 40%,#143459 78%,#1d4c78 100%);display:flex;flex-direction:column;overflow:hidden;position:relative;">
+<div style="position:absolute;left:0;right:0;bottom:0;height:460px;background:radial-gradient(70% 60% at 50% 105%,rgba(255,176,32,.18),rgba(255,176,32,0) 70%);pointer-events:none;"></div>
+<div style="position:absolute;left:0;right:0;top:0;height:300px;background:radial-gradient(60% 50% at 50% -20%,rgba(143,208,255,.10),rgba(143,208,255,0) 70%);pointer-events:none;"></div>
+<div class="panel" style="height:54px;margin:12px 14px 0;display:flex;align-items:center;gap:14px;padding:0 18px;flex-shrink:0;position:relative;">
+    <span class="mono" style="font-size:13px;font-weight:700;letter-spacing:.14em;">VCUT</span>
+    <span class="well mono" style="padding:5px 10px;font-size:11px;color:#ffb020;">IMG_1234.MOV  02:14  +1</span>
+    <div style="flex:1;"></div>
+    <div style="display:flex;gap:6px;"><span class="key"><span class="led on"></span>01 ใส่วิดีโอ</span><span class="key on"><span class="led on"></span>02 สไตล์</span><span class="key off"><span class="led"></span>03 ส่งออก</span></div>
+    <div style="flex:1;"></div>
+    <span class="well mono" style="padding:5px 10px;font-size:11px;color:#8fa3c2;">ENGINE 127.0.0.1:8765 <span style="color:#ffb020;">●</span></span>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;gap:14px;padding:14px 14px 14px;min-height:0;position:relative;">
+    <div class="panel" style="padding:16px 18px;display:flex;flex-direction:column;gap:12px;position:relative;"><span class="screw" style="left:8px;top:8px;"></span><span class="screw" style="right:8px;top:8px;"></span><span class="screw" style="left:8px;bottom:8px;"></span><span class="screw" style="right:8px;bottom:8px;"></span>
+      <div style="display:flex;align-items:baseline;gap:12px;"><span class="tag">SEC 01 · STYLE</span><span class="h1" style="font-size:20px;">เลือกสไตล์</span><span class="kv">4 สูตรจากเอนจิน เลือกชั้นแต่งให้เอง · หรือกำหนดเองทั้งหมด</span></div>
+      <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;"><div class="well" style="padding:8px;display:flex;flex-direction:column;gap:8px;">
+          <div class="thumb" style="height:162px;"><img src="f57.jpg" alt=""><div class="scrim"></div><span class="seg7" style="position:absolute;left:10px;top:6px;font-size:28px;color:rgba(238,244,255,.85);text-shadow:none;">A</span><span class="tc">SHOT 1.7–2.0 s</span></div>
+          <div style="display:flex;align-items:center;gap:8px;"><span class="led"></span><span style="font-size:13px;font-weight:400;">ปิดการขาย / แนะนำช่อง</span></div>
+          <span class="kv">ช้า → รัว → ช้า</span>
+        </div><div class="well" style="padding:8px;display:flex;flex-direction:column;gap:8px;">
+          <div class="thumb" style="height:162px;"><img src="f14.jpg" alt=""><div class="scrim"></div><span class="seg7" style="position:absolute;left:10px;top:6px;font-size:28px;color:rgba(238,244,255,.85);text-shadow:none;">B</span><span class="tc">SHOT 2.4 s</span></div>
+          <div style="display:flex;align-items:center;gap:8px;"><span class="led"></span><span style="font-size:13px;font-weight:400;">โชว์หลักฐาน</span></div>
+          <span class="kv">เลขนับขึ้น</span>
+        </div><div class="well" style="padding:8px;display:flex;flex-direction:column;gap:8px;">
+          <div class="thumb" style="height:162px;"><img src="f88.jpg" alt=""><div class="scrim"></div><span class="seg7" style="position:absolute;left:10px;top:6px;font-size:28px;color:rgba(238,244,255,.85);text-shadow:none;">C</span><span class="tc">SHOT 5.0 s</span></div>
+          <div style="display:flex;align-items:center;gap:8px;"><span class="led"></span><span style="font-size:13px;font-weight:400;">สอนกรอบวิธีคิด</span></div>
+          <span class="kv">เน้นเสียงพูด</span>
+        </div><div class="well" style="padding:8px;display:flex;flex-direction:column;gap:8px;">
+          <div class="thumb" style="height:162px;"><img src="f116.jpg" alt=""><div class="scrim"></div><span class="seg7" style="position:absolute;left:10px;top:6px;font-size:28px;color:rgba(238,244,255,.85);text-shadow:none;">D</span><span class="tc">SHOT 1.9–2.8 s</span></div>
+          <div style="display:flex;align-items:center;gap:8px;"><span class="led"></span><span style="font-size:13px;font-weight:400;">Before | After</span></div>
+          <span class="kv">ครอป 9:16</span>
+        </div><div class="well sel" style="padding:8px;display:flex;flex-direction:column;gap:8px;">
+          <div style="height:162px;border-radius:4px;border:1px dashed rgba(255,255,255,.18);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;"><span class="knob"></span><span class="tag">MANUAL</span></div>
+          <div style="display:flex;align-items:center;gap:8px;"><span class="led on"></span><span style="font-size:13px;font-weight:400;">กำหนดเอง</span></div>
+          <span class="kv">6 ตัวเลือก · หมุนเอง</span>
+        </div></div>
+    </div>
+    <div style="flex:1;display:grid;grid-template-columns:1fr 340px;gap:14px;min-height:0;">
+      <div class="panel" style="padding:16px 18px;display:flex;flex-direction:column;gap:12px;position:relative;"><span class="screw" style="left:8px;top:8px;"></span><span class="screw" style="right:8px;top:8px;"></span><span class="screw" style="left:8px;bottom:8px;"></span><span class="screw" style="right:8px;bottom:8px;"></span>
+        <div style="display:flex;align-items:baseline;gap:12px;"><span class="tag">SEC 02 · LAYERS · MANUAL</span><span class="h2">กำหนดเอง</span><span class="kv">เปิด/ปิดด้วยสวิตช์ · กดปุ่มเลือกค่า · จอด้านขวาของแต่ละแผงบอกค่าที่เลือกอยู่</span></div>
+        <div style="flex:1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;">
+          <div class="well" style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;align-items:center;gap:12px;"><span class="seg7" style="font-size:13px;">01</span><span style="font-weight:400;font-size:14.5px;">ระยะเวลา</span><div style="flex:1;"></div><span class="seg7" style="font-size:13px;">00:45</span><span class="sw on"><i></i></span></div>
+        <div class="seg" style="grid-template-columns:repeat(4,minmax(0,1fr));"><span class="key">30 วิ</span><span class="key on"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#ffb020" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 8.5l3 3 5-6"/></svg>45 วิ</span><span class="key">60 วิ</span><span class="key">ทั้งคลิป</span></div>
+        <span class="kv">ยังตัดครบ 6 แบบ · ค่านี้คือแบบที่เลือกไว้ก่อน</span>
+      </div>
+          <div class="well" style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;align-items:center;gap:12px;"><span class="seg7" style="font-size:13px;">02</span><span style="font-weight:400;font-size:14.5px;">ซับ</span><div style="flex:1;"></div><span class="seg7" style="font-size:13px;">LINE</span><span class="sw on"><i></i></span></div>
+        <div class="seg" style="grid-template-columns:repeat(2,minmax(0,1fr));"><span class="key on"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#ffb020" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 8.5l3 3 5-6"/></svg>ทั้งบรรทัด</span><span class="key">ทีละคำ</span></div>
+        <span class="kv">ขาวขอบดำ กลางล่าง · แก้คำผิดได้หลังตัด</span>
+      </div>
+          <div class="well" style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;align-items:center;gap:12px;"><span class="seg7" style="font-size:13px;">03</span><span style="font-weight:400;font-size:14.5px;">HOOK + การ์ดปิด</span><div style="flex:1;"></div><span class="seg7" style="font-size:13px;">2 ON</span><span class="sw on"><i></i></span></div>
+        <div style="display:flex;align-items:center;gap:10px;height:44px;padding:0 12px;border-radius:6px;background:rgba(255,255,255,.04);"><span style="font-size:13.5px;">HOOK จากประโยคแรก</span><div style="flex:1;"></div><span class="sw on"><i></i></span></div><div style="display:flex;align-items:center;gap:10px;height:44px;padding:0 12px;border-radius:6px;background:rgba(255,255,255,.04);"><span style="font-size:13.5px;">การ์ดปิด 4 วิ @ชื่อช่อง</span><div style="flex:1;"></div><span class="sw on"><i></i></span></div>
+        <span class="kv">พิมพ์ข้อความเองได้ในขั้น 03</span>
+      </div>
+          <div class="well" style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;align-items:center;gap:12px;"><span class="seg7" style="font-size:13px;">04</span><span style="font-weight:400;font-size:14.5px;">เพลงตามจังหวะ</span><div style="flex:1;"></div><span class="seg7" style="font-size:13px;">ENERGY</span><span class="sw on"><i></i></span></div>
+        <div class="seg" style="grid-template-columns:repeat(4,minmax(0,1fr));"><span class="key on"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#ffb020" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 8.5l3 3 5-6"/></svg>มีพลัง</span><span class="key">ชิล</span><span class="key">ดราม่า</span><span class="key">โลไฟ</span></div><div style="display:flex;flex-direction:column;gap:6px;"><div style="display:flex;align-items:center;gap:10px;height:44px;padding:0 12px;border-radius:6px;background:rgba(255,255,255,.04);"><span style="font-size:13.5px;">ดูดรอยตัดเข้าบีต</span><div style="flex:1;"></div><span class="sw on"><i></i></span></div><div style="display:flex;align-items:center;gap:10px;height:44px;padding:0 12px;border-radius:6px;background:rgba(255,255,255,.04);"><span style="font-size:13.5px;">ลดเสียงเพลงตอนพูด</span><div style="flex:1;"></div><span class="sw on"><i></i></span></div></div>
+        
+      </div>
+          <div class="well" style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;opacity:.6;">
+        <div style="display:flex;align-items:center;gap:12px;"><span class="seg7 off" style="font-size:13px;">05</span><span style="font-weight:400;font-size:14.5px;">สติกเกอร์ / ภาพซ้อน</span><div style="flex:1;"></div><span class="seg7 off" style="font-size:13px;">OFF</span><span class="sw"><i></i></span></div>
+        <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;"><span class="key on" style="height:56px;width:auto;padding:0;position:relative;"><img src="st-4k.png" alt="" style="max-width:46px;max-height:34px;"><span class="led on" style="position:absolute;right:5px;top:5px;"></span></span><span class="key" style="height:56px;width:auto;padding:0;position:relative;"><img src="st-bell.png" alt="" style="max-width:46px;max-height:34px;"></span><span class="key" style="height:56px;width:auto;padding:0;position:relative;"><img src="st-balloon.png" alt="" style="max-width:46px;max-height:34px;"></span><span class="key" style="height:56px;width:auto;padding:0;position:relative;"><img src="st-banner.png" alt="" style="max-width:46px;max-height:34px;"></span></div><span class="key" style="height:44px;"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M8 3v10M3 8h10"/></svg>เลือกจากคลัง 200 · อัปโหลด</span>
+        
+      </div>
+          <div class="well" style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;align-items:center;gap:12px;"><span class="seg7" style="font-size:13px;">06</span><span style="font-weight:400;font-size:14.5px;">เอฟเฟกต์รายช็อต</span><div style="flex:1;"></div><span class="seg7" style="font-size:13px;">2 FX</span><span class="sw on"><i></i></span></div>
+        <div class="seg" style="grid-template-columns:repeat(3,minmax(0,1fr));"><span class="key on"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#ffb020" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 8.5l3 3 5-6"/></svg>ซูมไล่</span><span class="key on"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#ffb020" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 8.5l3 3 5-6"/></svg>PUNCH</span><span class="key">ยิงรัว</span><span class="key">GLITCH</span><span class="key">ขาวดำ</span><span class="key">ไม่ใส่</span></div>
+        <span class="kv">ใส่ทุกช็อตพูด · ปรับทีละช็อตได้หลังตัด</span>
+      </div>
+        </div>
+      </div>
+      <div class="panel" style="padding:16px 18px;display:flex;flex-direction:column;gap:10px;position:relative;"><span class="screw" style="left:8px;top:8px;"></span><span class="screw" style="right:8px;top:8px;"></span><span class="screw" style="left:8px;bottom:8px;"></span><span class="screw" style="right:8px;bottom:8px;"></span>
+        <span class="tag">SUMMARY</span>
+        <div class="well" style="display:flex;flex-direction:column;padding:4px 0;">
+          <div class="stat" style="padding:6px 12px;"><span>LENGTH</span><span>45 s</span></div><div class="stat" style="padding:6px 12px;border-top:1px solid rgba(0,0,0,.5);"><span>SUB</span><span>LINE</span></div><div class="stat" style="padding:6px 12px;border-top:1px solid rgba(0,0,0,.5);"><span>HOOK / CARD</span><span>ON / ON</span></div><div class="stat" style="padding:6px 12px;border-top:1px solid rgba(0,0,0,.5);"><span>MUSIC</span><span>ENERGY · BEAT</span></div><div class="stat" style="padding:6px 12px;border-top:1px solid rgba(0,0,0,.5);"><span>STICKER</span><span>OFF</span></div><div class="stat" style="padding:6px 12px;border-top:1px solid rgba(0,0,0,.5);"><span>FX</span><span>ZOOM · PUNCH</span></div>
+        </div>
+        <div style="flex:1;"></div>
+        <div class="well" style="padding:8px 12px;display:flex;align-items:baseline;justify-content:space-between;"><span class="tag">ETA</span><span class="seg7" style="font-size:30px;">01:00</span></div>
+        <span class="cta" style="width:100%;">ตัดให้เลย · 6 แบบ</span>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

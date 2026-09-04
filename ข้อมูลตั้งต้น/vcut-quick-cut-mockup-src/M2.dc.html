@@ -1,0 +1,148 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pridi:wght@200;300;400;500&family=Bai+Jamjuree:wght@400;500;600;700&display=swap">
+  <style>
+body{margin:0;background:#0f211b;color:#eef1e6;font-family:"Bai Jamjuree","Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased;font-size:13.5px;line-height:1.45;font-weight:400}
+a{color:#f0b25c}a:hover{color:#ffd08a}
+b,strong{font-weight:600}
+.serif{font-family:"Pridi","Bai Jamjuree",serif;font-weight:300}
+.g{background:rgba(12,27,22,.74);border:1px solid rgba(168,196,172,.16);border-radius:14px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 10px 30px rgba(0,0,0,.28)}
+.well{background:rgba(7,17,14,.62);border-radius:10px;border:1px solid rgba(0,0,0,.35)}
+.hl{border-top:1px solid rgba(168,196,172,.16)}
+.muted{color:#9db0a0}
+.small{font-size:12px}
+.h1{font-family:"Pridi","Bai Jamjuree",serif;font-weight:300;font-size:32px;line-height:1.1;letter-spacing:.005em}
+.h2{font-family:"Pridi","Bai Jamjuree",serif;font-weight:400;font-size:17px}
+.num{font-family:"Pridi",serif;font-weight:300;font-variant-numeric:tabular-nums}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:42px;padding:0 18px;border-radius:9px;background:rgba(168,196,172,.10);border:1px solid rgba(168,196,172,.22);color:#eef1e6;font-size:13.5px;font-weight:500;white-space:nowrap;box-sizing:border-box}
+.btn.pri{background:#f0b25c;border-color:#f0b25c;color:#0b1712;font-weight:600;box-shadow:0 6px 18px rgba(240,178,92,.25)}
+.btn.lg{height:50px;padding:0 24px;font-size:15px}
+.btn.sm{height:34px;padding:0 13px;font-size:12.5px;border-radius:8px}
+.btn.ic{width:42px;padding:0}
+.seg{display:grid;gap:6px}
+.seg .btn{height:44px;padding:0 10px;font-weight:500}
+.seg .btn.on{border-color:#f0b25c;color:#f0b25c;background:rgba(240,178,92,.10)}
+.sw{width:52px;height:28px;border-radius:999px;background:rgba(168,196,172,.16);border:1px solid rgba(168,196,172,.2);position:relative;flex-shrink:0;box-sizing:border-box}
+.sw i{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:999px;background:#9db0a0}
+.sw.on{background:#3d6b55;border-color:#3d6b55}.sw.on i{left:27px;background:#eef1e6}
+.row{display:grid;grid-template-columns:52px 1fr auto;align-items:center;gap:14px;padding:10px 0}
+.row+.row{border-top:1px solid rgba(168,196,172,.16)}
+.thumb{position:relative;border-radius:10px;overflow:hidden;background:#000}.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.scrim{position:absolute;inset:0;background:linear-gradient(180deg,rgba(11,23,18,.05) 0%,rgba(11,23,18,0) 40%,rgba(11,23,18,.82) 100%)}
+.card{position:relative;border-radius:14px;overflow:hidden;background:#000;border:1px solid rgba(168,196,172,.16)}
+.card.sel{border-color:#f0b25c;box-shadow:0 0 0 1px #f0b25c,0 10px 30px rgba(240,178,92,.18)}
+.card.dim{opacity:.38}
+.sign{display:inline-flex;align-items:center;gap:8px;padding:4px 10px;border-radius:6px;background:rgba(11,23,18,.85);border:1px solid rgba(240,178,92,.35);color:#f0b25c;font-weight:600;font-size:12px;white-space:nowrap}
+.badge{width:30px;height:30px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;font-family:"Pridi",serif;font-size:16px;background:rgba(11,23,18,.8);border:1.5px solid #eef1e6;color:#eef1e6}
+.badge.on{border-color:#f0b25c;color:#f0b25c}
+.trail{position:relative;height:6px;border-radius:999px;background:repeating-linear-gradient(90deg,rgba(168,196,172,.35) 0 6px,transparent 6px 11px)}
+.trail i{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:#f0b25c}
+.trail i::after{content:"";position:absolute;right:-6px;top:-4px;width:14px;height:14px;border-radius:999px;background:#f0b25c;box-shadow:0 0 0 3px rgba(240,178,92,.25)}
+.dot{width:8px;height:8px;border-radius:999px;background:rgba(168,196,172,.25);flex-shrink:0}.dot.on{background:#f0b25c}.dot.done{background:#3d6b55}
+.sub{position:absolute;left:8%;right:8%;bottom:14%;text-align:center;font-size:12px;font-weight:700;color:#fff;text-shadow:0 1px 0 #000,0 0 3px #000,0 0 6px #000;line-height:1.3}
+.hook{position:absolute;left:8%;right:8%;top:12%;text-align:center;font-size:13px;font-weight:700;color:#fff;text-shadow:0 1px 0 #000,0 0 4px #000}
+.hook em{font-style:normal;color:#f0b25c}
+.tab{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:9px;color:#9db0a0;border:1px solid transparent;white-space:nowrap}
+.tab.on{color:#eef1e6;background:rgba(168,196,172,.10);border-color:rgba(168,196,172,.22)}
+.tab .cnt{font-size:11.5px;color:#9db0a0}
+.tag{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#9db0a0;font-weight:600}
+.stepper{display:grid;grid-template-columns:44px 1fr 44px;gap:6px;align-items:center}
+.stepper .btn{height:44px;width:44px;padding:0;font-size:20px}
+.stepper .well{height:44px;display:flex;align-items:center;justify-content:center;font-family:"Pridi",serif;font-size:20px}
+.pos{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.pos span{height:26px;border-radius:5px;background:rgba(168,196,172,.10);border:1px solid rgba(168,196,172,.18);box-sizing:border-box}
+.pos span.on{background:rgba(240,178,92,.18);border-color:#f0b25c}
+</style>
+</helmet>
+<div style="width:1440px;height:900px;background:linear-gradient(180deg,#0b1626 0%,#15304a 34%,#2d5570 52%,#4a6f78 60%,#0f211b 62%,#0b1712 100%);display:flex;flex-direction:column;overflow:hidden;position:relative;">
+<svg width="1440" height="900" viewBox="0 0 1440 900" style="position:absolute;inset:0;pointer-events:none;" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="glow" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0b25c" stop-opacity="0"/><stop offset="1" stop-color="#f0b25c" stop-opacity=".28"/></linearGradient>
+    <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .06 0"/></filter>
+  </defs>
+  <rect x="0" y="330" width="1440" height="220" fill="url(#glow)"/>
+  <polygon points="0,900 0,398 103,427 206,384 309,430 411,434 514,436 617,464 720,409 823,433 926,393 1029,404 1131,433 1234,417 1337,469 1440,426 1440,900" fill="#2a4d63" opacity=".85"/>
+  <polygon points="0,900 0,448 131,465 262,482 393,473 524,519 655,479 785,496 916,469 1047,451 1178,481 1309,456 1440,508 1440,900" fill="#1e3a49"/>
+  <polygon points="0,900 0,511 85,529 169,548 254,532 339,555 424,517 508,525 593,517 678,511 762,545 847,527 932,556 1016,535 1101,524 1186,528 1271,501 1355,536 1440,523 1440,900" fill="#173029"/>
+  <path d="M-10,900 L-10,600 M-10,600 L4,545 L19,600 M16,600 L30,574 L45,600 M42,600 L56,550 L71,600 M68,600 L82,553 L97,600 M94,600 L108,573 L123,600 M120,600 L134,544 L149,600 M146,600 L160,563 L175,600 M172,600 L186,566 L201,600 M198,600 L212,542 L227,600 M224,600 L238,571 L253,600 M250,600 L264,557 L279,600 M276,600 L290,547 L305,600 M302,600 L316,574 L331,600 M328,600 L342,548 L357,600 M354,600 L368,555 L383,600 M380,600 L394,571 L409,600 M406,600 L420,543 L435,600 M432,600 L446,565 L461,600 M458,600 L472,564 L487,600 M484,600 L498,543 L513,600 M510,600 L524,572 L539,600 M536,600 L550,554 L565,600 M562,600 L576,549 L591,600 M588,600 L602,574 L617,600 M614,600 L628,546 L643,600 M640,600 L654,558 L669,600 M666,600 L680,570 L695,600 M692,600 L706,542 L721,600 M718,600 L732,567 L747,600 M744,600 L758,561 L773,600 M770,600 L784,544 L799,600 M796,600 L810,573 L825,600 M822,600 L836,552 L851,600 M848,600 L862,551 L877,600 M874,600 L888,573 L903,600 M900,600 L914,544 L929,600 M926,600 L940,561 L955,600 M952,600 L966,568 L981,600 M978,600 L992,542 L1007,600 M1004,600 L1018,569 L1033,600 M1030,600 L1044,559 L1059,600 M1056,600 L1070,546 L1085,600 M1082,600 L1096,574 L1111,600 M1108,600 L1122,549 L1137,600 M1134,600 L1148,554 L1163,600 M1160,600 L1174,572 L1189,600 M1186,600 L1200,543 L1215,600 M1212,600 L1226,563 L1241,600 M1238,600 L1252,566 L1267,600 M1264,600 L1278,542 L1293,600 M1290,600 L1304,571 L1319,600 M1316,600 L1330,556 L1345,600 M1342,600 L1356,547 L1371,600 M1368,600 L1382,574 L1397,600 M1394,600 L1408,547 L1423,600 M1420,600 L1434,556 L1449,600 M1446,600 L1460,571 L1475,600 L1450,600 L1450,900 Z" fill="#0f231c"/>
+  <path d="M-10,900 L-10,640 M-10,640 L11,598 L32,640 M28,640 L49,562 L70,640 M66,640 L87,599 L108,640 M104,640 L125,585 L146,640 M142,640 L163,567 L184,640 M180,640 L201,606 L222,640 M218,640 L239,572 L260,640 M256,640 L277,578 L298,640 M294,640 L315,604 L336,640 M332,640 L353,564 L374,640 M370,640 L391,591 L412,640 M408,640 L429,595 L450,640 M446,640 L467,562 L488,640 M484,640 L505,602 L526,640 M522,640 L543,582 L564,640 M560,640 L581,569 L602,640 M598,640 L619,606 L640,640 M636,640 L657,570 L678,640 M674,640 L695,581 L716,640 M712,640 L733,602 L754,640 M750,640 L771,563 L792,640 M788,640 L809,594 L830,640 M826,640 L847,592 L868,640 M864,640 L885,564 L906,640 M902,640 L923,604 L944,640 M940,640 L961,578 L982,640 M978,640 L999,572 L1020,640 M1016,640 L1037,606 L1058,640 M1054,640 L1075,567 L1096,640 M1092,640 L1113,585 L1134,640 M1130,640 L1151,600 L1172,640 M1168,640 L1189,562 L1210,640 M1206,640 L1227,597 L1248,640 M1244,640 L1265,588 L1286,640 M1282,640 L1303,565 L1324,640 M1320,640 L1341,605 L1362,640 M1358,640 L1379,575 L1400,640 M1396,640 L1417,575 L1438,640 M1434,640 L1455,605 L1476,640 L1450,640 L1450,900 Z" fill="#0b1913"/>
+  <rect width="1440" height="900" filter="url(#grain)"/>
+</svg>
+<div style="height:68px;display:flex;align-items:center;gap:22px;padding:0 36px;flex-shrink:0;position:relative;">
+    <span style="display:inline-flex;align-items:center;gap:9px;font-family:'Pridi',serif;font-size:20px;font-weight:400;letter-spacing:.01em;"><svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="#f0b25c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M1.5 13L6 5l2.5 4L10.5 6l4 7z M6 5l1 1.5"/></svg>vcut</span>
+    <span class="muted small" style="display:inline-flex;align-items:center;gap:8px;"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#9db0a0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M2.5 3h11v10h-11zM2.5 6h11M2.5 10h11M5.5 3v10M10.5 3v10"/></svg>IMG_1234.MOV · 02:14 · +1 ไฟล์</span>
+    <div style="flex:1;"></div>
+    <div style="display:flex;align-items:center;gap:12px;"><span style="display:inline-flex;align-items:center;gap:9px;color:#eef1e6;font-weight:400;"><span style="width:26px;height:26px;border-radius:999px;background:#3d6b55;display:inline-flex;align-items:center;justify-content:center;"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#eef1e6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 8.5l3 3 5-6"/></svg></span>ใส่วิดีโอ</span><span style="width:56px;height:0;border-top:2px solid #3d6b55;"></span><span style="display:inline-flex;align-items:center;gap:9px;color:#eef1e6;font-weight:500;"><span style="width:26px;height:26px;border-radius:999px;background:#f0b25c;color:#0b1712;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;">2</span>สไตล์</span><span style="width:56px;height:0;border-top:2px dashed rgba(168,196,172,.35);"></span><span style="display:inline-flex;align-items:center;gap:9px;color:#9db0a0;font-weight:400;"><span style="width:26px;height:26px;border-radius:999px;border:1.5px dashed rgba(168,196,172,.45);color:#9db0a0;display:inline-flex;align-items:center;justify-content:center;font-size:12px;box-sizing:border-box;">3</span>ส่งออก</span></div>
+    <div style="flex:1;"></div>
+    <span style="width:170px;"></span>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;gap:18px;padding:16px 36px 28px;min-height:0;position:relative;">
+    <div style="display:flex;align-items:baseline;gap:16px;"><span class="h1">เลือกสไตล์</span><span class="muted">4 สูตรจากเอนจิน เลือกชั้นแต่งให้เอง · หรือกำหนดเองทั้งหมด</span></div>
+    <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;"><div class="card sel" style="height:380px;">
+          <img src="f57.jpg" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;">
+          <div class="scrim"></div>
+          <span class="badge on" style="position:absolute;left:14px;top:14px;">A</span>
+          <span style="position:absolute;right:12px;top:12px;display:inline-flex;width:26px;height:26px;border-radius:999px;background:#f0b25c;align-items:center;justify-content:center;"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#0b1712" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M4 8.5l3 3 5-6"/></svg></span>
+          <div style="position:absolute;left:14px;right:14px;bottom:14px;display:flex;flex-direction:column;gap:4px;">
+            <span style="font-size:15px;font-weight:600;">ปิดการขาย / แนะนำช่อง</span>
+            <span class="small" style="color:rgba(238,241,230,.72);">ช็อต 1.7–2.0 วิ · ช้า → รัว → ช้า</span>
+          </div>
+        </div><div class="card" style="height:380px;">
+          <img src="f14.jpg" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;">
+          <div class="scrim"></div>
+          <span class="badge" style="position:absolute;left:14px;top:14px;">B</span>
+          
+          <div style="position:absolute;left:14px;right:14px;bottom:14px;display:flex;flex-direction:column;gap:4px;">
+            <span style="font-size:15px;font-weight:600;">โชว์หลักฐาน</span>
+            <span class="small" style="color:rgba(238,241,230,.72);">ช็อต 2.4 วิ · เลขนับขึ้น</span>
+          </div>
+        </div><div class="card" style="height:380px;">
+          <img src="f88.jpg" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;">
+          <div class="scrim"></div>
+          <span class="badge" style="position:absolute;left:14px;top:14px;">C</span>
+          
+          <div style="position:absolute;left:14px;right:14px;bottom:14px;display:flex;flex-direction:column;gap:4px;">
+            <span style="font-size:15px;font-weight:600;">สอนกรอบวิธีคิด</span>
+            <span class="small" style="color:rgba(238,241,230,.72);">ช็อต 5.0 วิ · เน้นเสียงพูด</span>
+          </div>
+        </div><div class="card" style="height:380px;">
+          <img src="f116.jpg" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;">
+          <div class="scrim"></div>
+          <span class="badge" style="position:absolute;left:14px;top:14px;">D</span>
+          
+          <div style="position:absolute;left:14px;right:14px;bottom:14px;display:flex;flex-direction:column;gap:4px;">
+            <span style="font-size:15px;font-weight:600;">Before | After</span>
+            <span class="small" style="color:rgba(238,241,230,.72);">ช็อต 1.9–2.8 วิ · ครอป 9:16</span>
+          </div>
+        </div><div class="card" style="height:380px;background:rgba(12,27,22,.6);border-style:dashed;display:flex;flex-direction:column;justify-content:space-between;padding:14px;">
+          <span class="badge"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#eef1e6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M3 13h3l7-7-3-3-7 7zM9 4l3 3"/></svg></span>
+          <div style="display:flex;flex-direction:column;gap:4px;"><span style="font-size:15px;font-weight:600;">กำหนดเอง</span><span class="small muted">เลือกทุกอย่างเอง · 6 ตัวเลือก</span></div>
+        </div></div>
+    <div class="g" style="padding:22px 26px;display:flex;flex-direction:column;gap:18px;">
+      <div style="display:flex;align-items:baseline;gap:14px;"><span class="h2">สูตร A แต่งให้แบบนี้</span><span class="muted small">แก้เพิ่มได้หลังตัดเสร็จ ทีละแบบ ในขั้นส่งออก</span></div>
+      <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:22px;">
+        <div style="display:flex;gap:12px;align-items:flex-start;"><span style="width:34px;height:34px;border-radius:999px;background:rgba(168,196,172,.10);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#f0b25c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M3 4h10M8 4v9M5.5 13h5"/></svg></span><div style="display:flex;flex-direction:column;gap:2px;"><span style="font-weight:600;">ซับจากบทพูด</span><span class="muted small">ตัวหนา ขาวขอบดำ · กลางล่าง</span></div></div>
+        <div style="display:flex;gap:12px;align-items:flex-start;"><span style="width:34px;height:34px;border-radius:999px;background:rgba(168,196,172,.10);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#f0b25c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M8 2l1.3 3.7L13 7l-3.7 1.3L8 12l-1.3-3.7L3 7l3.7-1.3z"/></svg></span><div style="display:flex;flex-direction:column;gap:2px;"><span style="font-weight:600;">HOOK + การ์ดปิด</span><span class="muted small">จากประโยคแรก · การ์ด 4 วิ @ช่อง</span></div></div>
+        <div style="display:flex;gap:12px;align-items:flex-start;"><span style="width:34px;height:34px;border-radius:999px;background:rgba(168,196,172,.10);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#f0b25c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M6 12.5V4l7-1.5v8.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="11" r="1.5"/></svg></span><div style="display:flex;flex-direction:column;gap:2px;"><span style="font-weight:600;">เพลงตามจังหวะ</span><span class="muted small">สนุก/มีพลัง · รอยตัดเข้าบีต · ลดตอนพูด</span></div></div>
+        <div style="display:flex;gap:12px;align-items:flex-start;"><span style="width:34px;height:34px;border-radius:999px;background:rgba(168,196,172,.10);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#f0b25c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M3 13L13 3M9 3h4v4M3 9v4h4"/></svg></span><div style="display:flex;flex-direction:column;gap:2px;"><span style="font-weight:600;">เอฟเฟกต์รายช็อต</span><span class="muted small">ยิงรัวช่วงกลาง · ซูมไล่ · punch</span></div></div>
+        <div style="display:flex;gap:12px;align-items:flex-start;opacity:.45;"><span style="width:34px;height:34px;border-radius:999px;background:rgba(168,196,172,.10);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#9db0a0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M3 3h10v6l-4 4H3z M9 13V9h4"/></svg></span><div style="display:flex;flex-direction:column;gap:2px;"><span style="font-weight:600;">สติกเกอร์ / ภาพซ้อน</span><span class="muted small">สูตรนี้ไม่ใส่ · เพิ่มเองทีหลังได้</span></div></div>
+      </div>
+    </div>
+    <div style="flex:1;"></div>
+    <div style="display:flex;align-items:center;gap:18px;">
+      <span class="muted small">ตัดให้ 6 แบบ ต่างกันที่ความยาวและจังหวะ · 1080×1920 · −14 LUFS · ราว 1 นาที</span>
+      <div style="flex:1;"></div>
+      <span class="btn pri lg">ตัดให้เลย · 6 แบบ<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#0b1712" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M6 3.5l4.5 4.5L6 12.5"/></svg></span>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
