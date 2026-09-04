@@ -1,240 +1,500 @@
 "use client";
 
-// ③ ส่งออก — ซ้าย: 6 แบบของสไตล์ที่เลือก · กลาง: ดูแบบที่เลือก · ขวา: ชั้นแต่ง + ส่งออก
+// ③ เลือกแบบ · ส่งออก (mockup F3)
+//   ซ้าย : "เลือกแบบ" · แท็บสไตล์ A–D + กำหนดเอง (ตัดแล้ว = จำนวนแบบ · ยังไม่ตัด = "ตัดเพิ่ม" → recut)
+//          · การ์ดภาพ 3×2 ของ 6 แบบ · "เปลี่ยนสไตล์"
+//   ขวา  : ตัวอย่างแบบที่ดูอยู่ (วิดีโอ + เล่น/หยุด + ก่อน/ถัดไป) · "ชั้นแต่งของแบบนี้" 5 แถว (สวิตช์ + แก้)
+//          · ส่งออก 3 ช่อง (build / build_text / build_fx) + ปุ่มหลัก
 //
-// กดการ์ด = ดูตัวอย่าง (out.mp4 ของแบบนั้น) · กด "ใช้แบบนี้" = activate ในเอนจิน
-// (สลับ edl/render/fx/captions) แล้วถ้าแบบนั้นยังไม่เคยมีชั้นแต่ง → สั่ง autofx ให้เอง
-// ขั้น 4/5 (ซับ · ทุกชั้น) ทำต่อจากแบบที่ active เท่านั้น
+// กดการ์ด = ใช้แบบนั้น (activate ในเอนจิน — สลับ edl/render/fx/captions) แล้วถ้ายังไม่เคยมีชั้นแต่ง → autofx
+// ระหว่างงานวิ่ง กดการ์ดได้แค่ดู · แบบที่ดูอยู่ (?v=) กับแบบที่ใช้อยู่ (active) อาจต่างกัน — ส่งออกได้เฉพาะ active
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import TopBar from "@/components/frames/TopBar";
-import { Btn, Cta, Empty, Keys, Kv, Led, Mono, Panel, Tag, Thumb, Well, fmtBytes, fmtClock } from "@/components/instrument";
+import { Bar, Btn, Cta, Empty, Icon, Seg, Tog, cx, fmtClock, type IconName } from "@/components/instrument";
 import { useEngine, type Variant } from "@/hooks/engine";
 import { useRoute, type Edit3 } from "@/hooks/route";
-import { thumbUrl, variantUrl, type OutKind } from "@/lib/api";
+import { api2, thumbUrl, variantUrl, type OutKind } from "@/lib/api";
+import { FEATURES } from "@/lib/roadmap";
 import { dur } from "@/lib/time";
-import Player from "./Player";
 import { layerRows } from "./layers";
 import { useStudio } from "./store";
+import { styleNowOf, styleTabs, type StyleTab } from "./styles";
 
-const BUILD: { v: OutKind; label: string; mark: string; step: string; tip: string }[] = [
-  { v: "out", label: "ภาพ+เสียง", mark: "③", step: "build", tip: "ต่อไฟล์จากชิ้นที่ตัด (ไม่มีข้อความ)" },
-  { v: "text", label: "+ ซับ", mark: "④", step: "build_text", tip: "ภาพ+เสียง + เผาซับลงภาพ" },
-  { v: "fx", label: "+ ทุกชั้น", mark: "⑤", step: "build_fx", tip: "ทุกชั้นแต่ง: HOOK · การ์ด · ซับ · เพลง · สติกเกอร์ · เอฟเฟกต์" },
+const BUILD: { v: OutKind; label: string; step: string; tip: string }[] = [
+  { v: "out", label: "ภาพ+เสียง", step: "build", tip: "ต่อไฟล์จากชิ้นที่ตัด (ไม่มีข้อความ)" },
+  { v: "text", label: "+ ซับ", step: "build_text", tip: "ภาพ+เสียง + เผาซับลงภาพ" },
+  { v: "fx", label: "+ ทุกชั้น", step: "build_fx", tip: "ทุกชั้นแต่ง: HOOK · การ์ดปิด · ซับ · เพลง · สติกเกอร์ · เอฟเฟกต์" },
 ];
 
-function VariantCard({ v, sel, onClick }: { v: Variant; sel: boolean; onClick: () => void }) {
+/** ชื่อ/ไอคอนของแถวชั้นแต่งตาม mockup — โน้ตมาจาก layerRows (store) */
+const LAYER_META: { id: Edit3; name: string; icon: IconName }[] = [
+  { id: "sub", name: "ซับ", icon: "text" },
+  { id: "text", name: "HOOK + การ์ดปิด", icon: "spark" },
+  { id: "music", name: "เพลงตามจังหวะ", icon: "music" },
+  { id: "sticker", name: "สติกเกอร์ / ภาพซ้อน", icon: "sticker" },
+  { id: "fx", name: "เอฟเฟกต์รายช็อต", icon: "fx" },
+];
+
+// ─────────────────────────── การ์ดแบบ ───────────────────────────
+
+function VariantCard({ v, sel, hook, sub, onClick }: { v: Variant; sel: boolean; hook: string; sub: string; onClick: () => void }) {
   const bad = !v.ok;
   return (
-    <Well sel={sel} onClick={bad ? undefined : onClick} style={{ padding: 8, display: "grid", gridTemplateColumns: "54px 1fr", gap: 10, alignItems: "center", opacity: bad ? 0.55 : 1 }} title={bad ? v.error : v.note}>
-      <Thumb src={v.first ? thumbUrl(v.first) : undefined} w={54} h={96} tc={v.ok ? dur(v.dur) : undefined} />
-      <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 14, fontWeight: 500 }}>{v.label}</span>
-          {v.active && (
-            <span style={{ fontSize: 10.5, padding: "1px 7px", borderRadius: 999, background: "var(--amber)", color: "#08182e", fontWeight: 600 }}>ใช้อยู่</span>
-          )}
-        </div>
-        <Kv style={{ fontSize: 11.5, whiteSpace: "normal", lineHeight: "15px" }}>{bad ? v.error || "ยังไม่ได้ตัด" : v.note}</Kv>
-        {v.ok && (
-          <Mono style={{ fontSize: 10.5, color: "var(--muted)" }}>
-            {v.shots} ช็อต · {v.dur.toFixed(1)} วิ{v.hasLayers ? " · มีชั้นแต่ง" : ""}
-          </Mono>
-        )}
+    <div className={cx("card", sel && "sel", bad && "dim")} onClick={bad ? undefined : onClick} title={bad ? v.error || "ยังไม่ได้ตัด" : `${v.label} · ${v.note}`} style={{ minHeight: 0, cursor: bad ? "not-allowed" : "pointer" }} role="button" aria-pressed={sel}>
+      {v.first ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={thumbUrl(v.first)} alt="" loading="lazy" onError={(e) => (e.currentTarget.style.display = "none")} />
+      ) : null}
+      <div className="scrim" />
+      {sel && hook && <span className="hook-preview">{hook}</span>}
+      {sel && sub && (
+        <span className="sub-preview" style={{ bottom: "34%" }}>
+          {sub}
+        </span>
+      )}
+      {v.ok && (
+        <span className="num" style={{ position: "absolute", right: 14, top: 8, fontSize: 30, color: "rgba(240,244,234,.9)" }}>
+          {dur(v.dur)}
+        </span>
+      )}
+      {sel && (
+        <span className="check-badge" style={{ position: "absolute", left: 12, top: 12 }}>
+          <Icon name="check" size={14} color="var(--ink-dark)" />
+        </span>
+      )}
+      <div style={{ position: "absolute", left: 14, right: 14, bottom: 12, display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+        <span style={{ fontSize: 15, fontWeight: 400, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v.label}</span>
+        <span className="small" style={{ color: "rgba(240,244,234,.72)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {bad ? v.error || "ยังไม่ได้ตัด" : `${v.shots} ช็อต${v.active ? " · ใช้อยู่" : ""}`}
+        </span>
       </div>
-    </Well>
+    </div>
   );
 }
 
-export default function Variants() {
+// ─────────────────────────── ตัวอย่างแบบ (แผงขวาบน) ───────────────────────────
+
+function PreviewVideo({
+  v,
+  style,
+  letter,
+  frame,
+  lufs,
+  hook,
+  sub,
+  onPrev,
+  onNext,
+  canPrev,
+  canNext,
+  onTimeline,
+  onUse,
+  useBusy,
+  paused,
+}: {
+  v: Variant;
+  style: string;
+  letter: string;
+  frame: { w: number; h: number };
+  lufs: number;
+  hook: string;
+  sub: string;
+  onPrev: () => void;
+  onNext: () => void;
+  canPrev: boolean;
+  canNext: boolean;
+  onTimeline?: () => void;
+  onUse?: () => void;
+  useBusy?: boolean;
+  /** ลิ้นชักเปิดอยู่ — หยุดวิดีโอ */
+  paused: boolean;
+}) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const [t, setT] = useState(0);
+  const [len, setLen] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => {
+    if (paused) ref.current?.pause();
+  }, [paused]);
+  const total = len || v.dur;
+  const toggle = () => {
+    const el = ref.current;
+    if (!el) return;
+    if (el.paused) el.play().catch(() => {});
+    else el.pause();
+  };
+  const seek = (pct: number) => {
+    const el = ref.current;
+    if (el && total > 0) el.currentTime = pct * total;
+  };
+  return (
+    <div style={{ display: "flex", gap: 16 }}>
+      <div className="thumb" style={{ width: 110, height: 196, flexShrink: 0 }}>
+        {v.ok ? (
+          <video
+            ref={ref}
+            src={variantUrl(v.id, v.made, style)}
+            poster={v.first ? thumbUrl(v.first) : undefined}
+            playsInline
+            preload="metadata"
+            onTimeUpdate={(e) => setT(e.currentTarget.currentTime)}
+            onLoadedMetadata={(e) => setLen(e.currentTarget.duration || 0)}
+            onPlay={() => setPlaying(true)}
+            onPause={() => setPlaying(false)}
+            onEnded={() => setPlaying(false)}
+            onClick={toggle}
+            style={{ cursor: "pointer" }}
+          />
+        ) : (
+          <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 8, textAlign: "center" }}>
+            <span className="muted small">{v.error || "ยังไม่ได้ตัด"}</span>
+          </div>
+        )}
+        {hook && <span className="hook-preview" style={{ fontSize: 11 }}>{hook}</span>}
+        {sub && <span className="sub-preview" style={{ fontSize: 10.5 }}>{sub}</span>}
+      </div>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
+        <span className="num" style={{ fontSize: 34, lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={v.label}>
+          {letter} · {Math.round(v.dur)} <span className="muted" style={{ fontSize: 16 }}>วิ</span>
+        </span>
+        <span className="muted small" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {v.shots} ช็อต · {frame.w}×{frame.h} · {lufs > 0 ? "" : "−"}{Math.abs(lufs).toFixed(0)} LUFS
+        </span>
+        <div style={{ flex: 1 }} />
+        {onUse && (
+          <Btn sm on onClick={onUse} disabled={useBusy} title="สลับให้ชั้นแต่ง/ส่งออก ทำต่อจากแบบนี้">
+            {useBusy ? "กำลังสลับ…" : "ใช้แบบนี้"}
+            <Icon name="chev" size={11} />
+          </Btn>
+        )}
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <Btn sm ic onClick={onPrev} disabled={!canPrev} title="แบบก่อนหน้า">
+            <Icon name="prev" size={12} />
+          </Btn>
+          <Btn sm pri onClick={toggle} disabled={!v.ok} style={{ flex: 1, boxShadow: "none" }} title={playing ? "หยุด" : "เล่นตัวอย่างของแบบนี้"}>
+            <Icon name={playing ? "pause" : "play"} size={12} color="var(--ink-dark)" />
+            {playing ? "หยุด" : "เล่น"}
+          </Btn>
+          <Btn sm ic onClick={onNext} disabled={!canNext} title="แบบถัดไป">
+            <Icon name="next" size={12} />
+          </Btn>
+        </div>
+        <span
+          style={{ display: "block", padding: "4px 0", cursor: v.ok ? "pointer" : undefined }}
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            seek((e.clientX - r.left) / Math.max(1, r.width));
+          }}
+          title="กดเพื่อเลื่อน"
+        >
+          <Bar pct={total > 0 ? (t / total) * 100 : 0} />
+        </span>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+          <span className="muted small num">
+            {dur(t)} / {dur(total)}
+          </span>
+          {onTimeline && (
+            <button type="button" className="tab small" onClick={onTimeline} style={{ color: "var(--amber)", padding: 0, gap: 3, alignItems: "center" }} title="ไทม์ไลน์เต็ม — สลับ/ตัด/เล็มช็อตของแบบที่ใช้อยู่">
+              ไทม์ไลน์
+              <Icon name="chev" size={10} color="var(--amber)" />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────── หน้า ③ ───────────────────────────
+
+export default function Variants({ dim = false }: { dim?: boolean }) {
   const eng = useEngine();
-  const rt = useRoute();
+  const r = useRoute();
   const s = useStudio();
   const running = Boolean(eng.job?.running);
-  const active = eng.variants.find((v) => v.active) ?? null;
-  const sel = eng.variants.find((v) => v.id === rt.variant) ?? active ?? eng.variants.find((v) => v.ok) ?? null;
+  const proj = eng.proj;
   const [switching, setSwitching] = useState(false);
+  const [recutting, setRecutting] = useState(false);
   const [build, setBuild] = useState<OutKind>("fx");
-  const [showOut, setShowOut] = useState(false);
 
-  // แบบที่ดูอยู่คือแบบที่ active และมีไฟล์ส่งออกแล้ว → เปิด Player (ดู ③④⑤ + ชั้นซ้อนสด)
-  const have = useMemo(() => s.outs.filter((o) => o.exists).map((o) => o.kind), [s.outs]);
-  const canPlayer = Boolean(sel?.active) && have.length > 0;
+  // ── สไตล์ที่ดูอยู่ ↔ ก้อน variants ของเอนจิน ──
+  const styleNow = styleNowOf(r.style, proj);
+  const { variantsStyle, setVariantsStyle } = eng;
   useEffect(() => {
-    if (!canPlayer) setShowOut(false);
-  }, [canPlayer]);
+    if (variantsStyle !== styleNow) setVariantsStyle(styleNow);
+  }, [styleNow, variantsStyle, setVariantsStyle]);
+  const vd = eng.variantsData;
+  const loaded = vd !== null && (vd.style === styleNow || (!vd.style && vd.project_style === styleNow));
+  const variants = useMemo(() => (loaded ? eng.variants : []), [loaded, eng.variants]);
+  const styleInfo = useMemo(() => new Map((vd?.styles ?? []).map((x) => [x.style, x])), [vd]);
+  const tabs = useMemo(() => styleTabs(s.setup), [s.setup]);
+  const tabNow = tabs.find((t) => t.key === styleNow);
+  const letter = tabNow ? (tabNow.custom ? tabNow.label : tabNow.letter) : styleNow;
+  const cut = new Set(proj?.styles_cut ?? []);
 
-  const rows = useMemo(() => layerRows(s), [s]);
+  // ── แบบที่ใช้อยู่ · แบบที่ดูอยู่ ──
+  const active = variants.find((v) => v.active) ?? null;
+  const okList = variants.filter((v) => v.ok);
+  const view = variants.find((v) => v.id === r.variant) ?? active ?? okList[0] ?? null;
+  const viewIdx = view ? okList.findIndex((v) => v.id === view.id) : -1;
+
+  // ── ชั้นแต่ง (ของแบบที่ active — store ถือ fx/captions ของแบบนั้น) ──
+  const rows = useMemo(() => new Map(layerRows(s).map((l) => [l.id, l])), [s]);
   const rb = s.rebuild;
   const modN = (s.dirty ? 1 : 0) + (s.fx.dirty ? 1 : 0) + (s.cap.dirty ? 1 : 0);
+  const dirtyFiles = [s.dirty && "edl.json", s.cap.dirty && "captions.json", s.fx.dirty && "fx.json"].filter(Boolean) as string[];
+  const hookText = useMemo(() => {
+    const t = s.fx.draft?.texts.find((x) => (x.lines?.length ?? 0) === 0 && !x.id.startsWith("tr:") && !x.count);
+    return t?.text.split("\n")[0] ?? "";
+  }, [s.fx.draft]);
+  const subText = s.cap.draft?.enabled ? (s.cap.data?.cues[0]?.text ?? "") : "";
+
+  // ── ส่งออก ──
   const buildDef = BUILD.find((b) => b.v === build) ?? BUILD[2];
   const outFile = s.outs.find((o) => o.kind === build);
   const eta = build === "out" ? rb.eta.edl : build === "text" ? rb.eta.edl * Number(rb.edl) + rb.eta.text : rb.eta.edl * Number(rb.edl) + rb.eta.fx;
-  const need = build === "out" ? rb.edl : build === "text" ? rb.text : rb.fx;
-  const dirtyFiles = [s.dirty && "edl.json", s.cap.dirty && "captions.json", s.fx.dirty && "fx.json"].filter(Boolean) as string[];
+  const canExport = Boolean(view?.active && active && s.shots.length) && !running;
 
-  const useThis = async (v: Variant) => {
+  // ── สรุปบนแถบบน: ตัดเสร็จ n / 6 · เวลาที่ใช้ตัด ──
+  const okN = variants.filter((v) => v.ok).length;
+  const totalN = styleInfo.get(styleNow)?.total ?? variants.length;
+  const took = (vd?.items ?? []).filter((x) => x.ok).reduce((a, x) => a + (x.took || 0), 0);
+
+  const activateThis = async (v: Variant) => {
     if (running || switching || v.active || !v.ok) return;
     if (modN && !confirm("มีที่แก้ค้างในแบบที่ใช้อยู่ — สลับแบบแล้วจะทิ้งที่ยังไม่บันทึก ไปต่อไหม")) return;
     setSwitching(true);
     try {
-      const ok = await eng.activateVariant(v.id);
+      const ok = await eng.activateVariant(v.id, styleNow);
       if (ok && !v.hasLayers) await eng.runJob("autofx");
-      if (ok) eng.flash(`ใช้แบบ ${v.label} แล้ว${v.hasLayers ? "" : " — กำลังวางชั้นแต่งตามสไตล์"}`);
+      if (ok) eng.flash(`ใช้แบบ ${v.label} แล้ว${v.hasLayers ? "" : " — กำลังวางชั้นแต่งตามสูตร"}`);
     } finally {
       setSwitching(false);
     }
   };
 
+  const pick = (v: Variant) => {
+    if (!v.ok) return;
+    r.setVariant(v.id);
+    if (!running && !v.active) void activateThis(v);
+  };
+
+  // แท็บที่ยังไม่ตัด: วางค่าสูตรลงโปรเจกต์ → recut (ใช้ listen เดิม) → ไปหน้า ② ดูสถานะ
+  // เปลี่ยน ?st= กับ ?s= ต้องคนละรอบ (route.set อ่าน query ตอน render) — ตั้ง st ก่อน แล้วค่อย go(2) เมื่อ URL ตามทัน
+  const goAfterStyle = useRef<string | null>(null);
+  useEffect(() => {
+    if (goAfterStyle.current !== null && r.style === goAfterStyle.current) {
+      goAfterStyle.current = null;
+      r.go(2);
+    }
+  }, [r]);
+  const recut = async (tab: StyleTab) => {
+    if (running || recutting) return;
+    const path = s.setup?.project.path;
+    if (!path) return eng.flash("ยังไม่มีไฟล์โปรเจกต์ — ใส่วิดีโอที่ขั้น ① ก่อน");
+    setRecutting(true);
+    try {
+      await api2.saveSetup(path, tab.values);
+      const ok = await eng.runJob("recut");
+      if (!ok) return;
+      if (r.style === tab.key) r.go(2);
+      else {
+        goAfterStyle.current = tab.key;
+        r.setStyle(tab.key);
+      }
+    } catch (e) {
+      eng.flash(e instanceof Error ? e.message : "วางค่าสูตรไม่สำเร็จ");
+    } finally {
+      setRecutting(false);
+    }
+  };
+  const pickTab = (tab: StyleTab) => {
+    if (tab.key === styleNow) return;
+    if (cut.has(tab.key)) {
+      eng.setVariantsStyle(tab.key);
+      r.setStyle(tab.key);
+    } else void recut(tab);
+  };
+
   const onExport = async () => {
-    if (running || !active) return;
+    if (!canExport) return;
     if (dirtyFiles.length) await s.saveAll();
     await eng.runJob(buildDef.step);
   };
 
   const openEdit = (id: Edit3) => {
-    if (!sel?.active) return eng.flash("กด “ใช้แบบนี้” ก่อน ถึงจะแก้ชั้นแต่งของแบบนั้นได้");
-    rt.openEdit(id);
+    if (!view?.active) return eng.flash("กด “ใช้แบบนี้” ก่อน ถึงจะแก้ชั้นแต่งของแบบนั้นได้");
+    r.openEdit(id);
   };
+
+  const gridStyle = dim ? { opacity: 0.3, filter: "saturate(.5) blur(1px)", pointerEvents: "none" as const } : undefined;
 
   return (
     <>
       <TopBar
         right={
-          active ? (
-            <Well className="mono" style={{ padding: "4px 10px", fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap" }}>
-              ใช้อยู่ <span style={{ color: "var(--amber-hi)" }}>{active.label}</span> · {s.total.toFixed(1)} s · {s.shots.length} ช็อต
-            </Well>
-          ) : undefined
+          running || !vd ? undefined : (
+            <span className="muted small" style={{ width: 170, textAlign: "right", whiteSpace: "nowrap" }} title="แบบที่ตัดเสร็จ / ทั้งหมด · เวลาที่ใช้ตัด">
+              ตัดเสร็จ {okN} / {totalN} · {dur(took)}
+            </span>
+          )
         }
       />
-      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "330px minmax(0,1fr) 380px", gap: 10, padding: 10, minHeight: 0 }}>
-        {/* ── ซ้าย: 6 แบบ ── */}
-        <Panel style={{ display: "flex", flexDirection: "column", gap: 10, padding: 14, overflow: "hidden", minHeight: 0 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-            <span style={{ fontSize: 16, fontWeight: 600 }}>{eng.variants.filter((v) => v.ok).length} แบบ</span>
-            <Kv>สไตล์ {eng.proj?.autofx_style || "กำหนดเอง"}</Kv>
+      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "minmax(0,1fr) 410px", gap: 28, padding: "12px 36px 28px", minHeight: 0, ...gridStyle }}>
+        {/* ── ซ้าย: แท็บสไตล์ + 6 แบบ ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, minHeight: 0, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 16, flexWrap: "wrap" }}>
+            <span className="h1">เลือกแบบ</span>
+            <span className="muted">สไตล์ที่ตัดแล้วอยู่ในแท็บ · กดสไตล์อื่นเพื่อตัดเพิ่ม</span>
           </div>
-          {eng.variants.length === 0 ? (
-            <Empty>
-              ยังไม่มีแบบ — กลับไปขั้น ② แล้วกด “ตัดให้เลย”
-              <div style={{ marginTop: 10 }}>
-                <Btn onClick={() => rt.go(2)}>◀ เลือกสไตล์</Btn>
-              </div>
-            </Empty>
+          <div style={{ display: "flex", gap: 26, overflowX: "auto", flexShrink: 0 }}>
+            {tabs.map((t) => {
+              const on = t.key === styleNow;
+              const isCut = cut.has(t.key);
+              const n = on ? okN : (styleInfo.get(t.key)?.ok ?? 0);
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  className={cx("tab", on && "on")}
+                  disabled={!isCut && (running || recutting)}
+                  onClick={() => pickTab(t)}
+                  title={isCut ? `${t.label} — ตัดแล้ว ${n} แบบ` : `ตัดเพิ่มด้วยสูตร ${t.letter || t.label} (ใช้บทพูดที่ถอดไว้แล้ว)`}
+                  style={!isCut && (running || recutting) ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
+                >
+                  {t.letter && <b>{t.letter}</b>}
+                  {t.label}
+                  <span className="cnt">
+                    {isCut ? (
+                      `${n} แบบ`
+                    ) : (
+                      <>
+                        {recutting ? "กำลังสั่ง…" : "ตัดเพิ่ม"}
+                        <Icon name="chev" size={10} color="var(--muted)" />
+                      </>
+                    )}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {variants.length === 0 ? (
+            <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 0 }}>
+              <Empty className="w-full" style={{ maxWidth: 420 }}>
+                {loaded ? "ยังไม่มีแบบ — กลับไปขั้น ② แล้วกด ตัดให้เลย" : "กำลังโหลดแบบ…"}
+                <div style={{ marginTop: 12 }}>
+                  <Btn onClick={() => r.go(2)}>
+                    <Icon name="back" size={12} />
+                    เลือกสไตล์
+                  </Btn>
+                </div>
+              </Empty>
+            </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, overflowY: "auto", minHeight: 0 }}>
-              {eng.variants.map((v) => (
-                <VariantCard key={v.id} v={v} sel={sel?.id === v.id} onClick={() => rt.setVariant(v.id)} />
+            <div style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gridTemplateRows: "repeat(2, minmax(0,1fr))", gap: 16, minHeight: 0 }}>
+              {variants.slice(0, 6).map((v) => (
+                <VariantCard key={v.id} v={v} sel={view?.id === v.id} hook={v.active ? hookText : ""} sub={v.active ? subText : ""} onClick={() => pick(v)} />
               ))}
             </div>
           )}
-          <div style={{ flex: 1 }} />
-          <Btn onClick={() => rt.go(2)} title="เปลี่ยนสไตล์/ชั้นแต่งแล้วตัดใหม่ — บทพูดไม่ถอดซ้ำ">
-            ◀ เปลี่ยนสไตล์ · ตัดใหม่
-          </Btn>
-        </Panel>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
+            <Btn sm ghost onClick={() => r.go(2)} title="เปลี่ยนสไตล์/ชั้นแต่งแล้วตัดใหม่ — บทพูดไม่ถอดซ้ำ">
+              <Icon name="back" size={12} />
+              เปลี่ยนสไตล์
+            </Btn>
+            {variants.length > 0 && (
+              <span className="cap small">
+                {variants.length} แบบใช้ชั้นแต่งของ{tabNow?.custom ? "ที่กำหนดเอง" : `สูตร ${letter}`}เหมือนกัน ต่างกันที่การตัด
+              </span>
+            )}
+          </div>
+        </div>
 
-        {/* ── กลาง: ดูแบบ ── */}
-        <Panel style={{ display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden", minHeight: 0 }}>
-          {!sel ? (
+        {/* ── ขวา: ตัวอย่าง · ชั้นแต่ง · ส่งออก ── */}
+        <div className="panel deep" style={{ display: "flex", flexDirection: "column", padding: "16px 22px", minHeight: 0, overflowY: "auto" }}>
+          {!view ? (
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Kv>เลือกแบบทางซ้าย</Kv>
+              <span className="muted small">{variants.length ? "เลือกแบบทางซ้าย" : "ยังไม่มีแบบให้ดู"}</span>
             </div>
-          ) : showOut && canPlayer ? (
-            <Player mode="final" />
           ) : (
             <>
-              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 12, minHeight: 0 }}>
-                {sel.ok ? (
-                  <video key={`${sel.id}:${sel.made}`} src={variantUrl(sel.id, sel.made)} controls playsInline style={{ height: "100%", maxWidth: "100%", aspectRatio: "9/16", borderRadius: 10, background: "#000" }} />
-                ) : (
-                  <Kv>{sel.error || "แบบนี้ยังไม่ได้ตัด"}</Kv>
-                )}
+              <PreviewVideo
+                key={`${styleNow}:${view.id}:${view.made}`}
+                v={view}
+                style={styleNow}
+                letter={letter}
+                frame={s.frame}
+                lufs={s.lufs}
+                hook={view.active ? hookText : ""}
+                sub={view.active ? subText : ""}
+                onPrev={() => viewIdx > 0 && r.setVariant(okList[viewIdx - 1].id)}
+                onNext={() => viewIdx >= 0 && viewIdx < okList.length - 1 && r.setVariant(okList[viewIdx + 1].id)}
+                canPrev={viewIdx > 0}
+                canNext={viewIdx >= 0 && viewIdx < okList.length - 1}
+                onTimeline={view.active ? () => r.openEdit("tl") : undefined}
+                onUse={view.ok && !view.active ? () => void activateThis(view) : undefined}
+                useBusy={running || switching}
+                paused={dim}
+              />
+
+              <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "10px 0 0", flexWrap: "wrap" }}>
+                <span style={{ fontWeight: 400 }}>ชั้นแต่งของแบบนี้</span>
+                <span className="muted small">{view.active ? `เปิด/ปิดได้ · เรนเดอร์ใหม่เฉพาะแบบนี้ ~${rb.eta.fx} วิ` : "กด “ใช้แบบนี้” ก่อน ถึงจะแก้ได้"}</span>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderTop: "1px solid var(--line)", flexWrap: "wrap" }}>
-                <span style={{ fontSize: 14, fontWeight: 500 }}>{sel.label}</span>
-                <Kv>{sel.note}</Kv>
-                <div style={{ flex: 1 }} />
-                {sel.ok && !sel.active && (
-                  <Btn on onClick={() => useThis(sel)} disabled={running || switching} title="สลับให้ขั้น 4/5 ทำต่อจากแบบนี้">
-                    {switching ? "กำลังสลับ…" : "ใช้แบบนี้ ▸"}
-                  </Btn>
-                )}
-                {sel.active && canPlayer && (
-                  <Btn onClick={() => setShowOut(true)} title="ดูไฟล์ที่ส่งออกแล้ว (③④⑤) พร้อมชั้นซ้อนสด">
-                    ดูไฟล์ส่งออก ▸
-                  </Btn>
-                )}
-                {sel.active && (
-                  <Btn sm onClick={() => rt.openEdit("tl")} title="ไทม์ไลน์เต็ม — สลับ/ตัด/เล็มช็อต">
-                    ไทม์ไลน์ ▸
-                  </Btn>
-                )}
+              <div className="rows" style={{ display: "flex", flexDirection: "column", opacity: view.active ? 1 : 0.55 }}>
+                {LAYER_META.map((m) => {
+                  const row = rows.get(m.id);
+                  const on = view.active ? Boolean(row?.on) : false;
+                  const note = view.active ? (row?.note ?? "—") : view.hasLayers ? "ดูได้เมื่อใช้แบบนี้" : "จะวางให้ตามสูตรเมื่อใช้แบบนี้";
+                  const subTog = m.id === "sub" && view.active && s.cap.draft !== null;
+                  return (
+                    <div key={m.id} style={{ display: "grid", gridTemplateColumns: "56px 1fr auto", alignItems: "center", gap: 14, padding: "5px 0" }}>
+                      <Tog
+                        on={on}
+                        disabled={!subTog}
+                        onChange={subTog ? (v) => s.cap.patch({ enabled: v }) : undefined}
+                        title={subTog ? (on ? "ปิดซับ (บันทึกตอนส่งออก)" : "เปิดซับ") : view.active ? "เปิด/ปิดได้ในลิ้นชักแก้" : "กด “ใช้แบบนี้” ก่อน"}
+                      />
+                      <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontWeight: 400 }}>
+                          <Icon name={m.icon} size={14} color={on ? "var(--amber)" : "var(--muted)"} />
+                          {m.name}
+                        </span>
+                        <span className="muted small" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {note}
+                        </span>
+                      </div>
+                      <Btn sm onClick={() => openEdit(m.id)} disabled={!view.active} title={view.active ? "เปิดลิ้นชักแก้ชั้นนี้" : "กด “ใช้แบบนี้” ก่อน"}>
+                        {!on && (m.id === "sticker" || m.id === "music" || m.id === "text") ? "เพิ่ม" : "แก้"}
+                        <Icon name="chev" size={11} />
+                      </Btn>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ flex: 1 }} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 10 }}>
+                <Seg items={BUILD.map((b) => ({ v: b.v, label: b.label, title: b.tip }))} value={build} onChange={setBuild} />
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <Cta className="w-full" onClick={onExport} disabled={!canExport} busy={running && eng.lastStep === buildDef.step} title={running ? "เอนจินกำลังทำงานอื่น" : !view.active ? "ส่งออกได้เฉพาะแบบที่ใช้อยู่ — กด “ใช้แบบนี้” ก่อน" : `สั่ง ${buildDef.step}${dirtyFiles.length ? ` (บันทึก ${dirtyFiles.join(" · ")} ก่อน)` : ""}`}>
+                      ส่งออก · {letter} · {Math.round(view.dur)} วิ
+                    </Cta>
+                  </div>
+                  {FEATURES.openFinder && (
+                    <Btn lg ic style={{ width: 52 }} title="เปิดโฟลเดอร์ไฟล์ออก">
+                      <Icon name="folder" size={15} />
+                    </Btn>
+                  )}
+                </div>
+                <span className="muted small" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", direction: "rtl", textAlign: "left" }} title={outFile?.path ?? s.info?.project.out_dir}>
+                  {outFile?.path ?? s.info?.project.out_dir ?? "…"} · ~{fmtClock(eta)}
+                </span>
               </div>
             </>
           )}
-          {showOut && canPlayer && (
-            <div style={{ padding: "6px 14px", borderTop: "1px solid var(--line)" }}>
-              <Btn sm onClick={() => setShowOut(false)}>◀ ดูตัวอย่างของแบบ</Btn>
-            </div>
-          )}
-        </Panel>
-
-        {/* ── ขวา: ชั้นแต่ง · ส่งออก ── */}
-        <Panel style={{ display: "flex", flexDirection: "column", gap: 10, padding: 14, overflow: "hidden", minHeight: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 16, fontWeight: 600 }}>ชั้นแต่งหนัง</span>
-            <Kv>{active ? `ของแบบ ${active.label}` : "ยังไม่ได้เลือกแบบ"}</Kv>
-            <div style={{ flex: 1 }} />
-            {(modN > 0 || need) && (
-              <Mono style={{ fontSize: 10.5, color: "var(--amber-hi)" }}>{modN ? `แก้ค้าง ${modN}` : "ต้องทำใหม่"}</Mono>
-            )}
-          </div>
-          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
-            <Well className="rows" style={{ display: "flex", flexDirection: "column" }}>
-              {rows.map((l) => (
-                <div key={l.id} style={{ display: "grid", gridTemplateColumns: "10px 1fr auto", gap: 10, alignItems: "center", padding: "9px 10px" }}>
-                  <Led on={l.on} />
-                  <span style={{ minWidth: 0 }}>
-                    <span style={{ fontSize: 13, display: "block" }}>{l.name}</span>
-                    <Kv style={{ fontSize: 11 }}>{l.note}</Kv>
-                  </span>
-                  <Btn sm onClick={() => openEdit(l.id)} disabled={!active}>
-                    แก้ ▸
-                  </Btn>
-                </div>
-              ))}
-            </Well>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              <Btn sm onClick={() => eng.runJob("autofx")} disabled={running || !active} title="วางชั้นแต่งตามสไตล์ใหม่ทั้งชุด (ชิ้นที่วางเองไม่ถูกแตะ)">
-                ↻ วางชั้นแต่งตามสไตล์ใหม่
-              </Btn>
-              <Btn sm onClick={() => rt.openEdit("sticker")} disabled={!active}>
-                + สติกเกอร์
-              </Btn>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-            <span style={{ fontSize: 15, fontWeight: 600 }}>ส่งออก</span>
-            <Kv>{active ? active.label : "—"}</Kv>
-          </div>
-          <Keys sm={false} grow items={BUILD.map((b) => ({ v: b.v, label: b.label, n: b.mark, title: b.tip }))} value={build} onChange={setBuild} />
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Well className="mono" style={{ flex: 1, padding: "5px 8px", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", direction: "rtl", textAlign: "left" }} title={s.info?.project.out_dir}>
-              {s.info?.project.out_dir ?? "…"}
-            </Well>
-            <Tag>{outFile?.exists ? fmtBytes(outFile.size) : "ยังไม่มีไฟล์"}</Tag>
-          </div>
-          <Cta onClick={onExport} disabled={running || !active || !s.shots.length} busy={running} title={running ? "เอนจินกำลังทำงานอื่น" : `สั่ง ${buildDef.step}`}>
-            ส่งออก {buildDef.label} · ~{fmtClock(eta)}
-          </Cta>
-          <Mono className="kv" style={{ fontSize: 10.5, textAlign: "center" }}>
-            {need ? `ต้องทำ ${buildDef.mark} ใหม่` : outFile?.exists ? "ไฟล์พร้อม — เล่นได้ที่ “ดูไฟล์ส่งออก”" : "ยังไม่เคยส่งออก"}
-            {dirtyFiles.length ? ` · จะบันทึก ${dirtyFiles.join(" · ")} ก่อน` : ""}
-          </Mono>
-        </Panel>
+        </div>
       </div>
     </>
   );

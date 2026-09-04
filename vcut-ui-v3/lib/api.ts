@@ -33,9 +33,12 @@ export interface Chapter {
 }
 
 export interface ProjectState {
-  /** แบบที่ active อยู่ ("" = โปรเจกต์ที่ยังไม่เคยตัดหลายแบบ) · สไตล์ autofx ของโปรเจกต์ */
+  /** แบบที่ active อยู่ ("" = โปรเจกต์ที่ยังไม่เคยตัดหลายแบบ) + สไตล์ของแบบนั้น · สไตล์ autofx ของโปรเจกต์ */
   variant: string;
+  variant_style: string;
   autofx_style: string;
+  /** สไตล์ที่เคยตัดแล้ว (มี .vcut/variants/<style>/index.json) — แท็บในขั้น ③ */
+  styles_cut: string[];
   project: string;
   out: string;
   out_exists: boolean;
@@ -1209,11 +1212,26 @@ export interface VariantItem {
   has_layers: boolean;
 }
 
+export interface VariantStyle {
+  style: string;
+  made: number;
+  ok: number;
+  total: number;
+  active: boolean;
+}
+
 export interface VariantsData {
+  /** สไตล์ที่ก้อนนี้บรรยาย · สไตล์ของโปรเจกต์ตอนนี้ */
+  style: string;
+  project_style: string;
+  /** id ที่ active ถ้าเป็นของสไตล์นี้ (ว่างถ้า active อยู่สไตล์อื่น) */
   active: string;
+  active_style: string;
+  active_id: string;
   made: number;
   default: string;
   items: VariantItem[];
+  styles: VariantStyle[];
   dir: string;
 }
 
@@ -1239,11 +1257,13 @@ export interface AutofxData {
 }
 
 export const api4 = {
-  variants: () => j<VariantsData>(`${engine}/api/variants`),
-  activateVariant: (id: string) =>
-    j<{ ok: boolean; variants: VariantsData }>(`${engine}/api/variants/activate`, post({ id })),
+  /** แบบของสไตล์หนึ่ง (ว่าง = สไตล์ของโปรเจกต์) */
+  variants: (style = "") => j<VariantsData>(`${engine}/api/variants${style ? `?style=${encodeURIComponent(style)}` : ""}`),
+  activateVariant: (id: string, style = "") =>
+    j<{ ok: boolean; variants: VariantsData }>(`${engine}/api/variants/activate`, post(style ? { id, style } : { id })),
   autofx: () => j<AutofxData>(`${engine}/api/autofx`),
 };
 
-/** ไฟล์ตัวอย่างของแบบ (.vcut/variants/<id>/out.mp4) — t = กันแคชเมื่อตัดใหม่ */
-export const variantUrl = (id: string, t = 0) => `${engine}/variant/${id}/out${t ? `?t=${t}` : ""}`;
+/** ไฟล์ตัวอย่างของแบบ (.vcut/variants/<style>/<id>/out.mp4) — t = กันแคชเมื่อตัดใหม่ */
+export const variantUrl = (id: string, t = 0, style = "") =>
+  `${engine}/variant/${style ? `${encodeURIComponent(style)}/` : ""}${id}/out${t ? `?t=${t}` : ""}`;

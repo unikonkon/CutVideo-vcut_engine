@@ -40,3 +40,7 @@ vcut-ui/.next/
 desktop/node_modules/
 desktop/dist/
 desktop/resources/
+
+# โปรเจกต์ที่หน้าเว็บ v3 สร้างจากการวางไฟล์ (projects/<ชื่อ>.toml เก็บใน git · ฟุตเทจ/แคชไม่เก็บ)
+footage/
+.vcut-*/

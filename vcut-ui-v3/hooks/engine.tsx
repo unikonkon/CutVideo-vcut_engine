@@ -88,11 +88,14 @@ export interface Engine {
   notice: string;
   flash: (msg: string) => void;
 
-  /** 6 แบบจาก /api/variants (ว่าง = โปรเจกต์ยังไม่เคยตัดหลายแบบ) */
+  /** 6 แบบจาก /api/variants ของสไตล์ที่ดูอยู่ (ว่าง = โปรเจกต์ยังไม่เคยตัดหลายแบบ) */
   variants: Variant[];
   variantsData: VariantsData | null;
+  /** สไตล์ที่กำลังดูแบบอยู่ ("" = สไตล์ของโปรเจกต์) — แท็บในขั้น ③ */
+  variantsStyle: string;
+  setVariantsStyle: (style: string) => void;
   /** สลับแบบ (POST /api/variants/activate) แล้วโหลดสถานะใหม่ */
-  activateVariant: (id: string) => Promise<boolean>;
+  activateVariant: (id: string, style?: string) => Promise<boolean>;
 }
 
 const Ctx = createContext<Engine | null>(null);
@@ -102,6 +105,8 @@ export function EngineProvider({ children }: { children: ReactNode }) {
   const [clipsData, setClipsData] = useState<ClipsData | null>(null);
   const [trash, setTrash] = useState<TrashItem[]>([]);
   const [variantsData, setVariantsData] = useState<VariantsData | null>(null);
+  const [variantsStyle, setVariantsStyleRaw] = useState("");
+  const styleRef = useRef("");
   const [loading, setLoading] = useState(true);
   const [offline, setOffline] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -123,7 +128,7 @@ export function EngineProvider({ children }: { children: ReactNode }) {
         api.state(),
         api.clips(),
         api.trash().catch(() => ({ items: [] as TrashItem[], dir: "" })),
-        api4.variants().catch(() => null),
+        api4.variants(styleRef.current).catch(() => null),
       ]);
       setProj(st);
       setClipsData(cl);
@@ -139,11 +144,21 @@ export function EngineProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // โหลดรอบแรก — setState เกิดหลัง await ไม่ใช่ใน effect ตรง ๆ
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh();
   }, [refresh]);
 
   const bump = useCallback(() => setReloadKey((k) => k + 1), []);
+
+  const setVariantsStyle = useCallback((style: string) => {
+    styleRef.current = style;
+    setVariantsStyleRaw(style);
+    api4
+      .variants(style)
+      .then((va) => {
+        if (styleRef.current === style) setVariantsData(va);
+      })
+      .catch(() => {});
+  }, []);
 
   const pollJob = useCallback(async () => {
     try {
@@ -229,9 +244,9 @@ export function EngineProvider({ children }: { children: ReactNode }) {
   }, [variantsData, proj]);
 
   const activateVariant = useCallback(
-    async (id: string) => {
+    async (id: string, style = "") => {
       try {
-        const r = await api4.activateVariant(id);
+        const r = await api4.activateVariant(id, style || styleRef.current);
         setVariantsData(r.variants);
         await refresh();
         setReloadKey((k) => k + 1);
@@ -267,9 +282,11 @@ export function EngineProvider({ children }: { children: ReactNode }) {
       flash,
       variants,
       variantsData,
+      variantsStyle,
+      setVariantsStyle,
       activateVariant,
     }),
-    [proj, clipsData, trash, loading, offline, reloadKey, bump, refresh, job, jobLines, lastStep, runJob, stopJob, track, notice, flash, variants, variantsData, activateVariant],
+    [proj, clipsData, trash, loading, offline, reloadKey, bump, refresh, job, jobLines, lastStep, runJob, stopJob, track, notice, flash, variants, variantsData, variantsStyle, setVariantsStyle, activateVariant],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -1,29 +1,28 @@
 "use client";
 
-// CSUB — ซับจากบทพูด (captions.json · ขั้น ④)
-//   โหมด ทั้งบรรทัด/ทีละคำ/ปิดซับ · STYLE (ฟอนต์ · SIZE/OUTLINE/MARGIN/SHADOW · COLOUR · ALIGN)
-//   · LINES (subline: เวลา · ข้อความแก้ได้ · แก้/ซ่อน) · OUTPUT
-//   ข้อมูลซับไม่มีค่าความมั่นใจ (transcript ให้แค่ [start, end, text]) — จึงไม่มีมิเตอร์ 4 ขีดของ mockup
+// แท็บ "ซับ" ของลิ้นชัก (captions.json · ขั้น ④) — mockup F3Edit
+//   ซ้าย : โหมด 3 ช่อง (ทั้งบรรทัด / ทีละคำ / ปิดซับ) · "N บรรทัด" · รายการบรรทัด (เวลา · ข้อความแก้ inline · ซ่อน)
+//   ขวา  : จอตัวอย่าง (EditShell) · สไตล์ตัวอักษร 3 ช่องแนวตั้ง · ขนาด − / + · ตำแหน่ง 3×3
+//   "N บรรทัดไม่มั่นใจ" + แถบความมั่นใจต่อบรรทัด อยู่หลังธง FEATURES.subConfidence — เอนจินยังไม่ส่ง conf
 
 import { useMemo } from "react";
-import { Btn, CIn, Empty, Keys, Knob, Kv, Led, PosGrid, SecHead, Sel, Stat, Tag, Well, cx, fmtBytes, type POSES } from "@/components/instrument";
-import { durMs } from "@/lib/time";
+import { Bar, Empty, Icon, Pos9, Seg, Stepper, Well, cx } from "@/components/instrument";
+import { FEATURES } from "@/lib/roadmap";
+import { dur } from "@/lib/time";
 import { useStudio } from "@/components/step3/store";
-import { EditShell, KnobGrid, TagRow } from "./common";
+import { EditShell, IcBtn, Lbl, Row, pos9OfAlign, pos9Pose } from "./common";
 
 type Mode = "line" | "word" | "off";
 
-/** ชุดสีสำเร็จของ mockup — สีตัวอักษร + สีขอบ (captions.json ไม่มีคีย์ "แผ่นทึบ" จึงใช้ขอบขาวแทน) */
-const COLOURS: { v: string; label: string; color: string; outline: string; title: string }[] = [
-  { v: "white", label: "ขาว", color: "#FFFFFF", outline: "#000000", title: "ขาวขอบดำ — อ่านง่ายสุดบนภาพทั่วไป" },
-  { v: "yellow", label: "เหลือง", color: "#FFD400", outline: "#000000", title: "เหลืองขอบดำ — สไตล์ซับทีวี" },
-  { v: "plate", label: "ดำบนแผ่น", color: "#000000", outline: "#FFFFFF", title: "ดำขอบขาว — captions.json ไม่มีคีย์แผ่นทึบ จึงใช้ขอบขาวหนาแทน" },
+/** สไตล์ตัวอักษร 3 แบบของ mockup — captions.json ไม่มีคีย์ "แผ่นทึบ" จึงใช้ตัวดำขอบขาวหนาแทน */
+const LOOKS: { v: string; label: string; color: string; outline: string; title?: string }[] = [
+  { v: "bold", label: "หนา ขอบดำ", color: "#FFFFFF", outline: "#000000" },
+  { v: "plate", label: "แผ่นทึบ", color: "#000000", outline: "#FFFFFF", title: "เอนจินไม่มีแผ่นทึบใต้ซับ — ใช้ตัวดำขอบขาวหนาแทน" },
+  { v: "yellow", label: "เหลืองเน้น", color: "#FFD400", outline: "#000000" },
 ];
+const LOW_CONF = 0.7;
 
-const ALIGN_IDS = ["tl", "c", "bl", "bc", "br"];
-const ALIGN_TH: Record<number, string> = { 1: "ล่างซ้าย", 2: "กลางล่าง", 3: "ล่างขวา", 4: "กลางซ้าย", 5: "กลางจอ", 6: "กลางขวา", 7: "บนซ้าย", 8: "กลางบน", 9: "บนขวา" };
-
-interface Row {
+interface Line {
   id: string;
   tl: number;
   end: number;
@@ -31,6 +30,8 @@ interface Row {
   /** เอนจินคิด cue ให้แล้ว (มีในหนังจริง) · false = มีแค่ในบทพูด */
   cue: boolean;
   dropped: boolean;
+  /** ความมั่นใจของ whisper (0–1) — เอนจินยังไม่ส่ง จึงมักเป็น undefined */
+  conf?: number;
 }
 
 export default function SubEditor() {
@@ -41,31 +42,27 @@ export default function SubEditor() {
 
   // บรรทัด = บทพูดที่อยู่ในหนัง (id สูตรเดียวกับ cue) ทับด้วยข้อความของ cue/ที่แก้ค้าง
   // cue ที่ซ่อนไว้หายจากรายการที่เอนจินส่งมา จึงต้องปั้นแถวคืนจากบทพูด ไม่งั้นกู้ไม่ได้อีก
-  const rows = useMemo<Row[]>(() => {
+  const lines = useMemo<Line[]>(() => {
     if (!data || !cd) return [];
     const drop = new Set(cd.drop);
     const byId = new Map(data.cues.map((c) => [c.id, c]));
+    const confOf = (c: unknown) => (c && typeof (c as { conf?: unknown }).conf === "number" ? ((c as { conf: number }).conf as number) : undefined);
     const seen = new Set<string>();
-    const out: Row[] = s.speechLines.map((ln) => {
+    const out: Line[] = s.speechLines.map((ln) => {
       seen.add(ln.id);
       const c = byId.get(ln.id);
-      return { id: ln.id, tl: c?.a ?? ln.tl, end: c?.b ?? ln.tl + ln.dur, text: cd.edits[ln.id] ?? c?.text ?? ln.text, cue: Boolean(c), dropped: drop.has(ln.id) };
+      return { id: ln.id, tl: c?.a ?? ln.tl, end: c?.b ?? ln.tl + ln.dur, text: cd.edits[ln.id] ?? c?.text ?? ln.text, cue: Boolean(c), dropped: drop.has(ln.id), conf: confOf(c) };
     });
     for (const c of data.cues) {
       if (seen.has(c.id)) continue;
-      out.push({ id: c.id, tl: c.a, end: c.b, text: cd.edits[c.id] ?? c.text, cue: true, dropped: drop.has(c.id) });
+      out.push({ id: c.id, tl: c.a, end: c.b, text: cd.edits[c.id] ?? c.text, cue: true, dropped: drop.has(c.id), conf: confOf(c) });
     }
     return out.sort((a, b) => a.tl - b.tl);
   }, [data, cd, s.speechLines]);
 
-  const selIdx = rows.findIndex((r) => s.playhead >= r.tl && s.playhead < r.end);
-  const sel = selIdx >= 0 ? rows[selIdx] : null;
-  const shown = rows.filter((r) => !r.dropped).length;
-  const dropped = rows.length - shown;
-
   if (!data || !cd) {
     return (
-      <EditShell id="sub" badge="EDIT SUB" tag="SEC 05c · AUTO SUB" title="ซับจากบทพูด" buildStep="build_text">
+      <EditShell id="sub" buildStep="build_text">
         <Empty>{cap.data === null ? "โหลด captions.json ไม่ได้ — เอนจินตอบไม่ได้หรือยังไม่ได้ถอดเสียง" : "กำลังโหลด…"}</Empty>
       </EditShell>
     );
@@ -76,129 +73,109 @@ export default function SubEditor() {
   const setSt = (p: Record<string, unknown>) => cap.patch({ style: { ...st, ...p } });
   const mode: Mode = cd.enabled ? "line" : "off";
   const align = num("align", 2);
-  const fonts = data.fonts.thai.slice(0, 4);
-  const font = String(st.font ?? "");
-  const fontOpts = [...data.fonts.thai.map((f) => ({ v: f, label: `${f} (ไทย)` })), ...data.fonts.other.map((f) => ({ v: f, label: f }))];
-  if (font && !fontOpts.some((o) => o.v === font)) fontOpts.unshift({ v: font, label: `${font} (ไม่มีในเครื่องนี้)` });
-  const colourSel = COLOURS.find((c) => c.color === String(st.color).toUpperCase() && c.outline === String(st.outline).toUpperCase())?.v ?? null;
-  const posSel = ALIGN_IDS.find((id) => ({ tl: 7, c: 5, bl: 1, bc: 2, br: 3 })[id] === align) ?? null;
+  const shown = lines.filter((l) => !l.dropped).length;
+  const curIdx = lines.findIndex((l) => s.playhead >= l.tl && s.playhead < l.end);
+  const lowConf = FEATURES.subConfidence ? lines.filter((l) => !l.dropped && l.conf !== undefined && l.conf < LOW_CONF).length : 0;
+  const showConf = FEATURES.subConfidence && lines.some((l) => l.conf !== undefined);
+  const lookSel = LOOKS.find((c) => c.color === String(st.color).toUpperCase() && c.outline === String(st.outline).toUpperCase())?.v ?? null;
 
   const toggleDrop = (id: string) => cap.patch({ drop: cd.drop.includes(id) ? cd.drop.filter((x) => x !== id) : [...cd.drop, id] });
   const setText = (id: string, text: string) => cap.patch({ edits: { ...cd.edits, [id]: text } });
 
-  const topleft = sel
-    ? `SUB · LINE ${selIdx + 1} · ${durMs(sel.tl)}–${durMs(sel.end)} · align ${align} · size ${num("size", 54)}`
-    : `SUB · ${shown} LINES · align ${align} · size ${num("size", 54)}`;
-
   return (
     <EditShell
       id="sub"
-      badge={`EDIT SUB · ${shown} LINES`}
-      tag="SEC 05c · AUTO SUB"
-      title="ซับจากบทพูด"
       buildStep="build_text"
       revert={cap.revert}
-      leftNote="ซับใช้ segment เดิมของขั้น ③ ทั้งหมด — เปลี่ยนสไตล์แล้วเข้ารหัสภาพใหม่หนึ่งรอบ (④) ไม่แตะ render cache"
-      topleft={topleft}
+      right={
+        <>
+          <Lbl>สไตล์ตัวอักษร</Lbl>
+          <Seg
+            col
+            items={LOOKS.map((c) => ({ v: c.v, label: c.label, title: c.title }))}
+            value={lookSel}
+            onChange={(v) => {
+              const c = LOOKS.find((x) => x.v === v);
+              if (c) setSt({ color: c.color, outline: c.outline, bold: true, ...(v === "plate" ? { border: Math.max(num("border", 3), 4) } : {}) });
+            }}
+          />
+          <Row label="ขนาด" style={{ paddingTop: 4 }}>
+            <Stepper value={num("size", data.defaults.size)} min={10} max={200} step={2} onChange={(v) => setSt({ size: v })} title="ขนาดตัวอักษร (พิกเซลของหนัง)" />
+          </Row>
+          <Row label="ตำแหน่ง">
+            <Pos9 value={pos9OfAlign(align)} onChange={(i) => setSt({ align: pos9Pose(i).align, pos_x: null, pos_y: null })} title="ตำแหน่งซับบนจอ 9:16" />
+          </Row>
+        </>
+      }
     >
-      <Keys<Mode>
-        grow
-        sm={false}
+      <Seg<Mode>
         items={[
-          { v: "line", label: "ทั้งบรรทัด", title: "เผาซับทีละบรรทัดตามบทพูด (auto.enabled)" },
-          { v: "word", label: "ทีละคำ", disabled: true, title: "ยังไม่มีคีย์ในเอนจิน — captions.json มีแค่เปิด/ปิดทั้งบรรทัด (ทีละคำมีเฉพาะข้อความขั้น ⑤: anim fade_words/pop_words)" },
-          { v: "off", label: "ปิดซับ", title: "ไม่เผาซับในไฟล์ ④" },
+          { v: "line", label: "ทั้งบรรทัด", title: "เผาซับทีละบรรทัดตามบทพูด" },
+          { v: "word", label: "ทีละคำ", disabled: !FEATURES.wordSub, title: FEATURES.wordSub ? "ซับทีละคำตามเวลาที่พูด" : "ยังไม่มีในเอนจิน" },
+          { v: "off", label: "ปิดซับ", title: "ไม่เผาซับลงไฟล์" },
         ]}
         value={mode}
-        onChange={(v) => cap.patch({ enabled: v !== "off" })}
+        onChange={(v) => {
+          if (v === "word") return;
+          cap.patch({ enabled: v !== "off" });
+        }}
       />
-
-      <SecHead tag="STYLE · text.sub" />
-      <TagRow>
-        <Keys items={fonts.map((f) => ({ v: f, label: f }))} value={font} onChange={(v) => setSt({ font: v })} />
-        <div style={{ flex: 1, minWidth: 120 }}>
-          <Sel value={font} onChange={(v) => setSt({ font: v })} options={fontOpts} />
-        </div>
-      </TagRow>
-      <KnobGrid>
-        <Knob label="SIZE" value={num("size", 54)} min={10} max={200} step={1} def={data.defaults.size} onChange={(v) => setSt({ size: v })} />
-        <Knob label="OUTLINE" value={num("border", 3)} min={0} max={20} step={0.5} def={data.defaults.border} onChange={(v) => setSt({ border: v })} />
-        <Knob label="MARGIN" value={num("margin_v", 60)} min={0} max={600} step={4} def={data.defaults.margin_v} onChange={(v) => setSt({ margin_v: v })} title="ระยะจากขอบจอ (margin_v · พิกเซลของหนัง)" />
-        <Knob label="SHADOW" value={num("shadow", 0)} min={0} max={20} step={0.5} def={data.defaults.shadow} onChange={(v) => setSt({ shadow: v })} />
-      </KnobGrid>
-      <TagRow>
-        <Tag>COLOUR</Tag>
-        <Keys items={COLOURS.map((c) => ({ v: c.v, label: c.label, title: c.title }))} value={colourSel} onChange={(v) => {
-          const c = COLOURS.find((x) => x.v === v);
-          if (c) setSt({ color: c.color, outline: c.outline, ...(v === "plate" ? { border: Math.max(num("border", 3), 4) } : {}) });
-        }} />
+      <div style={{ display: "flex", alignItems: "center", gap: 10, paddingTop: 4 }}>
+        <Lbl>
+          {shown} บรรทัด{lines.length - shown ? ` · ซ่อน ${lines.length - shown}` : ""}
+        </Lbl>
         <div style={{ flex: 1 }} />
-        <CIn value={String(st.color ?? "#FFFFFF")} onChange={(v) => setSt({ color: v })} />
-        <CIn value={String(st.outline ?? "#000000")} onChange={(v) => setSt({ outline: v })} />
-      </TagRow>
-      <TagRow>
-        <Tag>ALIGN</Tag>
-        <div style={{ width: 170 }}>
-          <PosGrid ids={ALIGN_IDS} value={posSel} onChange={(p: (typeof POSES)[number]) => setSt({ align: p.align, pos_x: null, pos_y: null })} />
-        </div>
-        <Kv style={{ fontSize: 10.5 }}>
-          {ALIGN_TH[align] ?? "—"} (align {align}) · ตำแหน่งคิดจาก align + margin เท่านั้น (pos_x/pos_y ปล่อยว่าง)
-        </Kv>
-      </TagRow>
-      <TagRow>
-        <Tag>WEIGHT</Tag>
-        <Btn sm on={Boolean(st.bold)} onClick={() => setSt({ bold: !st.bold })}>หนา</Btn>
-        <Btn sm on={Boolean(st.italic)} onClick={() => setSt({ italic: !st.italic })}>เอียง</Btn>
-      </TagRow>
-
-      <SecHead
-        tag={`LINES · ${shown}${dropped ? ` · ซ่อน ${dropped}` : ""}`}
-        right={
-          <Btn sm onClick={() => cap.patch({ drop: [] })} disabled={!dropped} title={dropped ? `กู้บรรทัดที่ซ่อนไว้ ${dropped} บรรทัดกลับมาทั้งหมด` : "ไม่มีบรรทัดที่ซ่อนไว้"}>
-            จากบทพูด ▸ เพิ่ม
-          </Btn>
-        }
-      />
-      {rows.length === 0 ? (
+        {lowConf > 0 && (
+          <span className="small" style={{ color: "var(--warm)" }}>
+            {lowConf} บรรทัดไม่มั่นใจ · แก้ก่อนเรนเดอร์
+          </span>
+        )}
+      </div>
+      {lines.length === 0 ? (
         <Empty>ยังไม่มีบทพูดในหนัง — ต้องถอดเสียง (listen) และตัดชิ้นก่อน บรรทัดจะมาโผล่ที่นี่</Empty>
       ) : (
-        <Well className="rows" style={{ flex: 1, minHeight: 120, display: "flex", flexDirection: "column", padding: "2px 0", overflowY: "auto" }}>
-          {rows.map((r, i) => {
-            const on = i === selIdx;
+        <div className="rows" style={{ display: "flex", flexDirection: "column", opacity: mode === "off" ? 0.5 : 1 }}>
+          {lines.map((l, i) => {
+            const warn = FEATURES.subConfidence && l.conf !== undefined && l.conf < LOW_CONF;
             return (
               <div
-                key={r.id}
-                className={cx(on && "sel-ring")}
-                style={{ display: "grid", gridTemplateColumns: "52px 1fr auto", gap: 8, alignItems: "center", padding: "5px 10px", opacity: r.dropped ? 0.45 : 1 }}
-                title={`${r.id}${r.cue ? "" : " · เอนจินยังไม่คิด cue ให้ — บันทึกแล้วสร้างไฟล์ ④ จะได้บรรทัดนี้"}`}
+                key={l.id}
+                className={cx(i === curIdx && "sel-ring")}
+                style={{ display: "grid", gridTemplateColumns: showConf ? "40px 1fr 56px 34px" : "40px 1fr 34px", gap: 12, alignItems: "center", padding: "6px 0", opacity: l.dropped ? 0.45 : 1 }}
+                title={`${l.id}${l.cue ? "" : " · เอนจินยังไม่คิด cue ให้ — บันทึกแล้วเรนเดอร์จะได้บรรทัดนี้"}`}
               >
-                <span className="mono" style={{ fontSize: 10.5, color: "var(--amber)", cursor: "pointer" }} onClick={() => s.seek(r.tl)}>
-                  {durMs(r.tl)}
+                <span className="muted small num" style={{ cursor: "pointer" }} onClick={() => s.seek(l.tl)} title="ไปที่วินาทีนี้">
+                  {dur(l.tl)}
                 </span>
                 <input
                   type="text"
                   className="well in"
-                  style={{ fontFamily: "inherit", fontSize: 12, padding: "3px 8px", textDecoration: r.dropped ? "line-through" : undefined }}
-                  value={r.text}
-                  disabled={r.dropped}
-                  onFocus={() => s.seek(r.tl)}
-                  onChange={(e) => setText(r.id, e.target.value)}
+                  style={{ fontFamily: "inherit", fontSize: 13, padding: "4px 10px", minHeight: 34, color: warn ? "var(--warm)" : undefined, textDecoration: l.dropped ? "line-through" : undefined }}
+                  value={l.text}
+                  disabled={l.dropped || mode === "off"}
+                  onFocus={() => s.seek(l.tl)}
+                  onChange={(e) => setText(l.id, e.target.value)}
                 />
-                <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                  <Led on={!r.dropped && r.cue} dim={!r.dropped && !r.cue} title={r.cue ? "อยู่ในไฟล์ ④" : "รอเอนจินคิด cue"} />
-                  <Btn sm on={r.dropped} onClick={() => toggleDrop(r.id)} title={r.dropped ? "แสดงบรรทัดนี้อีกครั้ง" : "ซ่อนบรรทัดนี้ (drop)"}>
-                    {r.dropped ? "แสดง" : "ซ่อน"}
-                  </Btn>
-                </span>
+                {showConf && (
+                  <span title={l.conf !== undefined ? `มั่นใจ ${Math.round(l.conf * 100)}%` : "ไม่มีค่าความมั่นใจ"}>
+                    <Bar pct={(l.conf ?? 0) * 100} warm={warn} dim={l.conf === undefined} />
+                  </span>
+                )}
+                {warn ? (
+                  <span style={{ display: "inline-flex", justifyContent: "center" }} title="บรรทัดนี้ถอดเสียงไม่มั่นใจ — ตรวจคำก่อนเรนเดอร์">
+                    <Icon name="warn" size={13} color="var(--warm)" />
+                  </span>
+                ) : (
+                  <IcBtn name="eye" on={!l.dropped && l.cue} onClick={() => toggleDrop(l.id)} title={l.dropped ? "แสดงบรรทัดนี้อีกครั้ง" : "ซ่อนบรรทัดนี้จากซับ"} />
+                )}
               </div>
             );
           })}
-        </Well>
+        </div>
       )}
-      <Kv style={{ fontSize: 10.5, lineHeight: "14px" }}>
-        ค่าความมั่นใจ (confidence) ไม่มีในข้อมูลบทพูด — จึงไม่มีมิเตอร์ต่อบรรทัด · แก้คำในช่องแล้วมีผลเฉพาะซับ (edits) ไม่แตะบทพูดต้นฉบับ
-      </Kv>
-      <Stat label="OUTPUT" value={`${data.out.name} · build_text ④ · re-encode${data.out.exists ? ` · ${fmtBytes(data.out.size)}` : " · ยังไม่มีไฟล์"}`} warn={s.rebuild.text} />
+      <Well style={{ padding: "8px 12px" }}>
+        <Lbl>แก้คำในช่องแล้วมีผลเฉพาะซับ ไม่แตะบทพูดต้นฉบับ · เปลี่ยนสไตล์แล้วเข้ารหัสภาพใหม่หนึ่งรอบ</Lbl>
+      </Well>
     </EditShell>
   );
 }

@@ -1,12 +1,14 @@
 "use client";
 
-// ของใช้ร่วมของขั้น ① (Input · Library) — ตรรกะเล็ก ๆ ที่ทั้งสองหน้าต้องคิดเหมือนกัน
-// ถ้าคิดคนละสูตร หน้าใส่วิดีโอกับหน้าคลังจะบอกสถานะคลิปเดียวกันไม่ตรงกัน
+// ของใช้ร่วมของขั้น ① — ตรรกะเล็ก ๆ ที่ Input กับคิวอัปโหลดต้องคิดเหมือนกัน
+// (ชื่อคลิปที่เอนจินจะตั้ง · คลิปไหนถอดเสียงแล้ว) ถ้าคิดคนละสูตร แถวคลิปจะบอก
+// สถานะไม่ตรงกับที่คิวรู้
 
-import type { ClipInfo, SetupStep, TranscriptData } from "@/lib/api";
+import type { TranscriptData } from "@/lib/api";
 
-/** งานที่ต้องวิ่งต่อกันหลังมีคลิปใหม่ — ลำดับตายตัวตามไปป์ไลน์ของเอนจิน */
-export const CHAIN: string[] = ["scan", "listen", "thumbs"];
+/** งานที่สั่งหลังมีคลิปใหม่ — `ingest` ของเอนจิน = scan → thumbs → listen ในงานเดียว
+ *  (ยังไม่ตัด เพราะสไตล์ยังไม่ได้เลือก) */
+export const CHAIN: string[] = ["ingest"];
 
 /** ชื่อคลิปที่เอนจินจะใช้ — สูตรเดียวกับ upload_target ใน serve.py
  *  (ตัดนามสกุล · เหลือเฉพาะ A-Za-z0-9._- · ตัด . _ หัวท้าย) ใช้ทั้งเทียบว่า
@@ -37,25 +39,4 @@ export function speechOf(tr: TranscriptData | null, name: string): number | null
   // เอนจินฟังแล้วแต่ไม่พบคำพูด — อยู่ใน order แต่ไม่มีท่อน
   if (tr.order.includes(name)) return 0;
   return null;
-}
-
-export function findStep(steps: SetupStep[] | undefined, id: string) {
-  return steps?.find((s) => s.id === id) ?? null;
-}
-
-/** สถานะ LED หนึ่งช่อง — on ทำแล้ว · dim กำลังทำ · off รอ · red พัง */
-export interface LedState {
-  on?: boolean;
-  dim?: boolean;
-  red?: boolean;
-  text: string;
-  muted?: boolean;
-}
-
-/** ภาพตัวอย่างของคลิปนี้ทำไว้หรือยัง — thumbs ทำทีเดียวทั้งคลัง จึงดูจากเวลา:
- *  คลิปที่มาถึงหลังรอบ thumbs ล่าสุดยังไม่มีอยู่ในแผ่นไหน */
-export function thumbsCover(step: SetupStep | null, clip: ClipInfo | null) {
-  if (!step?.exists) return false;
-  if (!clip) return true;
-  return clip.added <= step.mtime;
 }

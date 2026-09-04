@@ -1,14 +1,13 @@
 "use client";
 
-// คิวอัปโหลดของขั้น ① + สายงานอัตโนมัติ scan → listen → thumbs
+// คิวอัปโหลดของขั้น ① + สั่งงาน `ingest` (scan → thumbs → listen) หลังส่งไฟล์ครบ
 //
-// อยู่ที่ระดับ Step1 (index.tsx) ไม่ใช่ในหน้า Input — เพราะผู้ใช้สลับไปหน้าคลัง
-// ระหว่างที่ไฟล์ 3 GB กำลังส่งอยู่ได้ ถ้า state อยู่ในหน้า Input การสลับหน้าจะ
-// ฆ่าการอัปโหลดทิ้งกลางทาง
+// อยู่ที่ระดับ Step1 (index.tsx) ไม่ใช่ในหน้า Input — state ของคิวต้องอยู่รอดข้าม
+// การ re-mount ของหน้า ไม่งั้นไฟล์ 3 GB ที่กำลังส่งอยู่จะขาดกลางทาง
 //
-// เอนจินรับงานทีละงาน (409 ถ้ามีงานวิ่ง) จึงสั่งทีละขั้น: สั่ง scan แล้วรอให้
-// hooks/engine เห็นงานจบ (reloadKey ขยับ) ค่อยสั่งขั้นถัดไป — ไม่ได้สั่ง "plan"
-// รวดเดียว เพราะ plan จะวิ่งไปถึง render ซึ่งขั้น ① ยังไม่ต้องการ
+// เอนจินรับงานทีละงาน (409 ถ้ามีงานวิ่ง) — ถ้าตอนส่งไฟล์เสร็จมีงานอื่นวิ่งอยู่
+// (เช่น quick จากขั้น ②) จะ *รอ* ให้งานนั้นจบก่อน (eng.job.running กลับเป็น false)
+// แล้วค่อยสั่ง ingest ไม่ยิงทันทีให้โดน 409
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api3, checkClip, uploadClip } from "@/lib/api";
@@ -37,16 +36,15 @@ export interface UploadQueue {
   items: UpItem[];
   /** กำลังส่งไฟล์อยู่ (สร้างโปรเจกต์ · check · upload) */
   busy: boolean;
-  /** ขั้นในสายงานที่กำลังวิ่ง ("" = ไม่มี) */
+  /** งานที่คิวนี้สั่งและกำลังรอให้จบ ("" = ไม่มี) */
   current: string;
-  /** ขั้นที่รอต่อจาก current */
-  queue: string[];
-  /** ขั้นที่วิ่งจบแล้วในสายรอบนี้ */
-  done: string[];
+  /** ส่งไฟล์ครบแล้วแต่เอนจินยังมีงานอื่นวิ่ง — จะสั่ง ingest ให้เองเมื่อว่าง */
+  waiting: boolean;
+  /** งานล้มเหลว/สั่งไม่ได้ — โชว์บรรทัดเตือน + ปุ่มลองใหม่ */
   chainError: string;
   start: (files: File[], mode: UploadMode, existingProjects?: string[]) => Promise<void>;
-  /** เริ่มสายงานเอง (ใช้หลัง link โฟลเดอร์ · กู้จากถังขยะ) */
-  chain: (steps?: string[]) => Promise<void>;
+  /** สั่งงาน ingest เอง (ปุ่มลองใหม่) — รอถ้ามีงานอื่นวิ่งอยู่ */
+  chain: (steps?: string[]) => void;
   clearDone: () => void;
 }
 
@@ -65,18 +63,20 @@ export function useUploadQueue(eng: Engine): UploadQueue {
   const [busy, setBusy] = useState(false);
   const [current, setCurrent] = useState("");
   const [queue, setQueue] = useState<string[]>([]);
-  const [done, setDone] = useState<string[]>([]);
+  const [waitFor, setWaitFor] = useState<string[] | null>(null);
   const [chainError, setChainError] = useState("");
   // reloadKey ตอนสั่งงาน — งานถือว่าจบต่อเมื่อคีย์ขยับพ้นค่านี้ ไม่งั้น snapshot
-  // ของงาน *ก่อนหน้า* ที่ชื่อขั้นเดียวกัน (scan เก่าที่จบไปแล้ว) จะถูกอ่านว่าเป็น
-  // งานของเราที่จบแล้ว แล้วสั่ง listen ทับทันทีจนโดน 409
+  // ของงาน *ก่อนหน้า* ที่ชื่อขั้นเดียวกัน (ingest เก่าที่จบไปแล้ว) จะถูกอ่านว่าเป็น
+  // งานของเราที่จบแล้ว
   const kickKey = useRef(-1);
   const keyRef = useRef(eng.reloadKey);
   const runRef = useRef(eng.runJob);
+  const runningRef = useRef(Boolean(eng.job?.running));
   useEffect(() => {
     keyRef.current = eng.reloadKey;
     runRef.current = eng.runJob;
-  }, [eng.reloadKey, eng.runJob]);
+    runningRef.current = Boolean(eng.job?.running);
+  }, [eng.reloadKey, eng.runJob, eng.job?.running]);
 
   const kick = useCallback(async (steps: string[]) => {
     const [head, ...rest] = steps;
@@ -93,17 +93,31 @@ export function useUploadQueue(eng: Engine): UploadQueue {
     if (!ok) {
       setCurrent("");
       setQueue([]);
-      setChainError(`สั่ง ${head} ไม่สำเร็จ — ลองใหม่เมื่อเอนจินว่าง`);
+      setChainError(`สั่งงาน ${head} ไม่สำเร็จ`);
     }
   }, []);
 
+  /** สั่งเลยถ้าเอนจินว่าง · ไม่งั้นจดไว้แล้วรอ (effect ข้างล่างสั่งให้เมื่องานอื่นจบ) */
   const chain = useCallback(
-    async (steps: string[] = CHAIN) => {
-      setDone([]);
-      await kick(steps);
+    (steps: string[] = CHAIN) => {
+      setChainError("");
+      if (runningRef.current) {
+        setWaitFor(steps);
+        return;
+      }
+      kick(steps);
     },
     [kick],
   );
+
+  // รอเอนจินว่าง — งานอื่นจบแล้ว (running กลับเป็น false) ค่อยสั่งของเรา
+  useEffect(() => {
+    if (!waitFor || eng.job?.running) return;
+    // setState หลังงานเอนจินจบ — ผูกกับ job.running ไม่ใช่ render รอบนี้
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setWaitFor(null);
+    kick(waitFor);
+  }, [waitFor, eng.job?.running, kick]);
 
   // เดินสายงาน: งานที่สั่งไว้จบแล้ว (reloadKey ขยับ · ไม่ running · ชื่อขั้นตรง) → สั่งขั้นถัดไป
   useEffect(() => {
@@ -112,11 +126,10 @@ export function useUploadQueue(eng: Engine): UploadQueue {
     if (!job || job.running) return;
     if (eng.reloadKey === kickKey.current) return; // ยังเป็นภาพก่อนงานเริ่ม
     if (job.step !== current) return; // งานอื่นจบ ไม่ใช่ของเรา
-    // setState หลังงานเอนจินจบ — ผูกกับ reloadKey ไม่ใช่ render รอบนี้
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDone((d) => (d.includes(current) ? d : [...d, current]));
     if (job.code !== 0) {
-      setChainError(job.stopped ? `${current} ถูกหยุด — ขั้นที่เหลือไม่ได้สั่ง` : `${current} ล้มเหลว (code ${job.code ?? "?"})`);
+      // setState หลังงานเอนจินจบ — ผูกกับ reloadKey ไม่ใช่ render รอบนี้
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setChainError(job.stopped ? `${job.cmd_label || current} ถูกหยุดกลางทาง` : `${job.cmd_label || current} ล้มเหลว (code ${job.code ?? "?"})`);
       setCurrent("");
       setQueue([]);
       return;
@@ -172,8 +185,10 @@ export function useUploadQueue(eng: Engine): UploadQueue {
           }
         }
         if (okCount > 0) {
-          eng.flash(`รับ ${okCount}/${files.length} ไฟล์แล้ว — เริ่มอ่านคลิป · ถอดเสียง · ทำภาพตัวอย่าง`);
-          await chain(CHAIN);
+          // ให้คลังเห็นไฟล์ใหม่ก่อน (manifest ยังไม่มีจนกว่า scan จะวิ่ง แต่แถว
+          // อัปโหลดจะยังโชว์ต่อจนกว่าชื่อจะโผล่ใน eng.clips)
+          await eng.refresh();
+          chain(CHAIN);
         }
       } catch (e) {
         eng.flash(e instanceof Error ? e.message : "สร้างโปรเจกต์ไม่สำเร็จ");
@@ -186,5 +201,5 @@ export function useUploadQueue(eng: Engine): UploadQueue {
 
   const clearDone = useCallback(() => setItems((xs) => xs.filter((u) => !u.done)), []);
 
-  return { items, busy, current, queue, done, chainError, start, chain, clearDone };
+  return { items, busy, current, waiting: waitFor !== null, chainError, start, chain, clearDone };
 }

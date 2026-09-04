@@ -106,6 +106,9 @@ export function Btn({
   on,
   off,
   sm,
+  lg,
+  ic,
+  pri,
   ghost,
   danger,
   disabled,
@@ -119,6 +122,12 @@ export function Btn({
   on?: boolean;
   off?: boolean;
   sm?: boolean;
+  /** สูง 52 — ปุ่มถัดไปท้ายหน้า */
+  lg?: boolean;
+  /** ไอคอนล้วน กว้างเท่าสูง */
+  ic?: boolean;
+  /** ครีมกระดาษ = ปุ่มหลัก (ใช้ Cta ถ้าเป็นปุ่มเดียวของหน้า) */
+  pri?: boolean;
   ghost?: boolean;
   danger?: boolean;
   disabled?: boolean;
@@ -128,7 +137,7 @@ export function Btn({
   return (
     <button
       type={type}
-      className={cx("btn", on && "on", off && "off", sm && "sm", ghost && "ghost", danger && "danger", className)}
+      className={cx("btn", on && "on", off && "off", sm && "sm", lg && "lg", ic && "ic", pri && "pri", ghost && "ghost", danger && "danger", className)}
       style={style}
       onClick={onClick}
       disabled={disabled}
@@ -158,6 +167,16 @@ export function Keys<T extends string>({
   grow?: boolean;
   className?: string;
 }) {
+  if (grow) {
+    return (
+      <Seg
+        items={items.map((it) => ({ v: it.v, label: it.label, note: it.n, title: it.title, disabled: it.disabled }))}
+        value={value ?? null}
+        onChange={onChange}
+        className={className}
+      />
+    );
+  }
   return (
     <div className={cx("flex gap-1", wrap && "flex-wrap", className)}>
       {items.map((it) => (
@@ -354,11 +373,7 @@ export function Cta({
 }: Div & { onClick?: () => void; disabled?: boolean; sm?: boolean; busy?: boolean }) {
   return (
     <button type="button" className={cx("cta", sm && "sm", className)} onClick={onClick} disabled={disabled || busy} title={title}>
-      {busy ? (
-        <Loader2 size={16} className="animate-spin" />
-      ) : (
-        <span className="led" style={{ background: "var(--bg)", boxShadow: "none" }} />
-      )}
+      {busy && <Loader2 size={16} className="animate-spin" />}
       {children}
     </button>
   );
@@ -621,7 +636,7 @@ export function Thumb({
     <div className={cx("thumb", onClick && "cursor-pointer", className)} style={{ width: w, height: h, ...style }} onClick={onClick} title={title}>
       {src ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt="" loading="lazy" />
+        <img src={src} alt="" loading="lazy" onError={(e) => (e.currentTarget.style.display = "none")} />
       ) : (
         <div style={{ width: "100%", height: "100%", background: "#0d0e0c" }} />
       )}
@@ -788,4 +803,183 @@ export function fmtWhen(ts: number) {
   y.setDate(now.getDate() - 1);
   if (d.toDateString() === y.toDateString()) return `เมื่อวาน ${hm}`;
   return `${d.getDate()}/${d.getMonth() + 1} ${hm}`;
+}
+
+
+// ─────────────────────────── v6 · ท้องฟ้า × ป่าไม้ ───────────────────────────
+
+/** ไอคอนเส้น 16px ชุดเดียวกับ mockup v6 — ไม่ใช้อีโมจิ/สัญลักษณ์ตัวอักษร */
+const ICONS: Record<string, string> = {
+  check: '<path d="M4 8.5l3 3 5-6"/>',
+  play: '<path d="M5 3.5v9l7-4.5z"/>',
+  x: '<path d="M4 4l8 8M12 4l-8 8"/>',
+  plus: '<path d="M8 3v10M3 8h10"/>',
+  upload: '<path d="M8 11V3M4.5 6.5L8 3l3.5 3.5M3 13h10"/>',
+  folder: '<path d="M2 4.5h4l1.5 1.5H14v7H2z"/>',
+  film: '<path d="M2.5 3h11v10h-11zM2.5 6h11M2.5 10h11M5.5 3v10M10.5 3v10"/>',
+  edit: '<path d="M3 13h3l7-7-3-3-7 7zM9 4l3 3"/>',
+  chev: '<path d="M6 3.5l4.5 4.5L6 12.5"/>',
+  back: '<path d="M10 3.5L5.5 8l4.5 4.5"/>',
+  stop: '<rect x="4" y="4" width="8" height="8" rx="1"/>',
+  prev: '<path d="M11 3.5v9L5 8zM4 3.5v9"/>',
+  next: '<path d="M5 3.5v9L11 8zM12 3.5v9"/>',
+  pause: '<path d="M5.5 3.5v9M10.5 3.5v9"/>',
+  mic: '<rect x="6" y="2" width="4" height="8" rx="2"/><path d="M4 8a4 4 0 0 0 8 0M8 12v2"/>',
+  clock: '<circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5l2.5 1.5"/>',
+  spark: '<path d="M8 2l1.3 3.7L13 7l-3.7 1.3L8 12l-1.3-3.7L3 7l3.7-1.3z"/>',
+  sticker: '<path d="M3 3h10v6l-4 4H3z M9 13V9h4"/>',
+  music: '<path d="M6 12.5V4l7-1.5v8.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="11" r="1.5"/>',
+  text: '<path d="M3 4h10M8 4v9M5.5 13h5"/>',
+  fx: '<path d="M3 13L13 3M9 3h4v4M3 9v4h4"/>',
+  warn: '<path d="M8 2.5l6 11H2z M8 6.5v3M8 11.5v.5"/>',
+  leaf: '<path d="M13 3c-6 0-9.5 3-9.5 8.5 0 .6.1 1.1.2 1.5C9.5 13 13 9.5 13 3z"/><path d="M3.7 13c1.8-3.4 4.2-6 7.3-8"/>',
+  refresh: '<path d="M13 8a5 5 0 1 1-1.5-3.5M13 3v3h-3"/>',
+  trash: '<path d="M3 4.5h10M6.5 4.5V3h3v1.5M5 4.5l.6 8h4.8l.6-8"/>',
+  eye: '<path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/>',
+  tl: '<path d="M2 5h12M2 8h8M2 11h5"/>',
+};
+export type IconName = keyof typeof ICONS;
+
+export function Icon({ name, size = 16, color = "currentColor", className, style }: { name: IconName; size?: number; color?: string; className?: string; style?: CSSProperties }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke={color}
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      style={{ flexShrink: 0, ...style }}
+      aria-hidden
+      dangerouslySetInnerHTML={{ __html: ICONS[name] ?? "" }}
+    />
+  );
+}
+
+/** ตัวเลือกแบบช่องเท่ากันสูง 44 มีเครื่องหมายถูก — ใช้แทนชิป/ข้อความขีดเส้นใต้ทุกที่ที่เป็น "ค่า"
+ *  value เป็นสตริง = เลือกได้ตัวเดียว · เป็น array = เลือกได้หลายตัว */
+export function Seg<T extends string>({
+  items,
+  value,
+  onChange,
+  cols,
+  col,
+  sm,
+  disabled,
+  className,
+  style,
+}: {
+  items: { v: T; label: ReactNode; note?: ReactNode; title?: string; disabled?: boolean }[];
+  value: T | T[] | null;
+  onChange: (v: T) => void;
+  /** จำนวนคอลัมน์ (ตั้งต้น = จำนวนตัวเลือก) */
+  cols?: number;
+  /** เรียงแนวตั้ง ชิดซ้าย */
+  col?: boolean;
+  sm?: boolean;
+  disabled?: boolean;
+  className?: string;
+  style?: CSSProperties;
+}) {
+  const on = (v: T) => (Array.isArray(value) ? value.includes(v) : value === v);
+  return (
+    <div className={cx("seg", col && "col", sm && "sm", className)} style={{ gridTemplateColumns: col ? undefined : `repeat(${cols ?? items.length}, minmax(0, 1fr))`, ...style }} role={Array.isArray(value) ? "group" : "radiogroup"}>
+      {items.map((it) => {
+        const sel = on(it.v);
+        const dis = disabled || it.disabled;
+        return (
+          <span
+            key={it.v}
+            className={sel ? "on" : undefined}
+            aria-disabled={dis ? "true" : undefined}
+            role={Array.isArray(value) ? "checkbox" : "radio"}
+            aria-checked={sel}
+            title={it.title}
+            onClick={() => !dis && onChange(it.v)}
+          >
+            {sel && <Icon name="check" size={12} color="var(--amber)" />}
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{it.label}</span>
+            {it.note !== undefined && (
+              <span style={{ fontSize: 11, color: "var(--muted)" }}>{it.note}</span>
+            )}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+/** ตัวเลขใช้ปุ่ม − / + (ไม่ใช้ลูกบิดให้หมุน) — กดค้างไม่ต้อง แค่กดทีละขั้น */
+export function Stepper({
+  value,
+  min,
+  max,
+  step = 1,
+  onChange,
+  unit,
+  fmt,
+  disabled,
+  title,
+  className,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  onChange: (v: number) => void;
+  unit?: ReactNode;
+  fmt?: (v: number) => string;
+  disabled?: boolean;
+  title?: string;
+  className?: string;
+}) {
+  const clamp = (v: number) => Math.round(Math.min(max, Math.max(min, v)) * 1e6) / 1e6;
+  return (
+    <span className={cx("stp", disabled && "opacity-45", className)} title={title} role="spinbutton" aria-valuemin={min} aria-valuemax={max} aria-valuenow={value}>
+      <span className="k" onClick={() => !disabled && onChange(clamp(value - step))} aria-label="ลด">
+        −
+      </span>
+      <span className="v num">
+        {fmt ? fmt(value) : value}
+        {unit !== undefined && <span style={{ fontSize: 11, color: "var(--muted)", marginLeft: 3 }}>{unit}</span>}
+      </span>
+      <span className="k" onClick={() => !disabled && onChange(clamp(value + step))} aria-label="เพิ่ม">
+        +
+      </span>
+    </span>
+  );
+}
+
+/** ตาราง 3×3 กดช่อง — ตำแหน่งบนจอ 9:16 · index 0–8 (แถวบน→ล่าง ซ้าย→ขวา) */
+export function Pos9({ value, onChange, disabled, title }: { value: number | null; onChange: (i: number) => void; disabled?: boolean; title?: string }) {
+  return (
+    <div className={cx("pos", disabled && "opacity-45")} title={title}>
+      {Array.from({ length: 9 }, (_, i) => (
+        <span key={i} className={value === i ? "on" : undefined} onClick={() => !disabled && onChange(i)} role="radio" aria-checked={value === i} />
+      ))}
+    </div>
+  );
+}
+
+/** แถบความคืบหน้าเส้นบาง 3px — warm = เตือน · dim = ไม่ใช่ของหลัก */
+export function Bar({ pct, warm, dim, className, style }: { pct: number; warm?: boolean; dim?: boolean; className?: string; style?: CSSProperties }) {
+  return (
+    <span className={cx("bar", className)} style={style}>
+      <i className={cx(warm && "warm", dim && "dim")} style={{ width: `${Math.max(0, Math.min(100, pct))}%` }} />
+    </span>
+  );
+}
+
+/** ช่องกดเปิด/ปิดพร้อมป้าย — สวิตช์ใหญ่ 56×30 (Tog) วางซ้าย ตามด้วยข้อความ */
+export function SwRow({ on, onChange, label, note, disabled, title }: { on: boolean; onChange: (v: boolean) => void; label: ReactNode; note?: ReactNode; disabled?: boolean; title?: string }) {
+  return (
+    <span className="inline-flex items-center gap-3" style={{ cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.55 : 1 }} onClick={() => !disabled && onChange(!on)} title={title}>
+      <Tog on={on} disabled={disabled} />
+      <span>{label}</span>
+      {note !== undefined && <span className="kv">{note}</span>}
+    </span>
+  );
 }

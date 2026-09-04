@@ -2,6 +2,7 @@
 //
 // งานพวกนี้เป็นคำสั่งแยกต่อขั้น (ไม่ใช่ `vcut run` คำสั่งเดียว) เอนจินจึงบอก job.cmd
 // กับ at/of ตรง ๆ — ไม่ต้องอ่านป้ายจาก log เหมือน v2
+// ถ้อยคำตาม mockup F2Run: ถอดเสียง · ตัดชิ้น · เรนเดอร์ทุกแบบ · แต่ง
 
 import type { JobState } from "@/lib/api";
 
@@ -12,13 +13,13 @@ export interface QuickStep {
 }
 
 export const QUICK_STEPS: QuickStep[] = [
-  { id: "scan", label: "อ่านคลิป", note: "คุณสมบัติทุกไฟล์ (ทำแล้วข้าม)" },
+  { id: "scan", label: "อ่านคลิป", note: "คุณสมบัติทุกไฟล์ · ทำแล้วข้าม" },
   { id: "thumbs", label: "ภาพตัวอย่าง", note: "ภาพปกของแต่ละแบบ" },
   { id: "listen", label: "ถอดเสียง", note: "บทพูดพร้อมเวลา — ใช้ร่วมทุกแบบ" },
-  { id: "silence", label: "หาช่วงเงียบ", note: "เกณฑ์ตามความดังของคลิป" },
+  { id: "silence", label: "ตัดชิ้น · หาช่วงเงียบ", note: "เกณฑ์ตามความดังของคลิป" },
   { id: "ai_trim", label: "AI เลือกช่วง", note: "trim_suggest ~2–3 นาที" },
-  { id: "variants", label: "ตัด 6 แบบ", note: "30 · 45 · 60 วิ · ตัดชิด · AI · ยิงรัว" },
-  { id: "autofx", label: "วางชั้นแต่ง", note: "HOOK · การ์ดปิด · ซับ · เพลง ตามสไตล์" },
+  { id: "variants", label: "เรนเดอร์ทุกแบบ", note: "ต่างกันที่ความยาวและจังหวะ" },
+  { id: "autofx", label: "แต่ง ซับ · HOOK · เพลง · เอฟเฟกต์", note: "ตามสไตล์ที่เลือก" },
 ];
 
 export const QUICK_JOBS: Record<string, string[]> = {
@@ -55,7 +56,7 @@ export function quickViews(job: JobState | null): StepView[] {
       if (job.running) {
         led = "dim";
         const pr = job.progress;
-        status = pr && pr.total > 0 ? `${pr.n}/${pr.total}${pr.eta ? ` · ~${pr.eta}` : ""}` : "กำลังทำ";
+        status = pr && pr.total > 0 ? `${pr.n} / ${pr.total}${pr.eta ? ` · ~${pr.eta}` : ""}` : "กำลังทำ";
       } else {
         led = "red";
         status = job.stopped ? "หยุด" : `พัง (code ${job.code})`;
@@ -73,4 +74,14 @@ export function quickFraction(job: JobState | null): number {
   const pr = job.progress;
   const inner = pr && pr.total > 0 ? pr.n / pr.total : 0.3;
   return Math.min(1, (Math.max(0, job.at - 1) + inner) / n);
+}
+
+/** ดัชนีขั้น "variants" ของงานนี้เทียบกับขั้นที่กำลังทำ: -1 ยังไม่ถึง · 0 กำลังตัด · 1 ผ่านแล้ว */
+export function variantsPhase(job: JobState | null): -1 | 0 | 1 {
+  if (!job || !isQuickJob(job.step)) return -1;
+  if (!job.running) return job.code === 0 && !job.stopped ? 1 : 0;
+  const ids = QUICK_JOBS[job.step];
+  const at = Math.max(0, job.at - 1);
+  const vi = ids.indexOf("variants");
+  return at < vi ? -1 : at === vi ? 0 : 1;
 }

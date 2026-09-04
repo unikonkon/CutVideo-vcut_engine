@@ -1,43 +1,80 @@
 "use client";
 
-// ① ใส่วิดีโอ — ช่องวางไฟล์ใหญ่ตรงกลาง + แถวคลิปที่มี + ปุ่มต่อไป
+// ① ใส่วิดีโอ (v6 · F1) — กลางหน้า: หัวเรื่อง → แผงกระจก 820 ที่มีช่องวางไฟล์เส้นประ
+// + รายการคลิปใต้ช่อง → แถวล่าง: ข้อความช่วยเหลือ + ปุ่มหลัก "เลือกสไตล์"
 //
-// ตัวเลขทุกตัวมาจากเอนจิน: manifest (eng.clips) · /api/setup steps · /api/transcript
-// · /api/job (งานที่วิ่งอยู่)  ปุ่มมีไม่กี่ปุ่ม: เลือกไฟล์ · (เพิ่ม/สร้างใหม่) · ต่อไป
+// ตัวเลขทุกตัวมาจากเอนจิน: eng.clips (manifest) · /api/transcript · eng.job
+// (งาน ingest ที่กำลังวิ่ง — ทุกคลิปใช้งานเดียวกัน จึงโชว์ความคืบหน้าที่แถวที่ยัง
+// ไม่มีบทพูด)  ไม่มีแผงสถานะ/ล็อกด้านขวาแล้ว — mockup ไม่มี
 
-import { useMemo, useRef, useState } from "react";
-import { Btn, Cta, Keys, Kv, Led, LogWell, Mono, Panel, Tag, Thumb, Well, fmtBytes } from "@/components/instrument";
+import { useMemo, useRef, useState, type ReactNode } from "react";
+import { Bar, Btn, Cta, Icon, Panel, Thumb, cx, fmtBytes } from "@/components/instrument";
 import { useEngine, useLoader } from "@/hooks/engine";
 import { useRoute } from "@/hooks/route";
-import { api2, thumbUrl, type ClipInfo } from "@/lib/api";
+import { api, api2, thumbUrl, type ClipInfo, type JobState } from "@/lib/api";
+import { FEATURES } from "@/lib/roadmap";
 import { dur } from "@/lib/time";
-import { findStep, orientLabel, pickVideos, speechOf, stemOf } from "./common";
-import type { UpItem, UploadMode, UploadQueue } from "./upload";
+import { orientLabel, pickVideos, speechOf, stemOf } from "./common";
+import type { UpItem, UploadQueue } from "./upload";
 
-/** ชิปสถานะหนึ่งอัน — ทำแล้ว (ฟ้า) · กำลังทำ (กะพริบ) · รอ (เทา) · พัง (แดง) */
-function Chip({ state, children }: { state: "on" | "dim" | "off" | "red"; children: React.ReactNode }) {
-  const color = state === "on" ? "var(--amber-hi)" : state === "red" ? "var(--danger)" : state === "dim" ? "var(--ink)" : "var(--muted)";
+const COLS = "40px minmax(0,1fr) 190px 24px";
+
+/** แถวไฟล์หนึ่งแถว — thumb 40 · ชื่อ+ข้อเท็จจริง · คอลัมน์สถานะ 190 · ปุ่มลบ 24 */
+function Row({ first, thumb, name, facts, status, onDelete, deleteTitle, faded }: { first: boolean; thumb?: string; name: string; facts: ReactNode; status: ReactNode; onDelete?: () => void; deleteTitle?: string; faded?: boolean }) {
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, color }}>
-      <Led on={state === "on"} dim={state === "dim"} blink={state === "dim"} red={state === "red"} />
+    <div className={cx(!first && "hl")} style={{ display: "grid", gridTemplateColumns: COLS, gap: 16, alignItems: "center", padding: "12px 0", opacity: faded ? 0.55 : 1 }}>
+      <Thumb src={thumb} w={40} h={40} style={{ borderRadius: 10 }} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+        <span style={{ fontWeight: 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+        <span className="muted small" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{facts}</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>{status}</div>
+      <span style={{ display: "inline-flex", justifyContent: "center" }}>
+        {onDelete && (
+          <button type="button" className="btn sm ic ghost" style={{ width: 24, height: 24, padding: 0 }} onClick={onDelete} title={deleteTitle}>
+            <Icon name="x" size={13} color="var(--muted)" />
+          </button>
+        )}
+      </span>
+    </div>
+  );
+}
+
+/** สถานะเป็นข้อความบรรทัดเดียว (มีไอคอนได้) — สีบอกความหมาย: มอส = เสร็จ/กำลังทำของหลัก · จาง = รอ */
+function Line({ icon, color, children }: { icon?: "mic" | "check" | "clock" | "warn"; color?: string; children: ReactNode }) {
+  return (
+    <span className="small" style={{ display: "inline-flex", alignItems: "center", gap: 7, color, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+      {icon && <Icon name={icon} size={12} color={color} />}
       {children}
     </span>
   );
 }
 
-function Row({ name, thumb, size, facts, chips, faded }: { name: string; thumb?: string; size: number; facts: React.ReactNode; chips: React.ReactNode; faded?: boolean }) {
+/** ความคืบหน้าของงาน ingest ที่กำลังวิ่ง — คลิปทุกตัวใช้งานเดียวกัน */
+function IngestLine({ job }: { job: JobState }) {
+  const prog = job.progress;
+  const label = job.cmd_label || job.cmd || job.step;
+  if (job.cmd === "listen" && prog && prog.total > 0) {
+    return (
+      <>
+        <Line icon="mic" color="var(--amber)">
+          ถอดเสียง {prog.n} / {prog.total}
+          {prog.eta ? <span className="muted"> · เหลือ ~{prog.eta}</span> : null}
+        </Line>
+        <Bar pct={(prog.n / prog.total) * 100} />
+      </>
+    );
+  }
+  // scan/thumbs (หรือ listen ก่อนแถบขึ้น) — บอกคำสั่งที่เท่าไรจากทั้งหมดในงาน
+  const pct = job.of > 0 ? ((Math.max(1, job.at) - 1) / job.of) * 100 : 0;
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "40px 1fr", gap: 12, alignItems: "center", padding: "9px 12px", opacity: faded ? 0.55 : 1 }}>
-      <Thumb src={thumb} w={40} h={70} />
-      <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-          <span style={{ fontSize: 14, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
-          <Mono className="kv">{fmtBytes(size)}</Mono>
-        </div>
-        <Mono style={{ fontSize: 11, color: "var(--muted)" }}>{facts}</Mono>
-        <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>{chips}</div>
-      </div>
-    </div>
+    <>
+      <Line icon="clock" color="var(--amber)">
+        กำลัง{label}
+        {job.of > 1 ? <span className="muted"> · {job.at}/{job.of}</span> : null}
+      </Line>
+      <Bar pct={pct} />
+    </>
   );
 }
 
@@ -48,118 +85,137 @@ export default function Input({ up }: { up: UploadQueue }) {
   const tr = useLoader(() => api2.transcript(), eng.reloadKey);
   const fileRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
-  const [modePick, setModePick] = useState<UploadMode | null>(null);
-  const mode: UploadMode = modePick ?? (eng.clips.length === 0 ? "new" : "add");
+  /** กด "เริ่มโปรเจกต์ใหม่" ค้างไว้ — ไฟล์ชุดถัดไปจะสร้างโปรเจกต์ใหม่แทนเพิ่มเข้าของเดิม */
+  const [fresh, setFresh] = useState(false);
+  const [deleting, setDeleting] = useState("");
 
-  const steps = setup.data?.steps;
-  const scanStep = findStep(steps, "scan");
-  const listenStep = findStep(steps, "listen");
   const job = eng.job;
   const running = Boolean(job?.running);
-  const runStep = running ? job?.step ?? "" : "";
-  const prog = running ? job?.progress ?? null : null;
-
-  const chipsFor = (clip: ClipInfo | null, item: UpItem | null) => {
-    const name = clip?.name ?? stemOf(item?.as ?? item?.name ?? "");
-    const n = speechOf(tr.data, name);
-    return (
-      <>
-        {item?.error ? (
-          <Chip state="red">{item.error}</Chip>
-        ) : item && !item.done ? (
-          <Chip state="dim">กำลังส่ง {item.pct}%</Chip>
-        ) : clip ? (
-          <Chip state="on">อ่านคลิปแล้ว</Chip>
-        ) : (
-          <Chip state={runStep === "scan" ? "dim" : "off"}>{runStep === "scan" ? "กำลังอ่านคลิป" : "รออ่านคลิป"}</Chip>
-        )}
-        {runStep === "listen" ? (
-          <Chip state="dim">ถอดเสียง {prog && prog.total ? `${prog.n}/${prog.total}` : "…"}{prog?.eta ? ` · เหลือ ~${prog.eta}` : ""}</Chip>
-        ) : n === null ? (
-          <Chip state="off">รอถอดเสียง</Chip>
-        ) : n > 0 ? (
-          <Chip state="on">บทพูด {n} ท่อน</Chip>
-        ) : (
-          <Chip state="on">ไม่มีเสียงพูด · ใช้เป็นวิว</Chip>
-        )}
-      </>
-    );
-  };
+  const hasProject = Boolean(eng.proj?.project);
+  const mode = fresh || !hasProject || eng.clips.length === 0 ? "new" : "add";
 
   const known = useMemo(() => new Set(eng.clips.map((c) => c.name)), [eng.clips]);
   const pending = up.items.filter((u) => !(u.done && known.has(stemOf(u.as ?? u.name))));
   const clips = useMemo(() => [...eng.clips].sort((a, b) => b.added - a.added), [eng.clips]);
+  const vmodeLabel = (v: string) => eng.vmodes.find((m) => m.value === v)?.label ?? v;
 
   const onFiles = (files: FileList | File[]) => {
     const vids = pickVideos(files);
     if (!vids.length) return eng.flash("รับเฉพาะไฟล์วิดีโอ .mov .mp4 .m4v");
+    setFresh(false);
     up.start(vids, mode, setup.data?.projects ?? []);
   };
 
-  const listened = Boolean(listenStep?.exists) && !up.current && !running;
-  const canNext = eng.clips.length > 0;
-  const busyLabel = up.busy ? "กำลังส่งไฟล์…" : up.current ? `กำลัง${job?.cmd_label || up.current}…` : "";
-  const projName = eng.proj?.project || "—";
+  const onDelete = async (name: string) => {
+    setDeleting(name);
+    try {
+      const res = await api.deleteClip(name);
+      await eng.refresh();
+      eng.flash(res.kind === "link" ? `ถอด ${name} ออกจากคลังแล้ว` : `ย้าย ${name} ไปถังขยะแล้ว`);
+    } catch (e) {
+      eng.flash(e instanceof Error ? e.message : "ลบคลิปไม่สำเร็จ");
+    } finally {
+      setDeleting("");
+    }
+  };
+
+  /** คอลัมน์สถานะของคลิปในคลัง */
+  const statusOf = (c: ClipInfo): ReactNode => {
+    const n = speechOf(tr.data, c.name);
+    if (n !== null) {
+      return <Line icon="check" color="var(--amber)">{n > 0 ? `ถอดเสียงแล้ว · ${n} ท่อน` : "ไม่มีเสียงพูด · ใช้เป็นวิว"}</Line>;
+    }
+    if (running && job) return <IngestLine job={job} />;
+    if (up.waiting) return <Line icon="clock" color="var(--muted)">รอเอนจินว่างแล้วจะถอดเสียง</Line>;
+    if (up.chainError) return <Line icon="warn" color="var(--danger)">ยังไม่ได้ถอดเสียง</Line>;
+    return <Line color="var(--muted)">รอถอดเสียง</Line>;
+  };
+
+  /** คอลัมน์สถานะของไฟล์ที่กำลังส่ง (ยังไม่โผล่ในคลัง) */
+  const statusOfUpload = (u: UpItem): ReactNode => {
+    if (u.error) return <Line icon="warn" color="var(--danger)">{u.error}</Line>;
+    if (!u.done) {
+      return (
+        <>
+          <Line color="var(--muted)">อัปโหลด {u.pct}%</Line>
+          <Bar pct={u.pct} dim />
+        </>
+      );
+    }
+    if (running && job) return <IngestLine job={job} />;
+    if (up.waiting) return <Line icon="clock" color="var(--muted)">ส่งครบแล้ว · รอเอนจินว่าง</Line>;
+    return <Line color="var(--muted)">ส่งครบแล้ว · รอเอนจินอ่านคลิป</Line>;
+  };
+
+  const canDelete = !running && !up.busy && !deleting;
+  const canNext = eng.clips.length > 0 && !eng.offline;
+  const projName = eng.proj?.project || "";
+  const dropHint = up.busy ? "กำลังส่งไฟล์…" : "ลากวิดีโอมาวางที่นี่";
+  const dropSub = !up.busy && eng.clips.length > 0 ? (mode === "new" ? "ไฟล์ชุดถัดไปจะสร้างโปรเจกต์ใหม่จากชื่อไฟล์แรก" : projName ? `จะเพิ่มเข้าโปรเจกต์ ${projName}` : "") : "";
+  const wide = { width: 820, maxWidth: "100%" } as const;
 
   return (
-    <div style={{ flex: 1, display: "grid", gridTemplateColumns: "minmax(0,1fr) 340px", gap: 10, padding: 10, minHeight: 0 }}>
-      <Panel style={{ display: "flex", flexDirection: "column", gap: 14, padding: "18px 20px", minHeight: 0, overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 20, fontWeight: 600 }}>ใส่วิดีโอ</span>
-          <Kv>วางกี่ไฟล์ก็ได้ · MOV / MP4 · แนวตั้งหรือแนวนอน — เอนจินปรับเป็น 9:16 ให้เอง</Kv>
-        </div>
+    <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 34, padding: "16px 24px 70px", position: "relative" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, textAlign: "center" }}>
+        <span className="h1" style={{ fontSize: 40 }}>ใส่วิดีโอ</span>
+        <span className="muted">วางกี่ไฟล์ก็ได้ · MOV / MP4 · แนวตั้งหรือแนวนอนก็ได้ เอนจินปรับเป็น 9:16 ให้เอง</span>
+      </div>
 
-        {eng.clips.length > 0 && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <Tag>ไฟล์ที่วางจะไปที่</Tag>
-            <Keys<UploadMode>
-              value={mode}
-              onChange={setModePick}
-              items={[
-                { v: "add", label: `โปรเจกต์นี้ (${projName})`, disabled: up.busy },
-                { v: "new", label: "โปรเจกต์ใหม่", disabled: up.busy, title: "projects/<ชื่อไฟล์>.toml · footage/<ชื่อไฟล์>/" },
-              ]}
-            />
+      <Panel style={{ ...wide, padding: 8, display: "flex", flexDirection: "column", flexShrink: 0 }}>
+        {eng.offline ? (
+          <div style={{ height: 210, borderRadius: 12, border: "1px dashed rgba(255,122,122,.45)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14 }}>
+            <Icon name="warn" size={28} color="var(--danger)" />
+            <span style={{ fontSize: 16 }}>ไม่พบเอนจิน</span>
+            <span className="muted small">เปิด vcut serve แล้วลองเชื่อมใหม่ — วางไฟล์ได้เมื่อเอนจินกลับมา</span>
+            <Btn onClick={() => eng.refresh()}>
+              <Icon name="refresh" size={14} />
+              ลองเชื่อมใหม่
+            </Btn>
           </div>
-        )}
-
-        <div
-          style={{ flex: pending.length + clips.length > 0 ? "0 0 auto" : 1, minHeight: 180, display: "flex" }}
-          onDragOver={(e) => {
-            if (!e.dataTransfer.types.includes("Files")) return;
-            e.preventDefault();
-            e.dataTransfer.dropEffect = "copy";
-            if (!up.busy) setOver(true);
-          }}
-          onDragLeave={(e) => {
-            if (!e.currentTarget.contains(e.relatedTarget as Node)) setOver(false);
-          }}
-          onDrop={(e) => {
-            if (!e.dataTransfer.types.includes("Files")) return;
-            e.preventDefault();
-            setOver(false);
-            if (!up.busy) onFiles(e.dataTransfer.files);
-          }}
-        >
-          <Well
-            dashed
-            sel={over}
+        ) : (
+          <div
+            className={cx("well dashed", over && "sel")}
+            style={{ height: 210, borderRadius: 12, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, cursor: up.busy ? "default" : "pointer", opacity: up.busy ? 0.7 : 1 }}
             onClick={() => !up.busy && fileRef.current?.click()}
-            style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: 24, opacity: up.busy ? 0.6 : 1 }}
+            onDragOver={(e) => {
+              if (!e.dataTransfer.types.includes("Files")) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "copy";
+              if (!up.busy) setOver(true);
+            }}
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node)) setOver(false);
+            }}
+            onDrop={(e) => {
+              if (!e.dataTransfer.types.includes("Files")) return;
+              e.preventDefault();
+              setOver(false);
+              if (!up.busy) onFiles(e.dataTransfer.files);
+            }}
+            role="button"
             title="คลิกเพื่อเลือกไฟล์ หรือลากไฟล์มาวาง"
           >
-            <span style={{ width: 56, height: 56, borderRadius: 999, background: "rgba(90,176,255,.14)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, color: "var(--amber-hi)" }}>+</span>
-            <span style={{ fontSize: 18, fontWeight: 500 }}>{busyLabel || "ลากวิดีโอมาวางที่นี่"}</span>
-            <Kv>หรือ</Kv>
-            <Btn
-              disabled={up.busy}
-              onClick={(e) => {
-                e.stopPropagation();
-                fileRef.current?.click();
-              }}
-            >
-              เลือกไฟล์…
-            </Btn>
+            <Icon name="upload" size={28} color="var(--amber)" />
+            <span style={{ fontSize: 16 }}>{dropHint}</span>
+            {dropSub && <span className="muted small" style={{ marginTop: -8 }}>{dropSub}</span>}
+            <div style={{ display: "flex", gap: 10 }}>
+              <Btn
+                disabled={up.busy}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  fileRef.current?.click();
+                }}
+              >
+                <Icon name="film" size={14} />
+                เลือกไฟล์…
+              </Btn>
+              {FEATURES.linkFolder && (
+                <Btn ghost disabled={up.busy} onClick={(e) => e.stopPropagation()} title="ยังไม่มีในเอนจิน">
+                  <Icon name="folder" size={14} />
+                  ลิงก์โฟลเดอร์
+                </Btn>
+              )}
+            </div>
             <input
               ref={fileRef}
               type="file"
@@ -172,70 +228,82 @@ export default function Input({ up }: { up: UploadQueue }) {
                 e.target.value = "";
               }}
             />
-          </Well>
-        </div>
+          </div>
+        )}
 
         {(pending.length > 0 || clips.length > 0) && (
-          <Well className="rows" style={{ display: "flex", flexDirection: "column", overflowY: "auto", minHeight: 0, flex: 1 }}>
-            {pending.map((u) => (
+          <div style={{ padding: "6px 16px 4px", display: "flex", flexDirection: "column" }}>
+            {pending.map((u, i) => (
               <Row
                 key={`up-${u.id}`}
+                first={i === 0}
                 name={u.as ? `${u.name} → ${u.as}` : u.name}
-                size={u.size}
-                facts={u.error ? u.error : u.done ? "ส่งครบแล้ว · รอเอนจินอ่านคลิป" : `${fmtBytes(Math.round((u.size * u.pct) / 100))} / ${fmtBytes(u.size)}`}
-                chips={chipsFor(null, u)}
+                facts={u.done ? fmtBytes(u.size) : `${fmtBytes(Math.round((u.size * u.pct) / 100))} / ${fmtBytes(u.size)}`}
+                status={statusOfUpload(u)}
                 faded={Boolean(u.error)}
               />
             ))}
-            {clips.map((c) => (
+            {clips.map((c, i) => (
               <Row
                 key={c.name}
-                name={c.name}
+                first={pending.length === 0 && i === 0}
                 thumb={thumbUrl(c.name)}
-                size={c.size}
-                facts={`${dur(c.dur)} · ${c.w}×${c.h} ${orientLabel(c.orient)} · ${(c.codec || "?").toUpperCase()}${c.picked ? "" : " · พักไว้"}`}
-                chips={chipsFor(c, null)}
-                faded={!c.picked}
+                name={c.name}
+                facts={[
+                  dur(c.dur),
+                  `${c.w}×${c.h}`,
+                  fmtBytes(c.size),
+                  orientLabel(c.orient),
+                  c.orient === "H" ? (c.vmode_eff === "crop" ? "จะครอปเป็น 9:16" : `เป็น 9:16 แบบ${vmodeLabel(c.vmode_eff)}`) : "",
+                  c.picked ? "" : "พักไว้",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                status={statusOf(c)}
+                onDelete={canDelete ? () => onDelete(c.name) : undefined}
+                deleteTitle="เอาคลิปออก (ไปถังขยะ กู้คืนได้)"
+                faded={!c.picked || deleting === c.name}
               />
             ))}
-          </Well>
+          </div>
         )}
-        {up.chainError && <Kv style={{ color: "var(--danger)" }}>{up.chainError}</Kv>}
+
+        {up.chainError && (
+          <div className="hl" style={{ margin: "0 16px", padding: "10px 0 6px", display: "flex", alignItems: "center", gap: 12 }}>
+            <Icon name="warn" size={14} color="var(--danger)" />
+            <span className="small" style={{ color: "var(--danger)", flex: 1, minWidth: 0 }}>{up.chainError}</span>
+            <Btn sm onClick={() => up.chain()} disabled={running || up.busy} title={running ? "มีงานกำลังรันอยู่ — รอให้เสร็จก่อน" : "สั่งอ่านคลิป · ถอดเสียงอีกครั้ง"}>
+              <Icon name="refresh" size={13} />
+              ลองใหม่
+            </Btn>
+          </div>
+        )}
       </Panel>
 
-      <Panel style={{ display: "flex", flexDirection: "column", gap: 12, padding: "18px 18px", minHeight: 0, overflow: "hidden" }}>
-        <span style={{ fontSize: 15, fontWeight: 600 }}>สถานะ</span>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {[
-            { id: "scan", label: "อ่านคลิป", done: Boolean(scanStep?.exists) },
-            { id: "listen", label: "ถอดเสียงเป็นบทพูด", done: Boolean(listenStep?.exists) },
-            { id: "thumbs", label: "ภาพตัวอย่าง", done: Boolean(findStep(steps, "thumbs")?.exists) },
-          ].map((s) => {
-            const cur = up.current === s.id || runStep === s.id;
-            return (
-              <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
-                <Led on={!cur && (s.done || up.done.includes(s.id))} dim={cur} blink={cur} />
-                <span style={{ flex: 1 }}>{s.label}</span>
-                <Mono style={{ fontSize: 11, color: cur ? "var(--amber-hi)" : "var(--muted)" }}>
-                  {cur ? (prog && prog.total ? `${prog.n}/${prog.total}` : "กำลังทำ") : s.done || up.done.includes(s.id) ? "เสร็จ" : up.queue.includes(s.id) ? "รอคิว" : "—"}
-                </Mono>
-              </div>
-            );
-          })}
-        </div>
-        <Kv style={{ fontSize: 11.5, lineHeight: "17px" }}>
-          {listened ? "บทพูดพร้อมแล้ว — ทุกแบบใช้ร่วมกัน ไม่ต้องถอดซ้ำ" : "ถอดเสียงใช้เวลาราวครึ่งหนึ่งของทั้งหมด (คลิป 2 นาที ≈ 40 วิ) — ไปเลือกสไตล์ต่อได้เลย ไม่ต้องรอ"}
-        </Kv>
-        <LogWell lines={running || up.current ? eng.jobLines : [setup.data?.project.path ? `${setup.data.project.path}` : "ยังไม่มีโปรเจกต์ — วางไฟล์เพื่อสร้าง"]} style={{ minHeight: 80, flex: 1 }} />
-        {running && (
-          <Btn sm ghost danger onClick={() => eng.stopJob()} style={{ alignSelf: "flex-start" }}>
-            หยุดงาน
+      <div style={{ ...wide, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+        <span className="cap small" style={{ flex: 1, minWidth: 200 }}>เอนจินเริ่มถอดเสียงทันทีที่วางไฟล์ ทุกสไตล์ทุกแบบใช้ร่วมกัน · ไปเลือกสไตล์ต่อได้ไม่ต้องรอ</span>
+        {eng.clips.length > 0 && !eng.offline && (
+          <Btn
+            sm
+            ghost
+            on={fresh}
+            disabled={up.busy}
+            onClick={() => {
+              const next = !fresh;
+              setFresh(next);
+              if (next) fileRef.current?.click();
+            }}
+            title={fresh ? "กดอีกครั้งเพื่อกลับไปเพิ่มเข้าโปรเจกต์เดิม" : "ไฟล์ชุดถัดไปจะสร้าง projects/<ชื่อไฟล์>.toml ใหม่ (สูตร vertical-short)"}
+          >
+            <Icon name="plus" size={13} />
+            เริ่มโปรเจกต์ใหม่
           </Btn>
         )}
         <Cta onClick={() => r.go(2)} disabled={!canNext} title={canNext ? "ไปเลือกสไตล์" : "วางไฟล์ก่อน"}>
-          ต่อไป · เลือกสไตล์ ▸
+          เลือกสไตล์
+          <Icon name="chev" size={14} color="var(--ink-dark)" />
         </Cta>
-      </Panel>
+      </div>
     </div>
   );
 }

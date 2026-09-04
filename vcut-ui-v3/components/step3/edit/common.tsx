@@ -1,19 +1,17 @@
 "use client";
 
-// ของกลางของแผงแก้รายชั้น (ขั้น ③ · edit) — โครงหน้า + ตัวช่วยที่ store ยังไม่มี
+// ของกลางของลิ้นชักแก้ชั้นแต่ง (ขั้น ③ · edit) — โครงลิ้นชัก + ตัวช่วยที่ store ยังไม่มี
 //
-//   EditShell   TopBar (ป้าย · MOD n · ทิ้ง/บันทึก · ↻ ทำขั้น ⑤ ใหม่) + EditFrame + Player
-//               โหมด timeline — ทุกแผงใช้ตัวเดียวกัน จะได้ไม่มีแผงไหนลืม disabled ตอนงานวิ่ง
-//   useAdders   "วางของที่หัวเล่น" ทุกชนิด (ข้อความ · รูปทรง · สติกเกอร์ · SFX · เพลง · หมุด)
-//               ประกอบจาก fx.patch / ensureAsset / tlToClip / setFocus ของ store — store ไม่มี
-//               ตัวเพิ่มพวกนี้ (v1 อยู่ใน page.tsx) จึงสร้างไว้ที่นี่ที่เดียว แผงไหนก็หยิบไป
-//   catalog     รายการตัวอย่างฝั่งหน้าเว็บที่ต้องส่งให้ AI review (สำเนาจาก ReviewPage —
-//               ตัวนั้นไม่ได้ export)
+//   EditShell    ลิ้นชัก (frames/EditFrame) + จอตัวอย่างเล็ก + ปุ่ม ยกเลิก/บันทึก·เรนเดอร์ใหม่
+//                ทุกแผงใช้ตัวเดียวกัน จะได้ไม่มีแผงไหนลืม disabled ตอนงานวิ่ง
+//   Lbl Row Sec  ชิ้นเล็กให้แผงเรียงแบบ mockup: ป้ายจาง · แถว "ป้าย | ตัวควบคุม" · หัวส่วน
+//   pos9         แปลงตาราง 3×3 ↔ (x, y, align) ของเอนจิน
+//   useAdders    "วางของที่หัวเล่น" ทุกชนิด (ข้อความ · รูปทรง · สติกเกอร์ · SFX · เพลง · หมุด)
+//   catalog      รายการตัวอย่างฝั่งหน้าเว็บที่ต้องส่งให้ AI review
 
-import { useCallback, useMemo, type ReactNode } from "react";
-import TopBar from "@/components/frames/TopBar";
+import { useCallback, useEffect, useMemo, type CSSProperties, type ReactNode } from "react";
 import EditFrame from "@/components/frames/EditFrame";
-import { Btn, Well } from "@/components/instrument";
+import { Bar, Btn, Icon } from "@/components/instrument";
 import { useEngine } from "@/hooks/engine";
 import { useRoute, type Edit3 } from "@/hooks/route";
 import type { FxJourney, FxOverlay, FxShape, FxTextItem, JourneyStop, MusicTrack, ReviewCatalog } from "@/lib/api";
@@ -23,9 +21,10 @@ import { lookOf, nameFromText, uniqueName } from "@/lib/presets";
 import { SFX_LIST, sfxUrl } from "@/lib/sfx";
 import { STICKER_LIST, stickerUrl, type StickerDef } from "@/lib/stickers";
 import { resolveLook } from "@/lib/textfx";
-import Player from "@/components/step3/Player";
-import { layerRows } from "@/components/step3/layers";
+import { dur } from "@/lib/time";
+import { Stage } from "@/components/step3/Player";
 import { useStudio } from "@/components/step3/store";
+import { styleLetter } from "@/components/step3/styles";
 import type { SpeechLine } from "@/components/step3/types";
 
 /** ข้อความที่มาจากบทพูดติดรหัสไว้ที่ id — สูตรเดียวกับ v1 TranscriptPanel (เอนจินเก็บ id ตามที่ส่ง) */
@@ -48,121 +47,168 @@ export function trackLabel(file: string): string {
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
-// ─────────────────────────── โครงหน้า ───────────────────────────
+// ─────────────────────────── ชิ้นเล็กของแผง ───────────────────────────
+
+/** ป้ายจางเล็ก (mockup: .muted.small) */
+export function Lbl({ children, style, title }: { children: ReactNode; style?: CSSProperties; title?: string }) {
+  return (
+    <span className="muted small" style={style} title={title}>
+      {children}
+    </span>
+  );
+}
+
+/** แถว "ป้ายซ้าย · ตัวควบคุมขวา" (mockup: ขนาด | − 54 +) */
+export function Row({ label, children, title, style }: { label: ReactNode; children: ReactNode; title?: string; style?: CSSProperties }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, ...style }} title={title}>
+      <Lbl>{label}</Lbl>
+      {children}
+    </div>
+  );
+}
+
+/** หัวส่วน — ชื่อน้ำหนัก 400 + ของฝั่งขวา */
+export function Sec({ title, note, right, style }: { title: ReactNode; note?: ReactNode; right?: ReactNode; style?: CSSProperties }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, paddingTop: 6, minWidth: 0, ...style }}>
+      <span style={{ fontWeight: 400, whiteSpace: "nowrap" }}>{title}</span>
+      {note !== undefined && <Lbl style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{note}</Lbl>}
+      <div style={{ flex: 1 }} />
+      {right}
+    </div>
+  );
+}
+
+/** แถวของหลายชิ้นเรียงซ้ายไปขวา ห่อบรรทัดได้ */
+export function TagRow({ children, style }: { children: ReactNode; style?: CSSProperties }) {
+  return <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", ...style }}>{children}</div>;
+}
+
+/** ตาราง 2 คอลัมน์ของแถว Row — ตัวเลขหลายตัวไม่ยาวเป็นตับ */
+export function Grid2({ children }: { children: ReactNode }) {
+  return <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px" }}>{children}</div>;
+}
+
+/** ปุ่มไอคอนเล็กโปร่ง (ลบ · เล่น) */
+export function IcBtn({ name, onClick, title, disabled, on }: { name: Parameters<typeof Icon>[0]["name"]; onClick: (e: React.MouseEvent<HTMLButtonElement>) => void; title?: string; disabled?: boolean; on?: boolean }) {
+  return (
+    <Btn sm ic ghost on={on} onClick={onClick} title={title} disabled={disabled}>
+      <Icon name={name} size={13} />
+    </Btn>
+  );
+}
+
+// ─────────────────────────── ตาราง 3×3 ↔ เอนจิน ───────────────────────────
+
+const POS_X = [0.08, 0.5, 0.92];
+const POS_Y = [0.08, 0.5, 0.9];
+
+/** ช่อง i (0–8 บน→ล่าง ซ้าย→ขวา) → (x, y, align แบบ ass numpad) */
+export function pos9Pose(i: number): { x: number; y: number; align: number } {
+  const row = Math.floor(i / 3);
+  const col = i % 3;
+  return { x: POS_X[col], y: POS_Y[row], align: (2 - row) * 3 + col + 1 };
+}
+
+/** align (1–9) → ช่อง 0–8 */
+export function pos9OfAlign(align: number): number | null {
+  if (!Number.isInteger(align) || align < 1 || align > 9) return null;
+  const row = align >= 7 ? 0 : align >= 4 ? 1 : 2;
+  return row * 3 + ((align - 1) % 3);
+}
+
+/** ช่องที่ตรงกับ (x, y, align) ของชิ้น — ไม่ตรง = จัดเอง (null) */
+export function pos9OfItem(x: number, y: number, align: number): number | null {
+  const i = pos9OfAlign(align);
+  if (i === null) return null;
+  const p = pos9Pose(i);
+  return Math.abs(p.x - x) < 0.05 && Math.abs(p.y - y) < 0.05 ? i : null;
+}
+
+// ─────────────────────────── จอตัวอย่างในลิ้นชัก ───────────────────────────
+
+/** จอ 9:16 ในคอลัมน์ขวา 200 — Stage ของ store (ชั้นซ้อนสด) + เล่น/หยุด + แถบเวลา */
+export function DrawerPreview() {
+  const s = useStudio();
+  const { setSource } = s;
+  useEffect(() => {
+    setSource({ mode: "timeline" });
+  }, [setSource]);
+  const total = Math.max(s.total, 0.001);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0 }}>
+      <div className="thumb" style={{ height: 250, display: "flex", alignItems: "center", justifyContent: "center", background: "#000" }}>
+        <Stage showOverlays message={!s.rendered.length ? "ยังไม่มีชิ้นที่ตัดแล้ว — ต่อไฟล์ก่อนถึงจะเล่นสดได้" : undefined} />
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Btn sm ic onClick={s.toggle} disabled={!s.rendered.length} title={s.playing ? "หยุด (Space)" : "เล่น (Space)"}>
+          <Icon name={s.playing ? "pause" : "play"} size={12} />
+        </Btn>
+        <Bar pct={(s.playhead / total) * 100} style={{ flex: 1 }} />
+        <span className="muted small num" style={{ whiteSpace: "nowrap" }}>
+          {dur(s.playhead)} / {dur(s.total)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────── โครงลิ้นชัก ───────────────────────────
 
 export interface ShellProps {
   id: Edit3;
-  /** ป้ายโมโนซ้ายบน เช่น "EDIT SUB · 12 LINES" (variant id เติมให้เอง) */
-  badge: string;
-  tag: string;
-  title: string;
-  /** ป้ายปุ่มขวาบน — ค่าตั้งต้น "↻ ทำขั้น ⑤ ใหม่ · ~N s" */
-  cta?: string;
-  /** งานที่ปุ่มขวาบนสั่ง — ซับใช้ build_text ที่เหลือ build_fx */
+  /** งานที่ปุ่มบันทึกสั่ง — ซับใช้ build_text ที่เหลือ build_fx */
   buildStep?: "build_fx" | "build_text";
-  /** ทิ้ง draft ของแผงนี้ (ปุ่ม ทิ้ง) */
+  /** ทิ้ง draft ของแผงนี้ (ปุ่ม ยกเลิก) */
   revert?: () => void;
-  leftNote?: ReactNode;
-  leftExtra?: ReactNode;
-  topleft?: ReactNode;
-  /** แถวเลนใต้ transport แทนของ Player (เช่น เลนที่มีเส้นบีต) */
-  lanes?: ReactNode;
+  /** ตัวควบคุมสไตล์ใต้จอตัวอย่าง (คอลัมน์ขวา) */
   right?: ReactNode;
   children: ReactNode;
 }
 
-export function EditShell({ id, badge, tag, title, cta, buildStep = "build_fx", revert, leftNote, leftExtra, topleft, lanes, right, children }: ShellProps) {
+export function EditShell({ id, buildStep = "build_fx", revert, right, children }: ShellProps) {
   const eng = useEngine();
   const r = useRoute();
   const s = useStudio();
   const running = Boolean(eng.job?.running);
-  const rows = useMemo(() => layerRows(s), [s]);
   const rb = s.rebuild;
   const modN = (s.dirty ? 1 : 0) + (s.fx.dirty ? 1 : 0) + (s.cap.dirty ? 1 : 0);
   const saving = s.saving || s.fx.saving || s.cap.saving;
   const isText = buildStep === "build_text";
   const eta = isText ? rb.eta.text : rb.eta.fx;
-  const label = cta ?? (isText ? `↻ เผาซับ · build_text ④ · ~${eta} s` : `↻ ทำขั้น ⑤ ใหม่ · ~${eta} s`);
+  const letter = styleLetter(s.setup, eng.proj?.variant_style ?? "");
+  const secs = Math.round(s.total || s.variant.dur);
 
   // draft ลงไฟล์ก่อนสั่งงานเสมอ — ไม่งั้นเอนจินสร้างจากของเก่าแล้วคนเข้าใจว่าที่แก้ไม่มีผล
-  const run = async () => {
-    if (running) return;
+  const save = async () => {
+    if (running || saving) return;
     if (modN) await s.saveAll();
-    await eng.runJob(buildStep);
+    const ok = await eng.runJob(buildStep);
+    if (ok) r.openEdit(null);
+  };
+  const cancel = () => {
+    revert?.();
+    r.openEdit(null);
   };
 
   return (
-    <>
-      <TopBar
-        left={
-          <Well className="mono" style={{ padding: "4px 10px", fontSize: 11, color: "var(--amber)", whiteSpace: "nowrap" }}>
-            {s.variant.id} · {badge}
-            {modN > 0 && ` · MOD ${modN}`}
-          </Well>
-        }
-        right={
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            {modN > 0 && (
-              <>
-                <Well className="mono" style={{ padding: "4px 10px", fontSize: 11, color: "var(--amber)", whiteSpace: "nowrap" }} title="ไฟล์ที่แก้ค้าง — Cmd+S บันทึกทั้งหมด">
-                  MOD {modN} · UNSAVED
-                </Well>
-                {revert && (
-                  <Btn sm onClick={revert} disabled={saving} title="ทิ้งที่แก้ในแผงนี้ กลับไปใช้ที่บันทึกไว้">
-                    ทิ้ง
-                  </Btn>
-                )}
-                <Btn sm onClick={() => s.saveAll()} disabled={saving} title="บันทึกทุก draft ที่ค้าง (Cmd+S)">
-                  บันทึก
-                </Btn>
-              </>
-            )}
-            <Btn on onClick={run} disabled={running || saving || !s.shots.length} title={running ? "เอนจินกำลังทำงานอื่นอยู่" : `บันทึก draft แล้วสั่ง ${buildStep}`}>
-              {label}
-            </Btn>
-          </div>
-        }
-      />
-      <EditFrame
-        variantId={s.variant.id}
-        variantLabel={s.variant.label}
-        variantMeta={`${s.total.toFixed(1)} s · ${s.shots.length} SHOTS`}
-        layers={rows}
-        active={id}
-        onPick={(l) => r.openEdit(l)}
-        leftNote={leftNote}
-        leftExtra={leftExtra}
-        rebuild={[
-          isText
-            ? { label: "④ TEXT REBUILD", value: rb.text ? `~${rb.eta.text} s` : "READY", warn: rb.text }
-            : { label: "⑤ FX REBUILD", value: rb.fx ? `~${rb.eta.fx} s` : "READY", warn: rb.fx },
-          { label: "③ RENDER", value: rb.edl ? `~${rb.eta.edl} s` : "CACHE", warn: rb.edl },
-        ]}
-        onBack={() => r.openEdit(null)}
-        center={
-          <>
-            <Player mode="timeline" topleft={topleft} showLanes={lanes === undefined} />
-            {lanes !== undefined && <div style={{ padding: "4px 14px 12px 14px" }}>{lanes}</div>}
-          </>
-        }
-        tag={tag}
-        title={title}
-        right={right}
-      >
-        {children}
-      </EditFrame>
-    </>
+    <EditFrame
+      active={id}
+      title={`แก้ชั้นแต่ง · ${letter} · ${secs} วิ`}
+      onPick={(t) => r.openEdit(t)}
+      onClose={() => r.openEdit(null)}
+      preview={<DrawerPreview />}
+      right={right}
+      footNote={`เรนเดอร์ใหม่เฉพาะแบบ ${s.variant.label} · ~${eta} วิ${modN ? ` · แก้ค้าง ${modN} ไฟล์` : ""}`}
+      onCancel={cancel}
+      onSave={save}
+      saveDisabled={running || saving || !s.shots.length}
+      saveTitle={running ? "เอนจินกำลังทำงานอื่นอยู่" : `บันทึกที่แก้ค้างแล้วสั่ง ${buildStep}`}
+    >
+      {children}
+    </EditFrame>
   );
-}
-
-/** ตารางลูกบิด n ช่องเท่ากัน (mockup: grid repeat(4,1fr) gap 8) */
-export function KnobGrid({ cols = 4, children }: { cols?: number; children: ReactNode }) {
-  return <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))`, gap: 8 }}>{children}</div>;
-}
-
-/** แถว TAG + ของ (mockup: display flex gap 10 align center) */
-export function TagRow({ children }: { children: ReactNode }) {
-  return <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>{children}</div>;
 }
 
 // ─────────────────────────── วางของที่หัวเล่น ───────────────────────────
@@ -318,7 +364,7 @@ export function useAdders() {
       if (replaceIdx != null && dr.music[replaceIdx]) {
         fx.patch({ music: dr.music.map((m, k) => (k === replaceIdx ? { ...m, file: actual } : m)) });
         setFocus({ kind: "music", idx: replaceIdx });
-        flash(`เปลี่ยน TR 1 เป็น ${trackLabel(file)}`);
+        flash(`เปลี่ยนเพลงเป็น ${trackLabel(file)}`);
         return;
       }
       const eff = d.music.defaults.dur > 0 ? d.music.defaults.dur : Math.max(total - tl, 1);
@@ -356,5 +402,8 @@ export function useAdders() {
     [d, dr, bindAt, fx],
   );
 
-  return { playhead, addTextAt, addSpeechText, makePresetFrom, addShapeAt, addStickerAt, addStickerSampleAt, addSfxAt, addBgmAt, addStopAt, r3, clamp01 };
+  return useMemo(
+    () => ({ playhead, addTextAt, addSpeechText, makePresetFrom, addShapeAt, addStickerAt, addStickerSampleAt, addSfxAt, addBgmAt, addStopAt, r3, clamp01 }),
+    [playhead, addTextAt, addSpeechText, makePresetFrom, addShapeAt, addStickerAt, addStickerSampleAt, addSfxAt, addBgmAt, addStopAt],
+  );
 }

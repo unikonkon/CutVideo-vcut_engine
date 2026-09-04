@@ -2,6 +2,9 @@
 
 // สถานะร่วมของขั้น ② — การ์ดสไตล์/สวิตช์ชั้นแต่ง *วางค่าไว้ในร่าง* แล้วปุ่ม "ตัดให้เลย"
 // บันทึกลงไฟล์โปรเจกต์ทีเดียวก่อนสั่งงาน (เอนจินอ่านไฟล์ตอนเริ่มงาน)
+//
+// นอกจากค่าตั้งของเอนจิน ยังถือ `pick` = แบบที่จะเปิดให้ก่อนในขั้น ③ (30/45/60 วิ/ทั้งคลิป)
+// ซึ่งเป็นเรื่องของหน้าเว็บล้วน ๆ — เอนจินตัดครบทุกแบบเสมอ
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { useEngine, useLoader } from "@/hooks/engine";
@@ -20,6 +23,14 @@ export interface Step2State {
   revert: () => void;
   save: () => Promise<boolean>;
   saving: boolean;
+  /** แบบที่จะเปิดให้ก่อนในขั้น ③ (id จาก variants.ids) — ไม่ใช่คีย์เอนจิน */
+  pick: string;
+  setPick: (id: string) => void;
+  /** งานที่ปุ่ม "ตัดให้เลย" จะสั่ง: recut (มีบทพูด+เคยตัดแล้ว) · quick_ai · quick */
+  jobKind: string;
+  /** บันทึกร่างแล้วสั่งงาน jobKind — คืน true เมื่อสั่งสำเร็จ */
+  run: () => Promise<boolean>;
+  busy: boolean;
 }
 
 const Ctx = createContext<Step2State | null>(null);
@@ -34,6 +45,8 @@ export function Step2Provider({ children }: { children: ReactNode }) {
 
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [pickRaw, setPick] = useState("");
 
   const values = setup.data?.values;
   const eff = useCallback((k: string) => (k in draft ? draft[k] : values?.[k]), [draft, values]);
@@ -73,6 +86,25 @@ export function Step2Provider({ children }: { children: ReactNode }) {
     }
   }, [draft, setup, eng]);
 
+  // recut = ข้ามถอดเสียง — ได้ต่อเมื่อบทพูดมีแล้วและโปรเจกต์นี้เคยตัดสไตล์ใดสไตล์หนึ่งแล้ว
+  const aiOn = bool(eff("variants.ai"));
+  const canRecut = Boolean(transcript.data?.exists) && (eng.proj?.styles_cut.length ?? 0) > 0;
+  const jobKind = canRecut ? "recut" : aiOn ? "quick_ai" : "quick";
+
+  const run = useCallback(async () => {
+    if (eng.job?.running) return false;
+    setBusy(true);
+    try {
+      const saved = await save();
+      if (!saved) return false;
+      return await eng.runJob(jobKind);
+    } finally {
+      setBusy(false);
+    }
+  }, [eng, save, jobKind]);
+
+  const pick = pickRaw || eng.variantsData?.default || "s45";
+
   const value = useMemo<Step2State>(
     () => ({
       setup: setup.data,
@@ -85,8 +117,13 @@ export function Step2Provider({ children }: { children: ReactNode }) {
       revert,
       save,
       saving,
+      pick,
+      setPick,
+      jobKind,
+      run,
+      busy,
     }),
-    [setup.data, setup.setData, transcript.data, draft, eff, stage, revert, save, saving],
+    [setup.data, setup.setData, transcript.data, draft, eff, stage, revert, save, saving, pick, jobKind, run, busy],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

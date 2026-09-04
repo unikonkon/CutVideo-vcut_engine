@@ -37,10 +37,12 @@ function Flow() {
 
 export default function Page() {
   return (
-    <EngineProvider>
-      <Suspense fallback={<Spin />}>
+    // Suspense ครอบ EngineProvider ด้วย — ไม่งั้น effect ของ provider (refresh/poll) เปลี่ยน state ก่อนที่
+    // ขอบเขต useSearchParams ข้างในจะ hydrate เสร็จ → React ฟ้อง hydration mismatch ทุกครั้งที่โหลด
+    <Suspense fallback={<Spin />}>
+      <EngineProvider>
         <Flow />
-      </Suspense>
-    </EngineProvider>
+      </EngineProvider>
+    </Suspense>
   );
 }

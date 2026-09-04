@@ -1,9 +1,11 @@
 "use client";
 
-// แถบบน — VCUT · ชื่อโปรเจกต์ · 3 ขั้น (กดข้ามได้) · ของฝั่งขวาตามหน้า · สถานะเอนจิน
+// แถบบน v6 — ตราใบไม้ vcut · ชื่อไฟล์/โปรเจกต์ · ขั้น ①②③ เป็น "เส้นทางเดินป่า"
+// (วง 22px เชื่อมด้วยเส้นประ · ทำแล้ว = จุดเต็มมอส · กำลังทำ = วงแหวนเรือง) · ของฝั่งขวาตามหน้า
+// สูง 68 ไม่มีกล่อง — ลอยบนท้องฟ้าโดยตรงตาม mockup
 
 import type { ReactNode } from "react";
-import { Btn, Led, Mono, Panel, Well } from "@/components/instrument";
+import { Icon } from "@/components/instrument";
 import { useEngine } from "@/hooks/engine";
 import { useRoute, type Step } from "@/hooks/route";
 import { dur } from "@/lib/time";
@@ -18,68 +20,53 @@ export default function TopBar({ left, right }: { left?: ReactNode; right?: Reac
   const eng = useEngine();
   const r = useRoute();
   const p = eng.proj;
-  const total = p ? Number(p.summary.duration_total ?? 0) : 0;
   const running = Boolean(eng.job?.running);
+  const first = eng.clips[0];
+  const more = Math.max(0, eng.clips.length - 1);
 
   return (
-    <Panel style={{ height: 56, margin: "10px 10px 0 10px", display: "flex", alignItems: "center", gap: 12, padding: "0 16px", flexShrink: 0 }}>
-      <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: ".04em", color: "var(--amber-hi)" }}>vcut</span>
-      <Well style={{ padding: "4px 10px", fontSize: 12, whiteSpace: "nowrap", maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis" }} title={p ? `${p.config.join(" → ")} · ${p.clips_total} คลิป · ${p.footage_minutes.toFixed(1)} นาที` : ""}>
-        {p ? (
-          <>
-            {p.project}
-            <Mono style={{ color: "var(--muted)", marginLeft: 8, fontSize: 11 }}>
-              {p.clips_total} คลิป{total ? ` · ${dur(total)}` : ""}
-            </Mono>
-          </>
-        ) : eng.offline ? (
-          "ไม่พบเอนจิน"
-        ) : (
-          "…"
-        )}
-      </Well>
+    <div style={{ height: 68, display: "flex", alignItems: "center", gap: 22, padding: "0 36px", flexShrink: 0, position: "relative" }}>
+      <span style={{ fontSize: 17, fontWeight: 500, letterSpacing: ".02em", display: "inline-flex", alignItems: "center", gap: 8 }}>
+        <Icon name="leaf" size={16} color="var(--amber)" />
+        vcut
+      </span>
+      {r.step > 1 && (
+        <span className="kv small" style={{ display: "inline-flex", alignItems: "center", gap: 8, whiteSpace: "nowrap", maxWidth: 360, overflow: "hidden", textOverflow: "ellipsis" }} title={p ? `${p.config.join(" → ")} · ${p.clips_total} คลิป · ${p.footage_minutes.toFixed(1)} นาที` : ""}>
+          <Icon name="film" size={13} color="var(--muted)" />
+          {p ? (first ? `${first.name} · ${dur(first.dur)}${more ? ` · +${more} ไฟล์` : ""}` : p.project) : eng.offline ? "ไม่พบเอนจิน" : "…"}
+        </span>
+      )}
       {left}
       <div style={{ flex: 1 }} />
-      <div style={{ display: "flex", gap: 6 }}>
-        {STEPS.map((s) => {
+      <div style={{ display: "flex", alignItems: "center" }}>
+        {STEPS.map((s, i) => {
           const cur = s.n === r.step;
-          const past = s.n < r.step;
+          const done = s.n < r.step;
           return (
-            <Btn key={s.n} on={cur} off={!cur && !past} onClick={() => r.go(s.n)} title={`ไปขั้น ${s.n}`}>
-              <span
-                style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: 999,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  background: cur ? "var(--amber)" : past ? "var(--amber-dim)" : "var(--faint)",
-                  color: cur || past ? "#08182e" : "var(--muted)",
-                }}
-              >
-                {s.n}
-              </span>
-              {s.label}
-            </Btn>
+            <span key={s.n} style={{ display: "inline-flex", alignItems: "center" }}>
+              <button type="button" className={`node${cur ? " on" : done ? " done" : ""}`} onClick={() => r.go(s.n)} title={`ไปขั้น ${s.n}`}>
+                <i>{done ? <Icon name="check" size={12} color="var(--ink-dark)" /> : s.n}</i>
+                {s.label}
+              </button>
+              {i < STEPS.length - 1 && <span className="trail" />}
+            </span>
           );
         })}
       </div>
       <div style={{ flex: 1 }} />
-      {right}
-      {running && (
-        <Well className="mono" style={{ padding: "4px 10px", fontSize: 11, color: "var(--amber-hi)", display: "flex", alignItems: "center", gap: 6 }} title={eng.job?.cmd_label || eng.job?.step}>
-          <Led dim blink />
-          {eng.job?.cmd_label || eng.job?.step || ""}
-          {eng.job && eng.job.of > 1 ? ` ${eng.job.at}/${eng.job.of}` : ""}
-        </Well>
+      {right ?? (
+        running ? (
+          <span className="small" style={{ width: 170, display: "inline-flex", justifyContent: "flex-end", alignItems: "center", gap: 8, color: "var(--amber)", whiteSpace: "nowrap" }} title={eng.job?.cmd_label || eng.job?.step}>
+            <span className="led on" />
+            {eng.job?.cmd_label || eng.job?.step || ""}
+            {eng.job && eng.job.of > 1 ? ` ${eng.job.at}/${eng.job.of}` : ""}
+          </span>
+        ) : eng.offline ? (
+          <span className="small" style={{ width: 170, textAlign: "right", color: "var(--danger)" }}>ไม่พบเอนจิน</span>
+        ) : (
+          <span style={{ width: 170 }} />
+        )
       )}
-      <Well className="mono" style={{ padding: "4px 10px", fontSize: 11, color: "var(--muted)", display: "flex", alignItems: "center", gap: 6 }} title="เอนจิน vcut (serve.py) ผ่าน /engine">
-        <Led on={!eng.offline && !eng.loading} red={eng.offline} />
-        {eng.offline ? "ออฟไลน์" : "เอนจิน"}
-      </Well>
-    </Panel>
+    </div>
   );
 }

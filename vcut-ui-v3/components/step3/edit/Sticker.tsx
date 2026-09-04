@@ -1,24 +1,23 @@
 "use client";
 
-// CQ3STK — สติกเกอร์ / ภาพซ้อน (fx.json overlays · /api/asset)
-//   แหล่ง: คลัง 200 (public/stickers · 12 หมวด) · อัปโหลดของฉัน (assets ภาพ) · มาสคอต (assets วิดีโอ)
-//   ชิ้นที่ focus: POSITION · SHOW AT · WIDTH/OPACITY · ANIM · IN/OUT · อัปโหลด
-//   ซ้าย (leftExtra): AI ASSIST — สั่ง review task sticker/sfx พร้อม catalog
+// แท็บ "สติกเกอร์" ของลิ้นชัก — สติกเกอร์ / ภาพซ้อน (fx.json overlays · /api/asset)
+//   แหล่ง 3 ช่อง: คลังตัวอย่าง (public/stickers) · อัปโหลดของฉัน · มาสคอต (วิดีโอโปร่งใส)
+//   ชิ้นที่เลือก: แสดงตอน (4 ช่อง) · เข้า/ออก/ยาว/หมุน (− / +) · แอนิเมชัน · ขวา: ตำแหน่ง 3×3 · กว้าง · ทึบ
+//   AI ช่วยวาง (review task sticker/sfx) อยู่ท้ายแผง
 
 import { useMemo, useRef, useState } from "react";
-import { Btn, Empty, Fld, Keys, Knob, Kv, Led, NIn, PosGrid, Sel, Tag, Well, cx } from "@/components/instrument";
+import { Btn, Empty, Fld, Icon, Pos9, Seg, Sel, Stepper, Well, cx } from "@/components/instrument";
 import { useEngine } from "@/hooks/engine";
 import { api2, assetUrl, fileToBase64, type FxOverlay } from "@/lib/api";
 import { STICKER_CATS, STICKER_LIST, stickerUrl, type StickerCat } from "@/lib/stickers";
 import { durMs } from "@/lib/time";
 import { useStudio } from "@/components/step3/store";
-import { EditShell, KnobGrid, TagRow, catalog, useAdders } from "./common";
+import { EditShell, Grid2, IcBtn, Lbl, Row, Sec, TagRow, catalog, useAdders } from "./common";
 
 type Source = "lib" | "mine" | "mascot";
 type ShowAt = "whole" | "first" | "last" | "cur";
 const CAT_SHOWN = 9;
 const SAFE = 0.05;
-const POS_IDS = ["tl", "tr", "c", "bl", "br"];
 const isVideo = (kind: string, file: string) => kind === "video" || /\.(mov|webm|mp4|m4v)$/i.test(file);
 
 export default function StickerEditor() {
@@ -40,7 +39,7 @@ export default function StickerEditor() {
 
   if (!d || !dr) {
     return (
-      <EditShell id="sticker" badge="EDIT STICKER" tag="SEC 05b · STICKER / OVERLAY" title="สติกเกอร์ / ภาพซ้อน">
+      <EditShell id="sticker">
         <Empty>กำลังโหลด fx.json…</Empty>
       </EditShell>
     );
@@ -60,24 +59,26 @@ export default function StickerEditor() {
     const a = assets.find((y) => y.file === x.file);
     return x.width * frameAR * (a && a.w && a.h ? a.h / a.w : 1);
   };
-  const poseId = (x: FxOverlay): string | null => {
+  /** ช่อง 3×3 ที่ชิ้นอยู่ (ชิดขอบปลอดภัย/กลาง) · null = จัดเอง */
+  const pos9Of = (x: FxOverlay): number | null => {
     const hw = x.width / 2;
     const hh = heightOf(x) / 2;
-    const col = Math.abs(x.x - (SAFE + hw)) < 0.02 ? "l" : Math.abs(x.x - (1 - SAFE - hw)) < 0.02 ? "r" : Math.abs(x.x - 0.5) < 0.02 ? "c" : "";
-    const row = Math.abs(x.y - (SAFE + hh)) < 0.02 ? "t" : Math.abs(x.y - (1 - SAFE - hh)) < 0.02 ? "b" : Math.abs(x.y - 0.5) < 0.02 ? "c" : "";
-    return { tl: "tl", tr: "tr", cc: "c", bl: "bl", br: "br" }[row + col] ?? null;
+    const col = Math.abs(x.x - (SAFE + hw)) < 0.02 ? 0 : Math.abs(x.x - 0.5) < 0.02 ? 1 : Math.abs(x.x - (1 - SAFE - hw)) < 0.02 ? 2 : -1;
+    const row = Math.abs(x.y - (SAFE + hh)) < 0.02 ? 0 : Math.abs(x.y - 0.5) < 0.02 ? 1 : Math.abs(x.y - (1 - SAFE - hh)) < 0.02 ? 2 : -1;
+    return col < 0 || row < 0 ? null : row * 3 + col;
   };
-  const setPose = (id: string) => {
+  const setPos9 = (i: number) => {
     if (!o) return;
     const hw = o.width / 2;
     const hh = heightOf(o) / 2;
-    const x = id.endsWith("l") ? SAFE + hw : id.endsWith("r") ? 1 - SAFE - hw : 0.5;
-    const y = id.startsWith("t") ? SAFE + hh : id.startsWith("b") ? 1 - SAFE - hh : 0.5;
+    const col = i % 3;
+    const row = Math.floor(i / 3);
+    const x = col === 0 ? SAFE + hw : col === 2 ? 1 - SAFE - hw : 0.5;
+    const y = row === 0 ? SAFE + hh : row === 2 ? 1 - SAFE - hh : 0.5;
     patch({ x: A.r3(A.clamp01(x)), y: A.r3(A.clamp01(y)) });
   };
 
-  // SHOW AT — ภาพซ้อนผูกกับ (คลิป, วินาทีในคลิป) · "ทั้งเรื่อง" = เกาะช็อตแรกแล้วยาวเท่าหนัง
-  // (ถ้าสลับช็อตแรกไปอยู่ที่อื่น ชิ้นนี้จะย้ายตามช็อตนั้น — ข้อจำกัดของโครงข้อมูล)
+  // แสดงตอน — ภาพซ้อนผูกกับ (คลิป, วินาทีในคลิป) · "ทั้งเรื่อง" = เกาะช็อตแรกแล้วยาวเท่าหนัง
   const shots = s.shots;
   const first = shots[0];
   const last = shots[shots.length - 1];
@@ -106,7 +107,7 @@ export default function StickerEditor() {
       const r = await api2.saveAsset(f.name, b64, "media");
       s.fx.setData(r.fx);
       setSrc(isVideo("", f.name) ? "mascot" : "mine");
-      s.flash(`เพิ่ม ${r.file} เข้าคลังแล้ว — คลิกไทล์เพื่อวางที่หัวเล่น`);
+      s.flash(`เพิ่ม ${r.file} เข้าคลังแล้ว — กดไทล์เพื่อวางที่หัวเล่น`);
     } catch (e) {
       s.flash(e instanceof Error ? e.message : "อัปโหลดไม่สำเร็จ");
     }
@@ -122,37 +123,31 @@ export default function StickerEditor() {
 
   const cats = allCats ? STICKER_CATS : STICKER_CATS.slice(0, CAT_SHOWN);
   const tiles = STICKER_LIST.filter((x) => x.cat === cat);
-  const topleft = o && blk
-    ? `STICKER · DRAG TO MOVE · ${durMs(blk.tl)}–${durMs(blk.tl + o.dur)} s · x ${o.x.toFixed(2).slice(1)} y ${o.y.toFixed(2).slice(1)} w ${o.width.toFixed(2).slice(1)}`
-    : `STICKER · ${overlays.length} PLACED · คลิกไทล์เพื่อวางที่หัวเล่น`;
+  const tile = { display: "flex", flexDirection: "column" as const, alignItems: "center", gap: 4, padding: "8px 4px 6px", position: "relative" as const };
 
   return (
     <EditShell
       id="sticker"
-      badge={`EDIT STICKER · ${overlays.length}`}
-      tag="SEC 05b · STICKER / OVERLAY"
-      title="สติกเกอร์ / ภาพซ้อน"
       revert={s.fx.revert}
-      topleft={topleft}
-      leftExtra={
-        <>
-          <Tag>AI ASSIST</Tag>
-          <Btn onClick={() => ai("sticker")} disabled={running} style={{ justifyContent: "space-between" }} title="review --task sticker (ส่ง catalog 200 แบบไป)">
-            วางสติกเกอร์ให้ 3–5 จุด <span className="mono kv" style={{ fontSize: 10 }}>~1m</span>
-          </Btn>
-          <Btn onClick={() => ai("sfx")} disabled={running} style={{ justifyContent: "space-between" }} title="review --task sfx">
-            วาง SFX ตรงรอยตัด <span className="mono kv" style={{ fontSize: 10 }}>~1m</span>
-          </Btn>
-          <Kv style={{ fontSize: 10.5, lineHeight: "15px" }}>AI เสนอเป็นรายการ กดรับทีละข้อเหมือนหน้า 03{running && eng.lastStep === "review" ? " · กำลังดู…" : ""}</Kv>
-        </>
+      right={
+        o ? (
+          <>
+            <Lbl>ตำแหน่ง</Lbl>
+            <Pos9 value={pos9Of(o)} onChange={setPos9} title="ชิดขอบปลอดภัย · ลากบนจอตัวอย่างได้ด้วย" />
+            <Row label="กว้าง">
+              <Stepper value={Math.round(o.width * 100)} min={2} max={150} step={5} unit="%" onChange={(v) => patch({ width: A.r3(v / 100) })} />
+            </Row>
+            <Row label="ทึบ">
+              <Stepper value={Math.round(o.opacity * 100)} min={0} max={100} step={10} unit="%" onChange={(v) => patch({ opacity: v / 100 })} />
+            </Row>
+          </>
+        ) : undefined
       }
     >
-      <Keys<Source>
-        grow
-        sm={false}
+      <Seg<Source>
         items={[
           { v: "lib", label: `คลัง ${STICKER_LIST.length}` },
-          { v: "mine", label: `อัปโหลดของฉัน ${mine.length}` },
+          { v: "mine", label: `ของฉัน ${mine.length}` },
           { v: "mascot", label: `มาสคอต ${mascots.length}`, title: "วิดีโอโปร่งใส (MOV ProRes 4444) ในคลัง" },
         ]}
         value={src}
@@ -160,107 +155,126 @@ export default function StickerEditor() {
       />
       {src === "lib" && (
         <>
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-            <Keys items={cats.map((c) => ({ v: c.key, label: c.label }))} value={cat} onChange={setCat} />
-            {!allCats && <Btn sm onClick={() => setAllCats(true)}>+{STICKER_CATS.length - CAT_SHOWN}</Btn>}
-          </div>
+          <TagRow>
+            <div style={{ flex: 1 }}>
+              <Seg sm cols={3} items={cats.map((c) => ({ v: c.key, label: c.label }))} value={cat} onChange={setCat} />
+            </div>
+            {!allCats && (
+              <Btn sm ghost onClick={() => setAllCats(true)}>
+                +{STICKER_CATS.length - CAT_SHOWN}
+              </Btn>
+            )}
+          </TagRow>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 6, maxHeight: 220, overflowY: "auto", flexShrink: 0 }}>
             {tiles.map((x) => (
-              <Well key={x.file} sel={o?.file === x.file} onClick={() => A.addStickerSampleAt(s.playhead, x)} title={`${x.label} — วางที่หัวเล่นด้วยท่า x ${x.x} y ${x.y} w ${x.width}${inLib.has(x.file) ? " (อยู่ในคลังแล้ว)" : ""}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "8px 4px 6px" }}>
+              <Well key={x.file} sel={o?.file === x.file} onClick={() => A.addStickerSampleAt(s.playhead, x)} title={`${x.label} — วางที่หัวเล่น${inLib.has(x.file) ? " (อยู่ในคลังแล้ว)" : ""}`} style={tile}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={stickerUrl(x.file)} alt={x.label} style={{ width: 44, height: 44, objectFit: "contain" }} loading="lazy" />
-                <Kv style={{ fontSize: 10, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{x.label}</Kv>
+                <Lbl style={{ fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{x.label}</Lbl>
               </Well>
             ))}
           </div>
-          <Kv style={{ fontSize: 10.5 }}>ทุกแบบมี “ท่า” มาให้ — แบดจ์เกาะมุมขวาบน · แถบนอนล่างซ้าย</Kv>
+          <Lbl>ทุกแบบมี “ท่า” มาให้ — แบดจ์เกาะมุมขวาบน · แถบนอนล่างซ้าย</Lbl>
         </>
       )}
-      {src !== "lib" && (
-        <>
-          {(src === "mine" ? mine : mascots).length === 0 ? (
-            <Empty>{src === "mine" ? "ยังไม่มีไฟล์ของคุณในคลัง — อัปโหลด PNG/WEBP/JPG ข้างล่าง" : "ยังไม่มีมาสคอต — อัปโหลด MOV ProRes 4444 (อัลฟา) ข้างล่าง"}</Empty>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 6, maxHeight: 220, overflowY: "auto", flexShrink: 0 }}>
-              {(src === "mine" ? mine : mascots).map((a) => (
-                <Well key={a.file} sel={o?.file === a.file} onClick={() => A.addStickerAt(s.playhead, a.file)} title={`${a.file} (${a.w}×${a.h}) — คลิกวางที่หัวเล่น`} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "8px 4px 6px", position: "relative" }}>
-                  {isVideo(a.kind, a.file) ? (
-                    <video src={assetUrl(a.file)} muted playsInline preload="metadata" style={{ width: 44, height: 44, objectFit: "contain" }} />
-                  ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={assetUrl(a.file)} alt={a.file} style={{ width: 44, height: 44, objectFit: "contain" }} loading="lazy" />
-                  )}
-                  <Kv style={{ fontSize: 10, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{a.file}</Kv>
-                  <Btn sm onClick={(e) => { e.stopPropagation(); del(a.file); }} style={{ position: "absolute", right: 2, top: 2, padding: "0 4px" }} title="ลบออกจากคลัง">✕</Btn>
-                </Well>
-              ))}
-            </div>
-          )}
-          {src === "mascot" && <Kv style={{ fontSize: 10.5 }}>มาสคอต = วิดีโอโปร่งใส MOV ProRes 4444 — .webm อัลฟาใช้ไม่ได้ · เล่นวนตามช่วงที่วาง</Kv>}
-        </>
-      )}
+      {src !== "lib" &&
+        ((src === "mine" ? mine : mascots).length === 0 ? (
+          <Empty>{src === "mine" ? "ยังไม่มีไฟล์ของคุณในคลัง — อัปโหลด PNG/WEBP/JPG ข้างล่าง" : "ยังไม่มีมาสคอต — อัปโหลด MOV ProRes 4444 (อัลฟา) ข้างล่าง"}</Empty>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 6, maxHeight: 220, overflowY: "auto", flexShrink: 0 }}>
+            {(src === "mine" ? mine : mascots).map((a) => (
+              <Well key={a.file} sel={o?.file === a.file} onClick={() => A.addStickerAt(s.playhead, a.file)} title={`${a.file} (${a.w}×${a.h}) — กดวางที่หัวเล่น`} style={tile}>
+                {isVideo(a.kind, a.file) ? (
+                  <video src={assetUrl(a.file)} muted playsInline preload="metadata" style={{ width: 44, height: 44, objectFit: "contain" }} />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={assetUrl(a.file)} alt={a.file} style={{ width: 44, height: 44, objectFit: "contain" }} loading="lazy" />
+                )}
+                <Lbl style={{ fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{a.file}</Lbl>
+                <span style={{ position: "absolute", right: 0, top: 0 }}>
+                  <IcBtn name="trash" onClick={(e) => { e.stopPropagation(); del(a.file); }} title="ลบออกจากคลัง" />
+                </span>
+              </Well>
+            ))}
+          </div>
+        ))}
 
       {/* ── ชิ้นที่วางอยู่ ── */}
       {overlays.length > 0 && (
-        <Well className="rows" style={{ display: "flex", flexDirection: "column", padding: "2px 0", maxHeight: 110, overflowY: "auto", flexShrink: 0 }}>
-          {overlays.map((x, i) => {
-            const b = s.layers.sticker.find((k) => k.idx === i);
-            return (
-              <div key={`${x.file}-${i}`} className={cx("cursor-pointer", i === focusIdx && "sel-ring")} style={{ display: "grid", gridTemplateColumns: "8px 1fr auto auto", gap: 10, alignItems: "center", padding: "4px 10px", opacity: b?.orphan ? 0.5 : 1 }} onClick={() => { s.setFocus({ kind: "sticker", idx: i }); if (b && !b.orphan) s.seek(b.tl); }}>
-                <Led on={!b?.orphan} red={b?.orphan} />
-                <span style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{STICKER_LIST.find((y) => y.file === x.file)?.label ?? x.file}</span>
-                <span className="mono kv" style={{ fontSize: 10 }}>{b && !b.orphan ? `${durMs(b.tl)}–${durMs(b.tl + x.dur)} s` : "กำพร้า"}</span>
-                <Btn sm onClick={(e) => { e.stopPropagation(); s.removeLayerItem("sticker", i); }}>✕</Btn>
-              </div>
-            );
-          })}
-        </Well>
+        <>
+          <Sec title={`วางแล้ว · ${overlays.length}`} note="กดเพื่อเลือกแล้วแก้" />
+          <div className="rows" style={{ display: "flex", flexDirection: "column", maxHeight: 140, overflowY: "auto", flexShrink: 0 }}>
+            {overlays.map((x, i) => {
+              const b = s.layers.sticker.find((k) => k.idx === i);
+              return (
+                <div key={`${x.file}-${i}`} className={cx("cursor-pointer", i === focusIdx && "sel-ring")} style={{ display: "grid", gridTemplateColumns: "16px 1fr auto 34px", gap: 10, alignItems: "center", padding: "4px 4px", opacity: b?.orphan ? 0.5 : 1 }} onClick={() => { s.setFocus({ kind: "sticker", idx: i }); if (b && !b.orphan) s.seek(b.tl); }}>
+                  <Icon name="sticker" size={13} color={b?.orphan ? "var(--danger)" : i === focusIdx ? "var(--amber)" : "var(--muted)"} />
+                  <span style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{STICKER_LIST.find((y) => y.file === x.file)?.label ?? x.file}</span>
+                  <span className="muted small num">{b && !b.orphan ? `${durMs(b.tl)}–${durMs(b.tl + x.dur)}` : "กำพร้า"}</span>
+                  <IcBtn name="x" onClick={(e) => { e.stopPropagation(); s.removeLayerItem("sticker", i); }} title="เอาชิ้นนี้ออก" />
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {o && (
         <>
-          <Tag>POSITION</Tag>
-          <PosGrid ids={POS_IDS} value={poseId(o)} onChange={(p) => setPose(p.id)} />
-          <Tag>SHOW AT</Tag>
-          <Keys<ShowAt>
-            grow
+          <Lbl>แสดงตอน{blk && !blk.orphan ? ` · ${durMs(blk.tl)}–${durMs(blk.tl + o.dur)}` : ""}</Lbl>
+          <Seg<ShowAt>
+            sm
             items={[
-              { v: "whole", label: "ทั้งเรื่อง", title: "เกาะช็อตแรก ยาวเท่าหนัง (ผูกกับคลิป — ถ้าย้ายช็อตแรก ชิ้นนี้ย้ายตาม)" },
+              { v: "whole", label: "ทั้งเรื่อง", title: "เกาะช็อตแรก ยาวเท่าหนัง" },
               { v: "first", label: "ช็อตแรก" },
               { v: "last", label: "ช็อตสุดท้าย" },
-              { v: "cur", label: "ช็อตที่ดูอยู่", title: cur ? `${cur.name} · ${cur.dur.toFixed(1)} s` : "" },
+              { v: "cur", label: "ช็อตที่ดูอยู่", title: cur ? `${cur.name} · ${cur.dur.toFixed(1)} วิ` : "" },
             ]}
             value={showAt(o)}
             onChange={setShowAt}
           />
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 8, alignItems: "end" }}>
-            <Knob label="WIDTH" value={o.width} min={0.02} max={1.5} step={0.01} def={d.defaults.overlay.width} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => patch({ width: A.r3(v) })} />
-            <Knob label="OPACITY" value={o.opacity} min={0} max={1} step={0.05} def={1} fmt={(v) => `${Math.round(v * 100)}`} onChange={(v) => patch({ opacity: v })} />
-            <Fld label="ANIM">
+          <Grid2>
+            <Row label="เข้า (วิ)">
+              <Stepper value={o.in} min={0} max={3} step={0.1} fmt={(v) => v.toFixed(1)} onChange={(v) => patch({ in: v })} />
+            </Row>
+            <Row label="ออก (วิ)">
+              <Stepper value={o.out} min={0} max={3} step={0.1} fmt={(v) => v.toFixed(1)} onChange={(v) => patch({ out: v })} />
+            </Row>
+            <Row label="ยาว (วิ)">
+              <Stepper value={o.dur} min={0.2} max={Math.max(1, s.total)} step={0.5} fmt={(v) => v.toFixed(1)} onChange={(v) => patch({ dur: Math.max(0.2, v) })} />
+            </Row>
+            <Row label="หมุน (องศา)">
+              <Stepper value={o.angle} min={-180} max={180} step={5} onChange={(v) => patch({ angle: v })} />
+            </Row>
+            <Fld label="แอนิเมชัน">
               <Sel value={o.anim} onChange={(v) => patch({ anim: v })} options={anims.map(([k, label]) => ({ v: k, label: k === label ? k : `${k} · ${label}` }))} />
             </Fld>
-          </div>
-          <KnobGrid>
-            <Fld label="IN (วิ)"><NIn value={o.in} step={0.05} min={0} max={3} onChange={(v) => patch({ in: v })} /></Fld>
-            <Fld label="OUT (วิ)"><NIn value={o.out} step={0.05} min={0} max={3} onChange={(v) => patch({ out: v })} /></Fld>
-            <Fld label="DUR (วิ)"><NIn value={o.dur} step={0.1} min={0.2} onChange={(v) => patch({ dur: Math.max(0.2, v) })} /></Fld>
-            <Fld label="ANGLE"><NIn value={o.angle} step={5} min={-180} max={180} onChange={(v) => patch({ angle: v })} /></Fld>
-          </KnobGrid>
-          <TagRow>
-            <Fld label="x" style={{ flex: 1 }}><NIn value={o.x} step={0.01} min={0} max={1} onChange={(v) => patch({ x: A.clamp01(v) })} /></Fld>
-            <Fld label="y" style={{ flex: 1 }}><NIn value={o.y} step={0.01} min={0} max={1} onChange={(v) => patch({ y: A.clamp01(v) })} /></Fld>
-            <Kv style={{ fontSize: 10.5, flex: 2 }}>ลากบนจอได้เลย · จุดมุม = ย่อขยาย · ก้านบน = หมุน</Kv>
-          </TagRow>
+          </Grid2>
+          <Lbl>ลากบนจอตัวอย่างได้ · จุดมุม = ย่อขยาย · ก้านบน = หมุน</Lbl>
         </>
       )}
 
       <div style={{ flex: 1 }} />
-      <Well dashed onClick={() => fileRef.current?.click()} style={{ padding: "8px 10px", display: "flex", flexDirection: "column", gap: 3 }} title="เลือกไฟล์จากเครื่อง">
-        <span style={{ fontSize: 11.5 }}>⬆ อัปโหลดของตัวเอง</span>
-        <Kv style={{ fontSize: 10, lineHeight: "14px" }}>PNG · WEBP · JPG · MOV ProRes 4444 ≤ 40 MB — .webm อัลฟาใช้ไม่ได้ · เข้า .vcut/assets</Kv>
+      <Well dashed onClick={() => fileRef.current?.click()} style={{ padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }} title="เลือกไฟล์จากเครื่อง">
+        <Icon name="upload" size={14} color="var(--amber)" />
+        <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+          <span style={{ fontSize: 13 }}>อัปโหลดของตัวเอง</span>
+          <Lbl style={{ fontSize: 11 }}>PNG · WEBP · JPG · MOV ProRes 4444 ≤ 40 MB — .webm อัลฟาใช้ไม่ได้</Lbl>
+        </span>
       </Well>
       <input ref={fileRef} type="file" accept=".png,.jpg,.jpeg,.webp,.mov,.mp4,.m4v" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = ""; }} />
-      {d.overlay.missing.length > 0 && <Kv style={{ fontSize: 10.5, color: "var(--danger)" }}>ไฟล์หาย: {d.overlay.missing.join(", ")}</Kv>}
+      <TagRow>
+        <Btn sm onClick={() => ai("sticker")} disabled={running} title="ให้ AI เสนอสติกเกอร์ 3–5 จุด (review --task sticker)">
+          <Icon name="spark" size={12} />
+          AI วางสติกเกอร์ให้
+        </Btn>
+        <Btn sm onClick={() => ai("sfx")} disabled={running} title="ให้ AI วางเสียงสั้นตรงรอยตัด (review --task sfx)">
+          <Icon name="spark" size={12} />
+          AI วางเสียงสั้น
+        </Btn>
+        {running && eng.lastStep === "review" && <Lbl>กำลังดู…</Lbl>}
+      </TagRow>
+      {d.overlay.missing.length > 0 && <Lbl style={{ color: "var(--danger)" }}>ไฟล์หาย: {d.overlay.missing.join(", ")}</Lbl>}
     </EditShell>
   );
 }

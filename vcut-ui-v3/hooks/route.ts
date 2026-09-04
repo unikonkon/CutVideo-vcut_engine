@@ -3,8 +3,9 @@
 // ตำแหน่งใน flow อยู่ใน URL query — รีเฟรชแล้วอยู่หน้าเดิม แผงเดิม
 //
 //   ?s=2      ขั้น ① ใส่วิดีโอ · ② สไตล์ · ③ ส่งออก
-//   &e=sub    แผงแก้รายชั้นของขั้น ③: tl · sub · text · music · sticker · fx
+//   &e=sub    ลิ้นชักแก้ชั้นแต่งของขั้น ③: tl · sub · text · music · sticker · fx
 //   &v=s45    แบบที่กำลังดูอยู่ในขั้น ③ (id จาก /api/variants)
+//   &st=sell  แท็บสไตล์ที่ดูอยู่ในขั้น ③ (sell · proof · teach · compare · custom)
 //
 // v3 ไม่มีลิ้นชักขั้นสูง/คลังคลิป/หน้า AI review อีกแล้ว (memory ui-v3-decisions)
 
@@ -18,9 +19,11 @@ export interface Route {
   step: Step;
   edit: Edit3 | null;
   variant: string;
+  style: string;
   go: (step: Step) => void;
   openEdit: (e: Edit3 | null) => void;
   setVariant: (id: string) => void;
+  setStyle: (style: string) => void;
 }
 
 const STEPS = new Set([1, 2, 3]);
@@ -36,6 +39,7 @@ export function useRoute(): Route {
   const e = sp.get("e") || "";
   const edit = (EDITS.has(e) ? e : null) as Edit3 | null;
   const variant = sp.get("v") || "";
+  const style = sp.get("st") || "";
 
   const set = useCallback(
     (patch: Record<string, string | null>) => {
@@ -55,10 +59,12 @@ export function useRoute(): Route {
       step,
       edit,
       variant,
+      style,
       go: (n) => set({ s: String(n), e: null }),
       openEdit: (ed) => set({ s: "3", e: ed }),
       setVariant: (id) => set({ v: id }),
+      setStyle: (st) => set({ st, v: null }),
     }),
-    [step, edit, variant, set],
+    [step, edit, variant, style, set],
   );
 }

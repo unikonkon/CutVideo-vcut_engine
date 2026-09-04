@@ -27,8 +27,6 @@ export function layerRows(s: Studio): LayerRow[] {
   const touched = Object.keys(clips).length;
   const grades = [...new Set(Object.values(clips).map((c) => c.grade).filter(Boolean))];
   const zooms = Object.values(clips).filter((c) => (c.zoom ?? 1) > 1 + 1e-6 || (c.zoom_to ?? 0) > 0).length;
-  const journey = (d?.journey ?? {}) as { enabled?: boolean; stops?: unknown[] };
-  const stops = journey.stops?.length ?? 0;
   const firstTrack = music[0]?.file.replace(/\.[^.]+$/, "").slice(0, 14) ?? "";
 
   return [

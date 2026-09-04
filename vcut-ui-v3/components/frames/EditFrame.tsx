@@ -1,12 +1,14 @@
 "use client";
 
-// โครงหน้าแก้รายชั้นของขั้น ③ — 3 คอลัมน์ (mockup edit3())
-//   ซ้าย 270  : แบบที่แก้อยู่ · LAYERS (กดสลับแผง) · โน้ต · ราคา rebuild · กลับ 03
-//   กลาง     : จอตัวอย่าง + transport + เลน (ส่งมาเป็น center)
-//   ขวา 400  : แผงของชั้นที่เลือก (ส่งมาเป็น children)
+// ลิ้นชักแก้ชั้นแต่งของขั้น ③ (mockup F3Edit) — กระจกเข้มลอยขวา กว้าง 680 สูงเต็ม
+//   หัว     : "แก้ชั้นแต่ง · A · 45 วิ" + ปุ่มปิด
+//   แท็บ    : ซับ · HOOK / การ์ดปิด · เพลง · สติกเกอร์ · เอฟเฟกต์ (สลับ ?e=)
+//   เนื้อใน : ซ้าย = แผงควบคุมของชั้น (children) · ขวา 200 = จอตัวอย่าง + ตัวควบคุมสไตล์ (right)
+//   ท้าย    : ราคา rebuild · ยกเลิก · บันทึก · เรนเดอร์ใหม่
+// หน้า ③ เดิมอยู่ข้างหลัง (จาง+เบลอ) — ตัวจัดวางอยู่ที่ components/step3/index.tsx
 
 import type { ReactNode } from "react";
-import { Btn, Led, Panel, Seg7, Stat, Tag, Well, cx } from "@/components/instrument";
+import { Btn, Icon, cx } from "@/components/instrument";
 import type { Edit3 } from "@/hooks/route";
 
 export interface LayerRow {
@@ -17,113 +19,88 @@ export interface LayerRow {
   on?: boolean;
 }
 
-export function LayerList({ rows, active, onPick }: { rows: LayerRow[]; active: Edit3 | null; onPick: (id: Edit3) => void }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      {rows.map((l) => {
-        const on = l.id === active;
-        return (
-          <div
-            key={l.id}
-            onClick={() => onPick(l.id)}
-            className={cx("cursor-pointer", on && "sel-ring")}
-            style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px" }}
-          >
-            <Led on={on || l.on} />
-            <span style={{ flex: 1, fontSize: 12 }}>{l.name}</span>
-            <span className="kv" style={{ fontSize: 10.5, textAlign: "right" }}>
-              {l.note}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+export const EDIT_TABS: { id: Edit3; label: string }[] = [
+  { id: "sub", label: "ซับ" },
+  { id: "text", label: "HOOK / การ์ดปิด" },
+  { id: "music", label: "เพลง" },
+  { id: "sticker", label: "สติกเกอร์" },
+  { id: "fx", label: "เอฟเฟกต์" },
+];
 
 export default function EditFrame({
-  variantId,
-  variantLabel,
-  variantMeta,
-  layers,
   active,
-  onPick,
-  leftNote,
-  leftExtra,
-  rebuild,
-  onBack,
-  center,
-  tag,
   title,
+  onPick,
+  onClose,
+  preview,
   right,
+  footNote,
+  onCancel,
+  onSave,
+  saveLabel = "บันทึก · เรนเดอร์ใหม่",
+  saveDisabled,
+  saveTitle,
   children,
 }: {
-  variantId: string;
-  variantLabel: string;
-  variantMeta: ReactNode;
-  layers: LayerRow[];
-  active: Edit3 | null;
-  onPick: (id: Edit3) => void;
-  leftNote?: ReactNode;
-  leftExtra?: ReactNode;
-  /** แถวราคาที่ต้องจ่ายถ้าบันทึก — [ป้าย, ค่า] */
-  rebuild?: { label: string; value: ReactNode; warn?: boolean }[];
-  onBack: () => void;
-  center: ReactNode;
-  tag: ReactNode;
+  active: Edit3;
+  /** ข้อความหัวลิ้นชัก เช่น "แก้ชั้นแต่ง · A · 45 วิ" */
   title: ReactNode;
+  onPick: (id: Edit3) => void;
+  onClose: () => void;
+  /** จอตัวอย่าง 9:16 (คอลัมน์ขวา บนสุด) */
+  preview?: ReactNode;
+  /** ตัวควบคุมสไตล์ใต้จอตัวอย่าง */
   right?: ReactNode;
+  footNote?: ReactNode;
+  onCancel: () => void;
+  onSave: () => void;
+  saveLabel?: ReactNode;
+  saveDisabled?: boolean;
+  saveTitle?: string;
   children: ReactNode;
 }) {
   return (
-    <div style={{ flex: 1, display: "grid", gridTemplateColumns: "270px minmax(0,1fr) 400px", gap: 10, padding: 10, minHeight: 0 }}>
-      <Panel style={{ display: "flex", flexDirection: "column", gap: 10, padding: "14px 12px", overflow: "hidden", minHeight: 0 }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <div className="h">
-            <Seg7 size={18}>{variantId}</Seg7>
-            <span className="t" style={{ fontSize: 14, overflow: "hidden", textOverflow: "ellipsis" }}>
-              {variantLabel}
-            </span>
-          </div>
-          <span className="mono kv" style={{ fontSize: 10.5 }}>
-            {variantMeta}
-          </span>
-        </div>
-        <Tag>LAYERS · กดเพื่อสลับแผง</Tag>
-        <LayerList rows={layers} active={active} onPick={onPick} />
-        <div style={{ height: 1, background: "var(--edge)" }} />
-        {leftExtra}
-        {leftNote && (
-          <span className="kv" style={{ fontSize: 10.5, lineHeight: "15px" }}>
-            {leftNote}
-          </span>
-        )}
+    <div
+      className="panel deep"
+      role="dialog"
+      aria-label="แก้ชั้นแต่ง"
+      style={{ position: "absolute", top: 14, right: 14, bottom: 14, width: 680, maxWidth: "calc(100% - 28px)", display: "flex", flexDirection: "column", background: "rgba(10,24,40,.86)", zIndex: 6, minHeight: 0 }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "22px 26px 10px", flexShrink: 0 }}>
+        <span className="h2" style={{ fontSize: 20, fontWeight: 300, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {title}
+        </span>
         <div style={{ flex: 1 }} />
-        {rebuild && rebuild.length > 0 && (
-          <Well style={{ padding: "8px 10px", display: "flex", flexDirection: "column", gap: 4 }}>
-            {rebuild.map((r) => (
-              <Stat key={r.label} label={r.label} value={r.value} warn={r.warn} />
-            ))}
-          </Well>
-        )}
-        <Btn onClick={onBack}>◀ กลับ 03 · เลือกแบบ</Btn>
-      </Panel>
-      <Panel style={{ display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden", minHeight: 0 }}>{center}</Panel>
-      <Panel style={{ display: "flex", flexDirection: "column", gap: 10, padding: 14, overflow: "hidden", minHeight: 0 }}>
-        <div className="h">
-          <Tag>{tag}</Tag>
-          <span className="t" style={{ fontSize: 15 }}>
-            {title}
-          </span>
-          {right !== undefined && (
-            <>
-              <div style={{ flex: 1 }} />
-              {right}
-            </>
-          )}
+        <Btn ic ghost onClick={onClose} title="ปิดลิ้นชัก (ที่แก้ค้างยังอยู่ จนกว่าจะบันทึกหรือยกเลิก)">
+          <Icon name="x" size={16} color="var(--muted)" />
+        </Btn>
+      </div>
+      <div style={{ display: "flex", gap: 18, padding: "0 26px 14px", overflowX: "auto", flexShrink: 0 }}>
+        {EDIT_TABS.map((t) => (
+          <button key={t.id} type="button" className={cx("tab", t.id === active && "on")} onClick={() => onPick(t.id)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "minmax(0,1fr) 200px", gap: 26, padding: "12px 26px 0", minHeight: 0, borderTop: "1px solid var(--edge)" }}>
+        <div style={{ display: "flex", flexDirection: "column", minHeight: 0, gap: 8, overflowY: "auto", paddingBottom: 8 }}>{children}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, minHeight: 0, overflowY: "auto", paddingBottom: 8 }}>
+          {preview}
+          {right}
         </div>
-        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>{children}</div>
-      </Panel>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 26px 20px", flexShrink: 0, flexWrap: "wrap" }}>
+        <span className="muted small" style={{ minWidth: 0 }}>
+          {footNote}
+        </span>
+        <div style={{ flex: 1 }} />
+        <Btn onClick={onCancel} title="ทิ้งที่แก้ค้างของชั้นนี้แล้วปิดลิ้นชัก">
+          ยกเลิก
+        </Btn>
+        <Btn pri onClick={onSave} disabled={saveDisabled} title={saveTitle}>
+          {saveLabel}
+        </Btn>
+      </div>
     </div>
   );
 }
