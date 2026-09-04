@@ -44,7 +44,7 @@ export interface FxStore {
 }
 
 /** state กลางของซับขั้น 4 — ทรงเดียวกับ FxStore เพื่อให้แผงเดียวคุมสองไฟล์ได้
- *  ด้วยตรรกะชุดเดียว (แก้ที่ draft · กดบันทึกทีเดียว · Cmd+S เก็บให้ทั้งหมด) */
+ *  ด้วยตรรกะชุดเดียว (แก้ที่ draft · กดบันทึกทีเดียว · Cmd+Shift+S เก็บให้ทั้งหมด) */
 export interface CapStore {
   data: CaptionsData | null;
   draft: CapDraft | null;

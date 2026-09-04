@@ -143,7 +143,7 @@ export default function Editor() {
   const [fxSaving, setFxSaving] = useState(false);
   const [capData, setCapData] = useState<CaptionsData | null>(null);
   // ซับขั้น 4 แก้ที่ draft เหมือน fx — แผงเดียวจึงกดบันทึกทีเดียวได้ทั้งสองไฟล์
-  // และ Cmd+S เก็บของค้างครบ (เดิม state ชุดนี้ซ่อนอยู่ในแผง Cmd+S จึงไม่เห็น)
+  // และ Cmd+Shift+S เก็บของค้างครบ (เดิม state ชุดนี้ซ่อนอยู่ในแผง คีย์ลัดจึงไม่เห็น)
   const [capDraft, setCapDraft] = useState<CapDraft | null>(null);
   const [capDirty, setCapDirty] = useState(false);
   const [capSaving, setCapSaving] = useState(false);
@@ -2354,7 +2354,7 @@ export default function Editor() {
     );
   }, [total]);
 
-  // Cmd+S — บันทึกทุกอย่างที่ค้างในครั้งเดียว
+  // Cmd+Shift+S — บันทึกทุกอย่างที่ค้างในครั้งเดียว
   const saveAll = useCallback(() => {
     if (!dirty && !fxDirty && !capDirty) return flash("ไม่มีอะไรค้างบันทึก");
     if (dirty) save();
@@ -2372,9 +2372,18 @@ export default function Editor() {
         e.preventDefault();
         if (e.shiftKey) redo();
         else undo();
-      } else if (mod && e.key.toLowerCase() === "s") {
+      } else if (mod && e.shiftKey && e.key.toLowerCase() === "s") {
         e.preventDefault();
         saveAll();
+      } else if (mod && e.key.toLowerCase() === "s") {
+        // Cmd+S / Cmd+A = ซูมเข้า/ออก (สองปุ่มติดกันใต้มือซ้าย) — บันทึกย้ายไป
+        // Cmd+Shift+S  ต้องเช็ก Shift ก่อนถึงตรงนี้ ไม่งั้นบันทึกจะถูกกินเป็นซูม
+        e.preventDefault();
+        setPxPerSec((p) => Math.min(120, p * 1.3));
+      } else if (mod && e.key.toLowerCase() === "a") {
+        // กัน select-all ของเบราว์เซอร์ที่จะไฮไลต์ทั้งหน้า
+        e.preventDefault();
+        setPxPerSec((p) => Math.max(2, p / 1.3));
       } else if (mod && e.key.toLowerCase() === "c") {
         // ก๊อปช็อตยังไม่มี — Cmd+C จึงเป็นของบล็อกเลเยอร์อย่างเดียว ปล่อยผ่าน
         // ตอนไม่ได้เลือกบล็อกไว้ เพื่อไม่ไปทับการก๊อปข้อความปกติของเบราว์เซอร์
@@ -2682,6 +2691,7 @@ export default function Editor() {
           onRemove={removeShot}
           onSplit={split}
           onDuplicate={duplicate}
+          onTrim={patchShot}
           layers={layers}
           vis={vis}
           onVis={(k) => setVis((v) => ({ ...v, [k]: !v[k] }))}

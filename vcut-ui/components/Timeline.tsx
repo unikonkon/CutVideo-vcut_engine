@@ -263,6 +263,7 @@ export default function Timeline({
   onRemove,
   onSplit,
   onDuplicate,
+  onTrim,
   layers,
   vis,
   onVis,
@@ -295,6 +296,8 @@ export default function Timeline({
   onRemove: (i: number) => void;
   onSplit: () => void;
   onDuplicate: (i: number) => void;
+  /** ลากขอบช็อตวิดีโอ — ส่งช่วงใหม่ในคลิปต้นฉบับ (page ทำ patchShot: คิด dur · ติดธงตัดใหม่ · เข้าประวัติ) */
+  onTrim: (i: number, patch: { start: number; end: number }) => void;
   layers: Record<LayerKind, LayerBlock[]>;
   vis: Record<LayerKind, boolean>;
   onVis: (k: LayerKind) => void;
@@ -380,6 +383,102 @@ export default function Timeline({
 
   const lanesAbove = LANES.filter((l) => vis[l.kind]);
   const lanesBelow = LANES_BELOW.filter((l) => vis[l.kind]);
+
+  // ── ยืดหดขอบช็อตวิดีโอ (trim in/out ในคลิปต้นฉบับ) ──
+  //
+  // ท่าเดียวกับบล็อกเลเยอร์: ghost ระหว่างลาก · commit ตอนปล่อยเท่านั้น  แต่แทร็ก
+  // วิดีโอเรียงต่อกันไม่มีช่องว่าง ขอบซ้ายบนจอจึงถูกตรึงด้วยช็อตก่อนหน้า — ลากขอบ
+  // ซ้ายคือเลื่อน *จุดเริ่มในคลิป* แล้วบล็อกยาว/สั้นไปทางขวา และช็อตหลังจากนั้น
+  // เลื่อนตามทั้งแถว (ripple) เหมือนที่แผง Properties ทำอยู่แล้ว
+  //
+  // กฎขอบเขต (0 ≤ start · end ≤ clip_dur · ยาวอย่างน้อย 0.3 วิ) ใช้ชุดเดียวกับ
+  // แผง Properties และเอนจิน (MIN_PIECE) — ถ้าหนีบไม่ตรงกัน จะลากได้แต่บันทึกไม่ผ่าน
+  const MIN_SHOT = 0.3;
+  const [trim, setTrim] = useState<{ i: number; start: number; end: number } | null>(null);
+  const trimRef = useRef<{
+    i: number;
+    x0: number;
+    start0: number;
+    end0: number;
+    side: "l" | "r";
+    clipDur: number;
+  } | null>(null);
+
+  /** จุดตัดท้ายช็อต (วินาทีบนไทม์ไลน์) → ดูดเข้าเส้นจังหวะเมื่อเปิดโหมดจังหวะ
+   *  (ระยะดูด 8 พิกเซล) ไม่งั้นปัดทีละ 0.05 วิ  ดูดที่ *รอยตัด* ไม่ใช่ที่ขอบซ้าย
+   *  เพราะรอยตัดคือสิ่งเดียวที่คนดูได้ยินตรงจังหวะ (กฎเดียวกับ beat.py) */
+  const snapCut = (cutTl: number) => {
+    const g = beats?.grid;
+    if (g && g.length) {
+      let best = -1;
+      let bd = 8 / pxPerSec;
+      for (const t of g) {
+        const d = Math.abs(t - cutTl);
+        if (d < bd) {
+          bd = d;
+          best = t;
+        }
+      }
+      if (best >= 0) return best;
+    }
+    return Math.round(cutTl * 20) / 20;
+  };
+
+  const trimStart = (e: React.PointerEvent, i: number, side: "l" | "r") => {
+    e.stopPropagation();
+    e.preventDefault();
+    try {
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      /* pointer จำลอง (ทดสอบ) ไม่มี capture ได้ — ลากต่อได้อยู่ดี */
+    }
+    const s = shots[i];
+    trimRef.current = {
+      i,
+      x0: e.clientX,
+      start0: s.start,
+      end0: s.end,
+      side,
+      clipDur: s.clip_dur > 0 ? s.clip_dur : s.end,
+    };
+    setTrim({ i, start: s.start, end: s.end });
+  };
+  const trimMove = (e: React.PointerEvent) => {
+    const d = trimRef.current;
+    if (!d) return;
+    const dx = (e.clientX - d.x0) / pxPerSec;
+    const off = offsets[d.i];
+    if (d.side === "r") {
+      let end = d.end0 + dx;
+      end = d.start0 + (snapCut(off + (end - d.start0)) - off);
+      end = Math.min(d.clipDur, Math.max(d.start0 + MIN_SHOT, end));
+      setTrim({ i: d.i, start: d.start0, end });
+    } else {
+      let start = d.start0 + dx;
+      start = d.end0 - (snapCut(off + (d.end0 - start)) - off);
+      start = Math.max(0, Math.min(d.end0 - MIN_SHOT, start));
+      setTrim({ i: d.i, start, end: d.end0 });
+    }
+  };
+  const trimEnd = () => {
+    const d = trimRef.current;
+    if (
+      d &&
+      trim &&
+      (Math.abs(trim.start - d.start0) > 0.005 || Math.abs(trim.end - d.end0) > 0.005)
+    ) {
+      onTrim(d.i, {
+        start: Math.round(trim.start * 1000) / 1000,
+        end: Math.round(trim.end * 1000) / 1000,
+      });
+    }
+    trimRef.current = null;
+    setTrim(null);
+  };
+  // ตำแหน่ง/ความยาวที่วาด — ระหว่างลากใช้ ghost แล้วเลื่อนช็อตหลังจากนั้นตามไปด้วย
+  const trimDelta = trim ? trim.end - trim.start - shots[trim.i].dur : 0;
+  const viewOff = (i: number) => (trim && i > trim.i ? offsets[i] + trimDelta : offsets[i]);
+  const viewDur = (i: number) => (trim && i === trim.i ? trim.end - trim.start : shots[i].dur);
 
   /** บอกข้างนอกว่าการ์ดลอยต้องไปชี้ตรงไหน
    *
@@ -698,7 +797,7 @@ export default function Timeline({
         <button
           onClick={() => onZoom(Math.max(2, pxPerSec / 1.4))}
           className="rounded-md p-2 text-muted hover:bg-panel-2 hover:text-ink"
-          title="ซูมออก (-) · ซูมพอดีทั้งเรื่อง (0)"
+          title="ซูมออก (- หรือ Cmd+A) · ซูมพอดีทั้งเรื่อง (0)"
         >
           <ZoomOut size={14} />
         </button>
@@ -709,12 +808,12 @@ export default function Timeline({
           value={pxPerSec}
           onChange={(e) => onZoom(parseFloat(e.target.value))}
           className="w-28"
-          title="ระดับซูมไทม์ไลน์ — คีย์ลัด: - / = / 0"
+          title="ระดับซูมไทม์ไลน์ — คีย์ลัด: - / = / 0 · Cmd+S ซูมเข้า · Cmd+A ซูมออก"
         />
         <button
           onClick={() => onZoom(Math.min(120, pxPerSec * 1.4))}
           className="rounded-md p-2 text-muted hover:bg-panel-2 hover:text-ink"
-          title="ซูมเข้า (=)"
+          title="ซูมเข้า (= หรือ Cmd+S)"
         >
           <ZoomIn size={14} />
         </button>
@@ -816,14 +915,20 @@ export default function Timeline({
               }}
             >
               {shots.map((s, i) => {
-                const left = 8 + offsets[i] * pxPerSec;
-                const w = Math.max(s.dur * pxPerSec - 2, 8);
+                const left = 8 + viewOff(i) * pxPerSec;
+                const w = Math.max(viewDur(i) * pxPerSec - 2, 8);
                 const isSel = selected === i;
+                const trimming = trim?.i === i;
                 return (
                   <div
                     key={`${s.name}-${i}`}
-                    draggable
+                    draggable={trim == null}
                     onDragStart={(e) => {
+                      // จับขอบอยู่ = ห้ามเบราว์เซอร์เริ่มลากสลับลำดับซ้อนขึ้นมา
+                      if (trimRef.current) {
+                        e.preventDefault();
+                        return;
+                      }
                       e.dataTransfer.setData("text/x-shot", String(i));
                       setDragFrom(i);
                     }}
@@ -850,7 +955,7 @@ export default function Timeline({
                       // คลิกช็อตไหน เส้นแดงไปยืนตรงจุดที่คลิก แล้วกดเล่นต่อได้เลย
                       onSeek(timeFromClientX(e.clientX));
                     }}
-                    title={`${s.name} · ${s.start.toFixed(1)}–${s.end.toFixed(1)} วิ${s.seg ? "" : " · ยังไม่มีไฟล์ตัด"}\nคลิก = เลือก + ย้ายเส้นหัวเล่นมาตรงนี้ · ลาก = สลับลำดับ`}
+                    title={`${s.name} · ${s.start.toFixed(1)}–${s.end.toFixed(1)} วิ (คลิปเต็ม ${s.clip_dur.toFixed(1)} วิ)${s.seg ? "" : " · ยังไม่มีไฟล์ตัด"}\nคลิก = เลือก + ย้ายเส้นหัวเล่นมาตรงนี้ · ลาก = สลับลำดับ · ขอบซ้าย/ขวา = ยืดหด`}
                     className={`absolute top-1 h-[4.5rem] cursor-grab overflow-hidden rounded-lg border active:cursor-grabbing ${
                       isSel ? "z-20 border-accent ring-2 ring-accent/60" : "border-line-2"
                     } ${dragOver === i && dragFrom !== i ? "outline outline-2 outline-accent/70" : ""}`}
@@ -872,8 +977,45 @@ export default function Timeline({
                     />
                     {w > 46 && (
                       <div className="absolute inset-x-0 bottom-0 truncate bg-black/55 px-1.5 py-0.5 text-[10px] text-white">
-                        {s.name} <span className="text-white/60">{dur(s.dur)}</span>
+                        {trimming && trim ? (
+                          <>
+                            {trim.start.toFixed(2)}–{trim.end.toFixed(2)}{" "}
+                            <span className="text-white/60">{(trim.end - trim.start).toFixed(2)} วิ</span>
+                          </>
+                        ) : (
+                          <>
+                            {s.name} <span className="text-white/60">{dur(s.dur)}</span>
+                          </>
+                        )}
                       </div>
+                    )}
+                    {/* จุดจับขอบ — โผล่เมื่อบล็อกกว้างพอให้เล็งได้ ไม่งั้นตอนซูมออกสุด
+                        ทุกคลิกจะกลายเป็นยืดหดแทนการเลือก */}
+                    {w >= 24 && (
+                      <>
+                        <div
+                          onPointerDown={(e) => trimStart(e, i, "l")}
+                          onPointerMove={trimMove}
+                          onPointerUp={trimEnd}
+                          onPointerCancel={trimEnd}
+                          onClick={(e) => e.stopPropagation()}
+                          title="ลาก = เลื่อนจุดเริ่มในคลิปต้นฉบับ"
+                          className={`absolute inset-y-0 left-0 z-10 w-1.5 cursor-ew-resize hover:bg-white/70 ${
+                            trimming ? "bg-white/80" : "bg-white/20"
+                          }`}
+                        />
+                        <div
+                          onPointerDown={(e) => trimStart(e, i, "r")}
+                          onPointerMove={trimMove}
+                          onPointerUp={trimEnd}
+                          onPointerCancel={trimEnd}
+                          onClick={(e) => e.stopPropagation()}
+                          title="ลาก = เลื่อนจุดจบในคลิปต้นฉบับ"
+                          className={`absolute inset-y-0 right-0 z-10 w-1.5 cursor-ew-resize hover:bg-white/70 ${
+                            trimming ? "bg-white/80" : "bg-white/20"
+                          }`}
+                        />
+                      </>
                     )}
                   </div>
                 );

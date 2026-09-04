@@ -117,7 +117,7 @@ export default function TopBar({
           <button
             onClick={onSave}
             disabled={saving}
-            title="เขียนไทม์ไลน์ลง edl.json — สำรองของเดิมไว้ให้ (Cmd+S)"
+            title="เขียนไทม์ไลน์ลง edl.json — สำรองของเดิมไว้ให้ (Cmd+Shift+S)"
             className="flex shrink-0 items-center gap-1.5 rounded-lg bg-panel-3 px-3 py-1.5 text-[12px] font-medium text-ink hover:bg-line-2 disabled:opacity-50"
           >
             {saving ? (
@@ -146,7 +146,7 @@ export default function TopBar({
             onClick={onSaveFx}
             disabled={fxSaving}
             className="flex shrink-0 items-center gap-1.5 rounded-lg border border-broll/50 bg-broll/20 px-3 py-1.5 text-[12px] font-medium text-ink hover:bg-broll/30 disabled:opacity-50"
-            title="บันทึกเลเยอร์ (ข้อความ/สติกเกอร์/เพลง/แผนที่) ลง fx.json (Cmd+S)"
+            title="บันทึกเลเยอร์ (ข้อความ/สติกเกอร์/เพลง/แผนที่) ลง fx.json (Cmd+Shift+S)"
           >
             {fxSaving ? (
               <Loader2 size={13} className="animate-spin" />
