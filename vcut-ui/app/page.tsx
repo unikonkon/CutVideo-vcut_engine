@@ -439,7 +439,15 @@ export default function Editor() {
     if (!fxDraft) return;
     setFxSaving(true);
     try {
-      const r = await api2.saveFx(fxDraft);
+      // ส่ง journey เฉพาะเมื่อแผนที่ถูกแก้ในหน้านี้จริง — เอนจิน (fx.merge) ทับ
+      // journey *ทั้งก้อน* ไม่ผสมทีละคีย์ ถ้าส่งร่างที่โหลดมาตอนเปิดหน้าไปทุกครั้ง
+      // ค่าที่ตั้งจากทางอื่น (viewer 8765 · API · แก้ไฟล์ตรง) จะถูกทับกลับเป็นค่าเก่า
+      // ทันทีที่กดบันทึกอะไรก็ตาม ทั้งที่ไม่ได้แตะแผนที่เลย  เทียบกับก้อนที่โหลด
+      // มาล่าสุด (fxData) แทนธง "แตะแล้ว" เพราะย้อนกลับ (undo) จนเท่าเดิมก็ไม่ควรส่ง
+      const { journey, ...rest } = fxDraft;
+      const journeyTouched =
+        JSON.stringify(journey) !== JSON.stringify(fxData?.fx.journey ?? null);
+      const r = await api2.saveFx(journeyTouched ? fxDraft : rest);
       setFxData(r.fx);
       setFxDraft({
         music: r.fx.fx.music.map((m) => ({ ...m })),
@@ -462,7 +470,7 @@ export default function Editor() {
     } finally {
       setFxSaving(false);
     }
-  }, [fxDraft, flash]);
+  }, [fxDraft, fxData, flash]);
 
   // ── ช็อตบนไทม์ไลน์ → กุญแจเอฟเฟกต์ของขั้น 5 ──
   //

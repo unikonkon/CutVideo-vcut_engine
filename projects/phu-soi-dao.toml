@@ -52,8 +52,8 @@ pad         = 0.06
 min_piece   = 0.45
 
 [video]
-width = 1080
-height = 1920
+width = 1920
+height = 1080
 vertical_mode = "blur_pad"
 
 [compose]
