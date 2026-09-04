@@ -62,6 +62,7 @@ STAGES = [
     {"id": "assemble", "label": "④ ต่อไฟล์"},
     {"id": "caption",  "label": "④ ใส่ข้อความ"},
     {"id": "fx",       "label": "⑤ แต่งหนัง"},
+    {"id": "autofx",   "label": "⑤ แต่งอัตโนมัติตามสไตล์"},
     {"id": "review",   "label": "AI ดูหนังที่ตัดแล้ว"},
 ]
 STAGE_ORDER = [x["id"] for x in STAGES]
@@ -72,6 +73,9 @@ STEP_LABEL = {s["id"]: s["label"] for s in STEPS}
 # ไม่มีใครต้องทำก่อน และ plan/phase ไม่ต้องรู้จัก  ใส่ชื่อไทยไว้ที่นี่เพราะแผงงาน
 # ของหน้าเว็บอ่าน STEP_LABEL ตัวเดียวกัน ไม่งั้นจะขึ้นว่า "กำลัง music…"
 STEP_LABEL["music"] = "ดาวน์โหลดเสียง"
+STEP_LABEL["variants"] = "ตัดหลายแบบ"
+STEP_LABEL["autofx"] = "แต่งอัตโนมัติ"
+STEP_LABEL["ai_trim"] = "AI เลือกช่วง"
 
 # ── 3 ขั้น ตามภาษาของคนตัดต่อ ไม่ใช่ภาษาของเครื่อง ────────────────────────────────
 #
@@ -115,7 +119,7 @@ PHASE_STAGES = {
     "prepare": ["listen", "ai", "prepare"],
     "compose": ["compose", "render", "assemble"],
     "text": ["caption"],
-    "fx": ["fx"],
+    "fx": ["fx", "autofx"],
 }
 SCOPES = ["all"] + [p["id"] for p in PHASES]
 SCOPE_LABEL = {"all": "ทุกขั้น",
@@ -296,6 +300,10 @@ FIELDS = [
       help="สูงขึ้น = ตัดถี่น้อยลง ปล่อยให้พูดจบความคิด"),
     F("talk.min_shot", "ช็อตพูดสั้นสุด", "float", "edl", "prepare",
       min=1, max=15, step=0.5, unit="วิ"),
+    F("talk.max_shot", "ช็อตพูดยาวสุด — ซอยตามประโยค", "float", "edl", "prepare",
+      min=0, max=60, step=0.5, unit="วิ",
+      help="0 = ไม่ซอย · คลิปเดียวที่พูดต่อเนื่องไม่มีช่องเงียบต้องซอย ไม่งั้นย่อเหลือ "
+           "45 วิไม่ได้ (ตัดที่รอยต่อท่อนของ transcript ไม่ตัดกลางคำ)"),
     F("talk.margin_pre", "เผื่อหัวประโยค", "float", "edl", "prepare",
       min=0, max=2, step=0.05, unit="วิ"),
     F("talk.margin_post", "เผื่อท้ายประโยค", "float", "edl", "prepare",
@@ -338,6 +346,11 @@ FIELDS = [
     F("jumpcut.min_silence", "เงียบนานเกินนี้ถึงตัดออก", "float", "silence", "prepare",
       min=0.1, max=3, step=0.05, unit="วิ",
       help="สั้นกว่านี้คือจังหวะหายใจปกติ ตัดออกแล้วฟังกระชาก"),
+    F("jumpcut.auto_noise", "เกณฑ์เงียบตามความดังของคลิป", "bool", "silence", "prepare",
+      help="เงียบ = เบากว่า LUFS ของคลิปนั้นลงไปตามค่าข้างล่าง — คลิปที่มีเพลงคลอ/"
+           "อัดมาดัง ค่าคงที่ −32 dB ไม่เจอช่วงเงียบเลย"),
+    F("jumpcut.auto_offset", "เบากว่าความดังคลิปกี่ dB ถือว่าเงียบ", "float", "silence",
+      "prepare", min=3, max=40, step=0.5, unit="dB", adv=True),
     F("jumpcut.pad", "เผื่อไว้ข้างละ", "float", "edl", "prepare",
       min=0, max=0.5, step=0.01, unit="วิ", help="กันตัดโดนพยัญชนะต้น/ท้ายคำ"),
     F("jumpcut.min_piece", "ซอยประโยคละเอียดได้ถึง", "float", "edl", "prepare",
@@ -358,9 +371,10 @@ FIELDS = [
 
     # ── รวมเป็นหนัง: วิธีเลือกชิ้นจากคลัง ──
     F("compose.mode", "วิธีเลือกชิ้นจากคลัง", "select", "edl", "compose",
-      options=["all", "pattern", "budget", "numbers", "timerange", "manual", "ai"],
+      options=["all", "pattern", "budget", "fit", "numbers", "timerange", "manual", "ai"],
       labels={"all": "เอาทั้งหมด", "pattern": "สลับตามรูปแบบ",
-              "budget": "กำหนดเวลารวมแต่ละแบบ", "numbers": "ตามเลขคลิป",
+              "budget": "กำหนดเวลารวมแต่ละแบบ", "fit": "ย่อให้พอดีความยาวเป้า",
+              "numbers": "ตามเลขคลิป",
               "timerange": "ตามช่วงเวลาที่ถ่าย", "manual": "เลือกทีละชิ้นเอง",
               "ai": "ให้ AI เลือกจากความหมาย"},
       # โหมดที่เรียก AI จริงและเสียโควตา — หน้าเว็บแยกกลุ่มด้วยรายการนี้
@@ -371,7 +385,11 @@ FIELDS = [
       options=["TALK", "BROLL"], labels={"TALK": "พูด", "BROLL": "วิว"},
       help="ใช้เมื่อเลือก 'สลับตามรูปแบบ' — เช่น พูด → วิว → วิว แล้ววนซ้ำ"),
     F("compose.target_minutes", "ความยาวเป้า", "float", "edl", "compose",
-      min=0, max=120, step=0.5, unit="นาที", help="0 = ไม่จำกัด (ใช้กับ 'สลับตามรูปแบบ')"),
+      min=0, max=120, step=0.5, unit="นาที",
+      help="0 = ไม่จำกัด (ใช้กับ 'สลับตามรูปแบบ' และ 'ย่อให้พอดี')"),
+    F("compose.talk_share", "สัดส่วนช่วงพูดของเป้า (ย่อให้พอดี)", "float", "edl", "compose",
+      min=0, max=1, step=0.05, adv=True,
+      help="0.8 = พูด 80% ของความยาวเป้า ที่เหลือเป็นวิว · ไม่มีวิวก็พูดเต็ม"),
     F("compose.talk_minutes", "เวลาช่วงพูด", "float", "edl", "compose",
       min=0, max=90, step=0.5, unit="นาที", help="ใช้กับ 'กำหนดเวลารวมแต่ละแบบ'"),
     F("compose.broll_minutes", "เวลาช่วงวิว", "float", "edl", "compose",
@@ -559,6 +577,48 @@ FIELDS = [
     # captions.json) ที่นี่มีแต่ค่ากลางจริง ๆ
     F("fx.out_suffix", "ท้ายชื่อไฟล์ของขั้น 5", "str", "free", "fx",
       help="ต่อท้ายชื่อไฟล์ของขั้น 3 — final.mp4 + '-fx' = final-fx.mp4"),
+
+    # ── หน้าเว็บ 3 ขั้น (v3) · ตัดหลายแบบ ──
+    # แบบต่างกันที่การตัดเท่านั้น (ดู variants.CATALOG) — ค่าพวกนี้ไม่ทำให้ของที่
+    # ทำไว้เก่า จึงเป็น free: สั่ง `variants` ใหม่เมื่ออยากได้แบบเพิ่ม
+    F("variants.ids", "แบบที่จะตัด", "multi", "free", "compose",
+      options=["s30", "s45", "s60", "tight", "ai45", "rapid"],
+      labels={"s30": "30 วิ", "s45": "45 วิ", "s60": "60 วิ",
+              "tight": "ตัดชิดทั้งคลิป", "ai45": "AI ไฮไลต์ 45 วิ", "rapid": "ยิงรัว"}),
+    F("variants.ai", "ถาม AI เลือกช่วงสำหรับแบบไฮไลต์", "bool", "free", "compose",
+      help="เปิดแล้ว `variants` จะสั่ง AI (trim_suggest ~2–3 นาที · โควตา) ให้เอง "
+           "ถ้ายังไม่มีคำตอบ · ปิด = ข้ามแบบ AI ไฮไลต์"),
+
+    # ── หน้าเว็บ 3 ขั้น (v3) · ชั้นแต่งอัตโนมัติ (autofx) ──
+    # เขียนลง fx.json/captions.json ตอนสั่ง `autofx` เท่านั้น — เปลี่ยนค่าแล้วต้อง
+    # สั่งใหม่ ของที่แก้เองในหน้าเว็บ (id ไม่ขึ้นต้น auto-) ไม่ถูกแตะ
+    F("autofx.style", "สไตล์การ์ด", "select", "free", "autofx",
+      options=["", "sell", "proof", "teach", "compare"],
+      labels={"": "ทั่วไป", "sell": "A · ปิดการขาย / แนะนำช่อง", "proof": "B · โชว์หลักฐาน",
+              "teach": "C · สอนกรอบวิธีคิด", "compare": "D · Before | After"}),
+    F("autofx.hook", "การ์ด HOOK จากประโยคแรก", "bool", "free", "autofx",
+      help="3 บรรทัด เด้งทีละคำ เน้นบรรทัดแดง — ข้อความจาก whisper ควรดูก่อนเผา"),
+    F("autofx.card", "การ์ดปิดท้าย 4 วิ", "bool", "free", "autofx"),
+    F("autofx.channel", "ชื่อช่องบนการ์ดปิด", "str", "free", "autofx",
+      placeholder="@ชื่อช่อง", help="ว่าง = @ชื่อโปรเจกต์"),
+    F("autofx.sub", "ซับจากบทพูด", "bool", "free", "autofx",
+      help="เปิดทั้งซับของขั้น 4 (final-text) และ auto_sub ของขั้น 5 (final-fx)"),
+    F("autofx.music", "เพลงคลอจากคลัง", "select", "free", "autofx",
+      options=["", "up", "chill", "lofi", "warm", "travel", "tense", "choir",
+               "depart", "trek", "summit", "camp", "back"],
+      labels={"": "ไม่ใส่", "up": "สนุก / มีพลัง", "chill": "ชิล", "lofi": "โลไฟ",
+              "warm": "อบอุ่น / ซึ้ง", "travel": "เดินทาง", "tense": "ลุ้นระทึก",
+              "choir": "คอรัส", "depart": "ออกเดินทาง", "trek": "เดินป่า",
+              "summit": "ขึ้นถึงยอด", "camp": "แคมป์ / กลางคืน", "back": "ขากลับ / ปิดเรื่อง"},
+      help="เลือกลูปให้เองจากหมวด (คงที่ต่อโปรเจกต์) · หลบเสียงพูด · วนจนจบ"),
+    F("autofx.beat_snap", "ดูดรอยตัดเข้าจังหวะเพลง", "bool", "free", "autofx",
+      help="แก้ edl.json ให้ปลายช็อตตรงบีต — ชิ้นที่ขยับต้อง render ใหม่"),
+    F("autofx.burst", "ชุดยิงรัว: ซูมไล่ + โทน punch", "bool", "free", "autofx",
+      help="ช็อตสั้นติดกัน ≥ 3 ช็อต → ซูม 1.05→1.22 สลับทิศ + สีจัด"),
+    F("autofx.burst_max", "ช็อตสั้นกว่านี้นับเป็นยิงรัว", "float", "free", "autofx",
+      min=0.3, max=6, step=0.1, unit="วิ", adv=True),
+    F("autofx.bgm_dir", "คลังลูปเพลง", "path", "free", "autofx", adv=True,
+      help="โฟลเดอร์ที่มีไฟล์ bgm-<หมวด>-*.m4a (เทียบกับรากโปรเจกต์)"),
 ]
 
 FIELD_BY_KEY = {f["key"]: f for f in FIELDS}
@@ -577,7 +637,8 @@ STEP_PARAMS = {
     "thumbs": ["thumbs.width", "thumbs.sheet_cols", "thumbs.sheet_rows"],
     "ai": ["ai.model", "ai.tasks", "ai.sheets", "ai.transcript_chars",
            "ai.batch_clips", "ai.goal"],
-    "silence": ["jumpcut.noise_db", "jumpcut.min_silence"],
+    "silence": ["jumpcut.noise_db", "jumpcut.min_silence",
+                "jumpcut.auto_noise", "jumpcut.auto_offset"],
     # ai.apply.order/score_weight ไม่อยู่ตรงนี้ — สองตัวนั้นมีผลตอนรวมเป็นหนัง
     # (ขั้น 3) ไม่ใช่ตอนตัดคลิปเป็นชิ้น แก้แล้วไม่ต้องเตรียมคลังใหม่
     "prepare": ["talk", "broll", "classify.min_speech_total", "jumpcut",

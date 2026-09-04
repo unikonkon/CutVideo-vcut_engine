@@ -21,6 +21,7 @@ margin_pre  = 0.12
 margin_post = 0.20
 gap_merge   = 0.35
 min_shot    = 0.80           # ต่ำกว่า vertical-short เพื่อให้ได้ชุดตัดถี่ช่วงกลาง
+max_shot    = 6.00
 
 [broll]
 durations = [1.5, 1.0, 0.6]  # ช่วงยิงตัวอย่างรัว
@@ -35,3 +36,11 @@ target_minutes = 0.60
 same_level  = true
 master_lufs = -14.0          # ต้นฉบับ −9.8 — อย่าไล่ตาม แพลตฟอร์มกดลงเอง
 tp_ceiling  = -1.0
+
+[autofx]
+style   = "sell"
+hook    = true
+card    = true
+sub     = true
+music   = "up"           # สนุก/มีพลัง
+burst   = true           # ชุดยิงรัวช่วงกลางเรื่อง → ซูมไล่ + punch

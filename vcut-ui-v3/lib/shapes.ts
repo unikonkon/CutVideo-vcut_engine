@@ -1,0 +1,193 @@
+// รูปทรงเวกเตอร์ของขั้น 5 — เส้นทางเดียวกับที่ libass จะวาดจริง
+//
+// **ทำไมหน้าเว็บคำนวณรูปเอง ทั้งที่เอนจินส่ง path มาให้แล้วใน view.shapes**
+//
+// เอนจินคำนวณจาก fx.json ที่ *บันทึกแล้ว* — รูปที่เพิ่งวางหรือกำลังหมุนแถบ
+// ขนาดอยู่ยังไม่มี path จนกว่าจะกดบันทึก ถ้ารอ path จากเอนจินอย่างเดียว การลาก
+// แถบ "ขนาด" จะไม่มีอะไรขยับบนจอเลยจนกดบันทึก ซึ่งแปลว่าต้องกดบันทึกเพื่อดูว่า
+// ค่าที่ตั้งถูกไหม แล้วกดย้อนกลับถ้าไม่ถูก — วนแบบนั้นทุกครั้งที่ปรับหนึ่งค่า
+//
+// ราคาที่จ่ายคือมีสูตรรูปสองชุด ซึ่งเป็นสิ่งที่ fxtext.shape_cues เตือนไว้ตรง ๆ
+// ว่าวันหนึ่งจะเพี้ยนจากกัน  กันไว้ด้วย scripts/check_shape_parity.py ที่เทียบ
+// ผลของสองชุดทีละตัวอักษรกับ vcut_engine/fxtext.py — รันแล้วต่างเมื่อไรคือแตกแล้ว
+//
+// ที่มา: vcut_engine/fxtext.py → path_of()  ·  vcut_engine/journey.py → rrect()
+
+/** จัดรูปแบบตัวเลขให้ได้สตริงเดียวกับ f"{v:.Nf}" ของ Python เป๊ะ
+ *
+ *  **ทำไมต้องละเอียดขนาดนี้กับการปัดเศษ**
+ *
+ *  สองภาษาต่างกันสองจุด และทั้งสองจุดโผล่จริงในค่าที่คนตั้งได้:
+ *
+ *    1. ค่าที่ตกครึ่งพอดี — Python ปัดเข้าหา *เลขคู่* (−3.5 → −4 · 2.5 → 2)
+ *       ส่วน toFixed ของ JS ปัดขึ้นเสมอ (2.5 → 3)  ค่าแบบนี้เกิดทุกครั้งที่
+ *       ขนาดเป็นเลขคี่ เพราะรูปทุกตัววาดจาก size/2
+ *
+ *    2. ค่าที่ *ดูเหมือน* ตกครึ่งแต่ไม่ใช่ — −3.15 ที่เก็บเป็น double จริง ๆ คือ
+ *       −3.1499999999999999 จึงต้องปัดเป็น −3.1 ไม่ใช่ −3.2  ทางที่ผิดคือคูณ
+ *       สิบก่อนแล้วค่อยปัด เพราะ −3.15 × 10 ปัดเป็น −31.5 พอดี ข้อมูลที่บอกว่า
+ *       มันน้อยกว่าครึ่งหายไปตั้งแต่ตอนคูณ  toFixed ดูค่าไบนารีจริงจึงตอบถูก
+ *
+ *  ทางที่ถูกคือ: ให้ toFixed ทำงานตามปกติ แล้วดักเฉพาะ "ตกครึ่งพอดีจริง ๆ"
+ *  ไปทำ half-even เอง — ซึ่งเป็นกรณีที่ตรวจได้แน่นอน ไม่ต้องเดา (ดู tieScale)
+ */
+function pyfmt(v: number, nd: 0 | 1): string {
+  const p = nd === 0 ? 1 : 10;
+  // ตกครึ่งพอดีที่ทศนิยม nd ตำแหน่ง = เป็นเศษส่วนของ tieScale ที่ตัวเศษเป็นเลขคี่
+  // (nd=0 → ครึ่งจำนวนเต็ม · nd=1 → เศษหนึ่งส่วนสี่) — คูณสองคูณสี่ไม่มีเศษหาย
+  // จึงเช็กได้ตรง ๆ ต่างจากการคูณสิบ
+  const tie = nd === 0 ? 2 : 4;
+  const a = Math.abs(v);
+  let body: string;
+  if (Number.isInteger(a * tie) && !Number.isInteger(a * (tie / 2))) {
+    const fl = Math.floor(a * p);
+    body = ((fl % 2 === 0 ? fl : fl + 1) / p).toFixed(nd);
+  } else {
+    body = a.toFixed(nd);
+  }
+  // −0.4 ที่ปัดแล้วเป็นศูนย์ Python ยังพิมพ์ "-0" ไม่ใช่ "0" — libass อ่านเหมือนกัน
+  // แต่ตัวเทียบสูตรเทียบทีละตัวอักษร ต่างตรงนี้ก็ถือว่าสองชุดแตกจากกันแล้ว
+  const sign = v < 0 || Object.is(v, -0) ? "-" : "";
+  return sign + body;
+}
+
+/** เทียบเท่า f"{v:.0f}" ของ Python */
+function f0(v: number): string {
+  return pyfmt(v, 0);
+}
+
+/** เทียบเท่า journey._fmt — f"{v:.1f}" แล้วตัดศูนย์ท้ายกับจุดทิ้ง */
+function f1(v: number): string {
+  return pyfmt(v, 1).replace(/\.0$/, "");
+}
+
+function pts(list: [number, number][]): string {
+  const [a, ...rest] = list;
+  return (
+    `m ${f0(a[0])} ${f0(a[1])} l ` +
+    rest.map(([x, y]) => `${f0(x)} ${f0(y)}`).join(" ")
+  );
+}
+
+/** สี่เหลี่ยมมุมมน — มุมทำด้วยเบซิเยร์สองจุดคุม (journey.rrect) */
+function rrect(x: number, y: number, w: number, h: number, r0: number): string {
+  const r = Math.max(0, Math.min(r0, w / 2, h / 2));
+  const k = r * 0.4477;
+  const x2 = x + w;
+  const y2 = y + h;
+  return (
+    `m ${f1(x + r)} ${f1(y)} l ${f1(x2 - r)} ${f1(y)} ` +
+    `b ${f1(x2 - k)} ${f1(y)} ${f1(x2)} ${f1(y + k)} ${f1(x2)} ${f1(y + r)} ` +
+    `l ${f1(x2)} ${f1(y2 - r)} ` +
+    `b ${f1(x2)} ${f1(y2 - k)} ${f1(x2 - k)} ${f1(y2)} ${f1(x2 - r)} ${f1(y2)} ` +
+    `l ${f1(x + r)} ${f1(y2)} ` +
+    `b ${f1(x + k)} ${f1(y2)} ${f1(x)} ${f1(y2 - k)} ${f1(x)} ${f1(y2 - r)} ` +
+    `l ${f1(x)} ${f1(y + r)} ` +
+    `b ${f1(x)} ${f1(y + k)} ${f1(x + k)} ${f1(y)} ${f1(x + r)} ${f1(y)} `
+  );
+}
+
+/** เส้นทางของรูปทรงหนึ่งชิ้น — ยึด (0,0) เป็นกึ่งกลางรูป เหมือนที่เอนจินทำ
+ *
+ *  พิกัดเป็นหน่วยพิกเซลของหนังจริง ไม่ใช่ของจอตัวอย่าง — ตัวเรียกครอบด้วย
+ *  <svg viewBox> ที่สเกลลงมาให้เอง ค่าที่เห็นในช่อง "ขนาด" จึงเป็นเลขเดียวกับ
+ *  ที่ออกมาในไฟล์ ไม่ว่าจอตัวอย่างจะย่อไว้เท่าไร
+ */
+export function shapePath(kind: string, size: number, thick: number): string {
+  const s = Math.max(4, size);
+  const th = Math.min(0.9, Math.max(0.03, thick));
+  const half = s / 2;
+
+  if (kind === "bar") {
+    const h = Math.max(1, s * th) / 2;
+    return pts([
+      [-half, -h],
+      [half, -h],
+      [half, h],
+      [-half, h],
+    ]);
+  }
+
+  if (kind === "rrect") {
+    const h = Math.max(2, s * th);
+    return rrect(-half, -h / 2, s, h, Math.min(h / 2, s * 0.18));
+  }
+
+  if (kind === "dot") {
+    const r = half;
+    const k = r * 0.5523; // ค่าคงที่ที่ทำให้เบซิเยร์ 4 ท่อนกลายเป็นวงกลม
+    return (
+      `m 0 ${f0(-r)} ` +
+      `b ${f0(k)} ${f0(-r)} ${f0(r)} ${f0(-k)} ${f0(r)} 0 ` +
+      `b ${f0(r)} ${f0(k)} ${f0(k)} ${f0(r)} 0 ${f0(r)} ` +
+      `b ${f0(-k)} ${f0(r)} ${f0(-r)} ${f0(k)} ${f0(-r)} 0 ` +
+      `b ${f0(-r)} ${f0(-k)} ${f0(-k)} ${f0(-r)} 0 ${f0(-r)}`
+    );
+  }
+
+  // arrow — ชี้ลงเป็นค่าตั้งต้น แล้วให้คนหมุนเอาด้วย angle
+  const sw = (s * th) / 2;
+  const hw = Math.min(half, sw * 2.4);
+  const hy = half - s * 0.42;
+  return pts([
+    [-sw, -half],
+    [sw, -half],
+    [sw, hy],
+    [hw, hy],
+    [0, half],
+    [-hw, hy],
+    [-sw, hy],
+  ]);
+}
+
+/** เส้นทางแบบ ASS (\p) → เส้นทางแบบ SVG
+ *
+ *  ทั้งสองนับพิกัดเหมือนกัน ต่างกันแค่ชื่อคำสั่ง — m/l ตรงกันอยู่แล้ว ส่วน `b`
+ *  ของ ASS คือเบซิเยร์สามจุดคุมชุดเดียว ตรงกับ C ของ SVG พอดี  ตัวเลขที่ตาม
+ *  หลัง l ของ ASS เป็นชุดพิกัดกี่คู่ก็ได้ (SVG ก็เหมือนกัน) จึงส่งต่อได้ตรง ๆ
+ */
+export function assPathToSvg(path: string): string {
+  return path
+    .replace(/\bm\b/g, "M")
+    .replace(/\bl\b/g, "L")
+    .replace(/\bb\b/g, "C")
+    .trim() + " Z";
+}
+
+// ── แสงฟุ้ง (รอบ 4) ────────────────────────────────────────────────────────
+//
+// ตัวเลขทุกตัวในบล็อกนี้ต้องตรงกับ vcut_engine/journey.py เป๊ะ (GLOW · glow_unit)
+// ไม่งั้นชิปที่ตั้งไว้จนพอดีในพรีวิวจะฟุ้งคนละขนาดในไฟล์จริง — กันไว้ด้วย
+// scripts/check_shape_parity.py เหมือนสูตรรูป
+
+const GLOW: readonly (readonly [number, number, number])[] = [
+  [2.6, 2.0, 0.6],
+  [1.1, 0.8, 0.35],
+];
+
+/** ขนาดอ้างอิงของแสงฟุ้ง — โตตามความหนาของรูป แต่ตันที่ 1.2% ของด้านสั้นของจอ
+ *
+ *  เพดานมีเพราะฮาโลไม่ได้โตตามความหนาไปเรื่อย ๆ (ดูเหตุผลเต็มที่ journey.py)
+ */
+export function glowUnit(thickness: number, w: number, h: number): number {
+  return Math.min(Math.min(w, h) * 0.012, Math.max(3, thickness));
+}
+
+/** ชั้นฟุ้งที่ต้องวาด *ใต้* รูปจริง — คืน [] เมื่อปิด
+ *
+ *  ความแรงคุมแค่ *ขนาด* ของฮาโล ไม่ได้คุมความทึบ — ความทึบของแต่ละชั้นตายตัว
+ *  ตามตาราง GLOW เหมือนฝั่งเอนจิน (glow_layers ส่ง op ตรง ๆ ไม่ได้คูณ strength)
+ */
+export function glowLayers(
+  kind: string,
+  size: number,
+  thick: number,
+  strength: number,
+  w: number,
+  h: number,
+): { bord: number; blur: number; op: number }[] {
+  const g = Math.min(1, Math.max(0, strength || 0));
+  if (g <= 0.01) return [];
+  const u = glowUnit(size * (kind === "dot" ? 0.5 : thick), w, h);
+  return GLOW.map(([bo, bl, op]) => ({ bord: u * bo * g, blur: u * bl * g, op }));
+}

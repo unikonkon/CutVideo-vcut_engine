@@ -42,6 +42,8 @@
 | `vcut review` | edl + render | `.vcut/review.json` | ให้ AI ดูหนังที่ตัดแล้ว → เสนอ ตัดออก/สลับที่ · ตัดช่วงเงียบ · เพลง · เสียงเอฟเฟกต์ · สติกเกอร์ · ข้อความ |
 | `vcut caption` | render + captions | `final-text.mp4` | **ขั้น 4** · เขียนซับ/ข้อความลงในภาพ (ไฟล์ตัวที่สอง) |
 | `vcut fx` | render + captions + fx | `final-fx.mp4` | **ขั้น 5** · แต่งหนังทุกชั้นในพาสเดียว (ไฟล์ตัวที่สาม) |
+| `vcut variants` | manifest + transcript | `.vcut/variants/<id>/` | ตัด 6 แบบ (30/45/60 วิ · ตัดชิด · AI · ยิงรัว) จาก cache เดียว · `--activate` สลับแบบ — ดู [docs/QUICK-CUT-ENGINE.md](docs/QUICK-CUT-ENGINE.md) |
+| `vcut autofx` | edl + transcript | `fx.json` · `captions.json` | วางชั้นแต่งตามสไตล์ให้เอง (HOOK · การ์ดปิด · ซับ · เพลง · ยิงรัว) ทุกชิ้น id `auto-*` |
 | `vcut view` | ทุกอย่างข้างบน | `edl.json` | เปิดหน้าเว็บในเครื่อง ดู/แก้ EDL ด้วยตา |
 | `vcut gc` | — | — | ลบ segment ที่ EDL ปัจจุบันไม่ได้ใช้ (รวม cache ของขั้น 5) |
 

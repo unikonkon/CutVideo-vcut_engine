@@ -27,6 +27,7 @@ margin_pre  = 0.15
 margin_post = 0.25
 gap_merge   = 0.40
 min_shot    = 1.20           # ตรงกับช็อตเฉลี่ย 1.92 วิ ของช่อง After
+max_shot    = 8.00
 
 [broll]
 durations = [2.0, 1.5, 1.0]
@@ -41,3 +42,11 @@ target_minutes = 1.0
 [audio]
 same_level  = true
 master_lufs = -14.0
+
+[autofx]
+style   = "compare"
+hook    = false
+card    = true
+sub     = true
+music   = ""
+burst   = false

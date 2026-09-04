@@ -21,9 +21,9 @@ import sys
 import time
 from pathlib import Path
 
-from . import (ai, assemble, caption, cleanup, compose, config, decide, finish,
-               fx, listen, prepare, render, reset, review, scan, serve, settings,
-               silence, thumbs)
+from . import (ai, assemble, autofx, caption, cleanup, compose, config, decide,
+               finish, fx, listen, prepare, render, reset, review, scan, serve,
+               settings, silence, thumbs, variants)
 from .util import (c, die, disk_free_gb, hhmmss, info, read_json,
                    require_tools, reveal, sweep_dir, warn)
 
@@ -44,6 +44,9 @@ USAGE = """vcut — ตัดต่อวิดีโออัตโนมัต
                                   (--task cut|trim|music|sfx|sticker|text)
   vcut caption                    เขียนข้อความลงหนัง → final-text.mp4
   vcut fx                         ขั้น 5 · แต่งหนัง → final-fx.mp4
+  vcut variants                   ตัดหลายแบบ (30/45/60 วิ · ตัดชิด · AI · ยิงรัว) จาก cache เดียว
+                                  (--ids s30,s45 · --activate s45 · --list)
+  vcut autofx                     วางชั้นแต่งตามสไตล์ให้เอง (HOOK · การ์ดปิด · ซับ · เพลง · ยิงรัว)
   vcut view                       เปิดหน้าเว็บดู/แก้ EDL ในเครื่อง
   vcut info                       สรุปสถานะโปรเจกต์
   vcut presets                    ดู preset ที่มี
@@ -80,12 +83,19 @@ def build_parser():
 
     for name in ("scan", "listen", "thumbs", "ai", "silence", "prepare",
                  "compose", "decide", "render", "assemble", "caption", "fx",
-                 "review", "view",
+                 "variants", "autofx", "review", "view",
                  "run", "info", "gc", "presets", "config", "reset"):
         p = sub.add_parser(name, add_help=False)
         p.add_argument("-h", "--help", action="store_true")
         add_common(p)
-        if name in ("scan", "listen", "ai", "silence", "render", "run"):
+        if name == "variants":
+            p.add_argument("--ids", default="",
+                           help="แบบที่จะตัด คั่นจุลภาค (ไม่ระบุ = [variants] ids)")
+            p.add_argument("--activate", metavar="ID",
+                           help="สลับไปใช้แบบนี้ (ไม่ตัดใหม่ถ้าไม่ใส่ --ids)")
+            p.add_argument("--list", dest="show_list", action="store_true",
+                           help="ดูแบบที่ตัดไว้ ไม่ทำอะไร")
+        if name in ("scan", "listen", "ai", "silence", "render", "run", "variants"):
             p.add_argument("-f", "--force", action="store_true",
                            help="ไม่ใช้ cache ทำใหม่ทั้งหมด")
         if name in ("assemble", "caption", "fx", "run"):
@@ -371,6 +381,24 @@ def show(ctx, dst):
     return dst
 
 
+def cmd_variants(ctx, args):
+    """ตัดหลายแบบ / สลับแบบ / ดูรายการ — ตรรกะอยู่ที่ variants.py (หน้าเว็บใช้ตัวเดียวกัน)"""
+    ids = [x.strip() for x in (args.ids or "").split(",") if x.strip()]
+    if args.show_list or (args.activate and not ids):
+        if args.activate:
+            variants.activate(ctx, args.activate)
+        v = variants.view(ctx)
+        info(f"{c('แบบที่ตัดไว้', 'b')}  {v['dir']}")
+        for it in v["items"]:
+            mark = c("●", "g") if it["active"] else (c("✓", "g") if it["ready"] else c("·", "d"))
+            tail = (f"{it['shots']:>3} ชิ้น  {it['dur']:>6.1f} วิ"
+                    + (c("  (EDL แก้หลังตัดตัวอย่าง)", "y") if it["stale"] else "")
+                    if it["ready"] else c(it["error"] or "ยังไม่ได้ตัด", "d"))
+            info(f"  {mark} {it['id']:<6} {it['label']:<16} {tail}")
+        return
+    variants.run(ctx, ids=ids or None, force=args.force, activate=args.activate)
+
+
 def cmd_run(ctx, args):
     """ทำครบขั้น 1→5 — ขั้นที่ทำไว้แล้วและค่ายังไม่เปลี่ยนจะข้ามจาก cache
 
@@ -473,6 +501,10 @@ def main(argv=None):
         show(ctx, caption.run(ctx, out=args.out))
     elif args.cmd == "fx":
         show(ctx, finish.run(ctx, out=args.out))
+    elif args.cmd == "variants":
+        cmd_variants(ctx, args)
+    elif args.cmd == "autofx":
+        autofx.run(ctx)
     elif args.cmd == "review":
         review.run(ctx, context=args.context, force=args.force, tasks=args.tasks)
     elif args.cmd == "view":

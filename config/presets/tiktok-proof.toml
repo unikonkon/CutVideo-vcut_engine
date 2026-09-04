@@ -21,6 +21,7 @@ margin_pre  = 0.14
 margin_post = 0.22
 gap_merge   = 0.38
 min_shot    = 1.00
+max_shot    = 8.00
 
 [broll]
 durations = [2.0, 1.2, 0.6]
@@ -35,3 +36,11 @@ target_minutes = 0.72
 same_level  = true
 master_lufs = -14.0          # ตรงกับต้นฉบับพอดี
 tp_ceiling  = -1.0
+
+[autofx]
+style   = "proof"
+hook    = true
+card    = true
+sub     = true
+music   = "travel"
+burst   = true           # ชุดตัดถี่ตอนโชว์หลักฐาน

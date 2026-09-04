@@ -8,6 +8,7 @@
     all        เอาทุกชิ้นในคลัง เรียงตามลำดับที่จัดไว้ในขั้น 1
     pattern    สลับตามรูปแบบที่กำหนด เช่น พูด → วิว → วิว วนไป
     budget     กำหนดเวลารวมของแต่ละแบบ เช่น พูด 6 นาที + วิว 4 นาที
+    fit        ย่อให้พอดีความยาวเป้า — ชิ้นคะแนนดีก่อน ใส่ไม่ลงข้าม (ไม่หยุด)
     numbers    เอาเฉพาะเลขคลิปที่ระบุ เช่น 7068-7200, 7305
     timerange  เอาเฉพาะคลิปที่ถ่ายในช่วงเวลาที่ระบุ
     manual     เลือกทีละชิ้นเอง (หน้าเว็บเขียนรายการ id มาให้)
@@ -43,7 +44,7 @@ from . import config
 from .util import c, die, info, read_json, warn, write_json
 
 
-MODES = ("all", "pattern", "budget", "numbers", "timerange", "manual", "ai")
+MODES = ("all", "pattern", "budget", "fit", "numbers", "timerange", "manual", "ai")
 
 
 # ─────────────────────────── ตัวช่วยให้คะแนน ───────────────────────────
@@ -286,6 +287,53 @@ def mode_budget(pool_ok, cfg, ctx):
     return sorted(out, key=_by_seq), False, stats
 
 
+def mode_fit(pool_ok, cfg, ctx):
+    """ย่อให้พอดีความยาวเป้า — เอาชิ้นคะแนนดีก่อนจนเต็ม แล้วเรียงกลับตามเวลา
+
+    ต่างจาก pattern ที่มีเป้าตรงที่ **ชิ้นที่ใส่ไม่ลงถูกข้าม ไม่ใช่หยุดทั้งขบวน**
+    (pattern `break` ทันทีที่เจอชิ้นแรกที่เกินงบ — คลิปเดียวที่ชิ้นแรกยาว 101 วิ
+    จึงได้ 0 ชิ้น) และต่างจาก budget ตรงที่ตั้งเป้าเป็นความยาวรวมตัวเดียว
+    แล้วแบ่งสัดส่วนพูด/วิวให้เอง ([compose] talk_share) — คนกดปุ่ม "45 วิ" ไม่ควร
+    ต้องคิดว่าพูดกี่นาทีวิวกี่นาที
+
+    ลำดับ: พูดตามคะแนนจนถึงงบพูด → วิวตามคะแนนจนเต็มที่เหลือ → ถ้ายังไม่ถึง 85%
+    ของเป้า เติมพูดที่เหลือที่ยังใส่ลง → เรียงตามลำดับเล่าเรื่อง → สลับตามรูปแบบ
+    """
+    target = float(cfg.get("target_minutes", 0) or 0) * 60.0
+    if target <= 0:
+        die("[compose] mode = fit ต้องตั้ง target_minutes > 0")
+    keyf = sort_key(ctx) or _by_seq
+    talk = sorted([p for p in pool_ok if p["kind"] == "TALK"],
+                  key=lambda p: -p.get("_rank", 0))
+    broll = sorted([p for p in pool_ok if p["kind"] == "BROLL"],
+                   key=lambda p: -p.get("_rank", 0))
+    share = float(cfg.get("talk_share", 0.8) or 0.8) if broll else 1.0
+    share = max(0.0, min(1.0, share))
+
+    picked, used = [], 0.0
+    for p in talk:
+        if used + p["dur"] <= target * share + 1e-6:
+            picked.append(p)
+            used += p["dur"]
+    for p in broll:
+        if used + p["dur"] <= target + 1e-6:
+            picked.append(p)
+            used += p["dur"]
+    if used < target * 0.85:
+        for p in talk:
+            if p not in picked and used + p["dur"] <= target + 1e-6:
+                picked.append(p)
+                used += p["dur"]
+
+    picked.sort(key=keyf)
+    pat = [str(x).upper() for x in (cfg.get("pattern", []) or [])]
+    pat = [x for x in pat if x in ("TALK", "BROLL")]
+    if pat and broll:
+        picked, _ = _reflow(picked, pat)
+    return picked, True, {"เป้า": f"{target:.0f} วิ", "ได้": f"{used:.1f} วิ",
+                          "ชิ้น": len(picked)}
+
+
 def mode_ai(pool_ok, cfg, ctx):
     """ใช้รายการที่ AI เลือกไว้ใน .vcut/compose.json — engine ไม่ได้ถาม AI เอง"""
     d = read_json(ctx.work / "compose.json")
@@ -301,6 +349,7 @@ def mode_ai(pool_ok, cfg, ctx):
 
 
 PICKERS = {"all": mode_all, "pattern": mode_pattern, "budget": mode_budget,
+           "fit": mode_fit,
            "numbers": mode_numbers, "timerange": mode_timerange,
            "manual": mode_manual, "ai": mode_ai}
 

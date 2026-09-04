@@ -21,6 +21,7 @@ margin_pre  = 0.20
 margin_post = 0.35
 gap_merge   = 0.60           # สูงกว่าสูตรอื่น — คลิปสอนไม่ควรตัดถี่
 min_shot    = 2.00           # สูงกว่าสูตรอื่นเท่าตัว
+max_shot    = 12.00
 
 [broll]
 durations = [3.0, 2.0, 1.2]
@@ -35,3 +36,11 @@ target_minutes = 1.9
 same_level  = true
 master_lufs = -14.0
 tp_ceiling  = -1.0
+
+[autofx]
+style   = "teach"
+hook    = true
+card    = true
+sub     = true
+music   = "lofi"         # รองบทพูดยาว ไม่ชิงจังหวะ
+burst   = false

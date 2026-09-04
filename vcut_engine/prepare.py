@@ -89,6 +89,51 @@ def cut_silence(ranges, quiet, cfg):
     return out
 
 
+def split_long(parts, segs, max_shot, min_shot):
+    """ซอยช่วงพูดที่ยาวเกิน max_shot ตามรอยต่อท่อนของ transcript
+
+    ทำไมต้องมี: คลิปเดียวที่พูดต่อเนื่องไม่มีช่องเงียบ (whisper คืน 26 ท่อนติดกัน
+    สนิท 0–3 · 3–4 · 4–6 …) ถูก talk_ranges เชื่อมเป็นก้อนเดียว 101 วิ แล้วทุก
+    โหมดของ compose หยิบ "ทั้งก้อนหรือไม่หยิบเลย" — เป้า 45 วิ จึงได้หนังเปล่า
+    (docs/PLAN-quick-cut.md · G1)  ซอยตรงรอยต่อประโยคแล้วโหมด fit/pattern มีชิ้น
+    ให้เลือกจริง
+
+    ตัดที่ *ท้ายท่อน* ของ whisper เท่านั้น ไม่ตัดกลางอากาศ — จุดเวลาของ whisper
+    หยาบระดับวินาที แต่ท้ายท่อนคือจุดที่ประโยคจบจริง ดีกว่าหั่นทุก N วินาที
+    ที่โดนกลางคำแน่นอน  ชิ้นที่ซอยแล้วได้ gi ใหม่ของตัวเอง (ไม่ใช่ประโยคเดียวกัน
+    ที่ต้องอยู่ติดกัน) เพราะจุดประสงค์คือให้ compose เลือกทีละชิ้นได้
+
+    max_shot = 0 คือปิด — โปรเจกต์กองคลิปสั้น ๆ ไม่ต้องแตะ
+    """
+    if max_shot <= 0:
+        return parts
+    ends = sorted({round(float(e), 3) for _, e, _ in segs})
+    out = []
+    for a, b, gi in parts:
+        if b - a <= max_shot + 1e-6:
+            out.append((a, b, gi))
+            continue
+        cur, pieces = a, []
+        while b - cur > max_shot + 1e-6:
+            ok = [x for x in ends if cur + min_shot <= x <= cur + max_shot]
+            if ok:
+                x = ok[-1]                       # ไกลสุดที่ยังไม่เกินเพดาน
+            else:
+                later = [x for x in ends if cur + max_shot < x <= b - min_shot]
+                if not later:
+                    break                        # ไม่มีรอยต่อให้ตัดแล้ว
+                x = later[0]                     # ยอมเกินเพดานนิดหน่อยดีกว่าตัดกลางคำ
+            pieces.append((cur, x))
+            cur = x
+        pieces.append((cur, b))
+        if len(pieces) == 1:
+            out.append((a, b, gi))
+            continue
+        for k, (s, e) in enumerate(pieces):
+            out.append((round(s, 3), round(e, 3), f"{gi}s{k}"))
+    return out
+
+
 def text_in(segs, a, b):
     return " ".join(t for s, e, t in segs if e > a and s < b).strip()
 
@@ -287,6 +332,10 @@ def run(ctx, write=True):
         warn("เปิด [jumpcut] ไว้แต่ยังไม่มี silence.json — สั่ง 'หาช่วงเงียบ' ก่อน "
              "รอบนี้ยังไม่ตัดช่วงเงียบให้")
     jump_saved, jump_pieces = 0.0, 0
+    # ซอยช่วงพูดที่ยาวเกินเพดานตามรอยต่อประโยค — ดู split_long
+    max_shot = float(tcfg.get("max_shot", 0) or 0)
+    min_shot = float(tcfg.get("min_shot", 3.0))
+    split_pieces = 0
 
     # คลิปที่ผู้ใช้เอาออกตั้งแต่ขั้น 1 — ไม่เข้าคลังเลย ไม่ใช่เข้ามาแล้วติดป้าย
     # เพราะมันคือ "ไม่เอา" ไม่ใช่ "ตัวกรองคัดออก" ที่ยังหยิบกลับได้ในขั้น 3
@@ -373,6 +422,10 @@ def run(ctx, write=True):
                     - sum(b - a for a, b, _ in cut)
                 jump_pieces += len(cut) - len(parts)
                 parts = cut
+            if max_shot > 0:
+                sp = split_long(parts, segs, max_shot, min_shot)
+                split_pieces += len(sp) - len(parts)
+                parts = sp
 
             # ชิ้นที่มาจากช่วงพูดเดียวกันหลายชิ้น = ประโยคที่ถูกตัดชน ต้องอยู่ติดกัน
             multi = {gi for gi in {g for _, _, g in parts}
@@ -414,6 +467,7 @@ def run(ctx, write=True):
             "forced": sum(1 for p in pieces if p.get("forced")),
             "jump_pieces": jump_pieces,
             "jump_saved": round(jump_saved, 1),
+            "split_pieces": split_pieces,
             "loud_matched": len({p["name"] for p in ok if p.get("loud_ref")}),
             "same_level": bool(ctx.get("audio.same_level", False)),
             "talk": sum(1 for p in ok if p["kind"] == "TALK"),

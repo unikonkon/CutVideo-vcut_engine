@@ -22,12 +22,33 @@ _START = re.compile(r"silence_start:\s*(-?[\d.]+)")
 _END = re.compile(r"silence_end:\s*(-?[\d.]+)")
 
 # ค่าที่มีผลต่อ "ช่วงเงียบอยู่ตรงไหน" — เปลี่ยนแล้วต้องฟังใหม่
-DETECT_KEYS = ("noise_db", "min_silence")
+DETECT_KEYS = ("noise_db", "min_silence", "auto_noise", "auto_offset")
+
+# ── เกณฑ์เงียบอัตโนมัติ ──
+#
+# −32 dB คงที่ใช้ได้กับฟุตเทจดิบที่พื้นเสียงเงียบจริง แต่คลิปที่มีเพลงคลอหรือ
+# อัดมาดัง (คลิป TikTok ตัวอย่าง −6.8 LUFS) silencedetect ไม่เจออะไรเลยที่ −32
+# และไปเจอ 7 ช่วงที่ −15 — เกณฑ์ที่ใช้ได้จึงขึ้นกับความดังของ *แต่ละคลิป*
+# ไม่ใช่ค่าคงที่ตัวเดียว  เปิด auto_noise แล้วเกณฑ์ = LUFS ของคลิป − auto_offset
+# (scan วัด lufs ไว้ใน manifest แล้ว ไม่ต้องฟังซ้ำ)
+AUTO_LO, AUTO_HI = -60.0, -8.0
 
 
 def params_of(ctx):
     j = ctx.get("jumpcut", {}) or {}
     return {k: j.get(k) for k in DETECT_KEYS}
+
+
+def noise_for(cl, j):
+    """เกณฑ์เงียบของคลิปนี้ — คงที่ตามค่าที่ตั้ง หรือคิดจากความดังของคลิป"""
+    fixed = float(j.get("noise_db", -32.0))
+    if not bool(j.get("auto_noise", False)):
+        return fixed
+    lufs = cl.get("lufs")
+    if lufs is None or float(lufs) <= -70.0:
+        return fixed
+    off = float(j.get("auto_offset", 15.0))
+    return round(max(AUTO_LO, min(AUTO_HI, float(lufs) - off)), 1)
 
 
 def detect(path, noise_db, min_silence, clip_len):
@@ -58,6 +79,7 @@ def run(ctx, force=False):
     tr = (read_json(ctx.transcript, {}) or {}).get("clips", {})
 
     j = ctx.get("jumpcut", {}) or {}
+    auto = bool(j.get("auto_noise", False))
     noise = float(j.get("noise_db", -32.0))
     minsil = float(j.get("min_silence", 0.45))
     params = params_of(ctx)
@@ -74,15 +96,17 @@ def run(ctx, force=False):
     cached = old.get("clips", {}) if (not force and old.get("params") == params) else {}
     todo = [cl for cl in todo_all if cl["name"] not in cached]
 
+    how = (f"เงียบกว่า LUFS ของคลิป − {float(j.get('auto_offset', 15.0)):g} dB"
+           if auto else f"เงียบกว่า {noise:g} dB")
     info(f"SILENCE  {len(todo_all)} คลิปพูด  ({c(f'cache {len(todo_all) - len(todo)}', 'd')}"
-         f", ใหม่ {len(todo)})  ·  เงียบกว่า {noise:g} dB นานเกิน {minsil:g} วิ")
+         f", ใหม่ {len(todo)})  ·  {how} นานเกิน {minsil:g} วิ")
 
     found = dict(cached)
     if todo:
         pr = Progress(len(todo), "ฟัง")
 
         def one(cl):
-            return cl["name"], detect(cl["src"], noise, minsil, cl["duration"])
+            return cl["name"], detect(cl["src"], noise_for(cl, j), minsil, cl["duration"])
 
         with ThreadPoolExecutor(max_workers=int(ctx.get("scan.workers", 6))) as ex:
             for name, gaps in ex.map(one, todo):
@@ -91,7 +115,9 @@ def run(ctx, force=False):
         pr.done()
 
     keep = {cl["name"]: found.get(cl["name"], []) for cl in todo_all}
-    data = {"params": params, "clips": keep}
+    # เกณฑ์ที่ใช้จริงต่อคลิป — หน้าเว็บบอกได้ว่า "คลิปนี้ฟังที่ −21.8 dB"
+    data = {"params": params, "clips": keep,
+            "noise": {cl["name"]: noise_for(cl, j) for cl in todo_all}}
     write_json(ctx.work / "silence.json", data)
 
     quiet = sum(b - a for v in keep.values() for a, b in v)

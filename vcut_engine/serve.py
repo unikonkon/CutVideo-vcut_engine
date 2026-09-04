@@ -43,6 +43,22 @@ JOB_STEPS = {
     "render": ["render"], "assemble": ["assemble"], "caption": ["caption"],
     "finish": ["fx"],
     "plan": ["run"],          # ครบขั้น 1→5 — ปุ่ม "ทำทุกขั้น" ของ viewer เก่าใช้ตัวนี้
+    # หน้าเว็บ 3 ขั้น (v3): ตัดหลายแบบจาก cache เดียว · วางชั้นแต่งตามสไตล์ ·
+    # ถาม AI เฉพาะ trim_suggest (ถูกกว่าถามทุกงาน — แบบ ai45 ใช้แค่ตัวนี้)
+    "variants": ["variants"], "autofx": ["autofx"],
+    "ai_trim": ["ai", "--task", "trim_suggest"],
+}
+
+# ── ปุ่ม "ตัดให้เลย" ของหน้าเว็บ 3 ขั้น (v3) ────────────────────────────────
+#
+# ครบทางจากคลิปดิบถึง 6 แบบ + ชั้นแต่งของแบบตั้งต้น ในงานเดียว — ขั้นที่ทำไว้แล้ว
+# (scan/listen/thumbs/silence) ข้ามจาก cache ของตัวเอง จึงสั่งซ้ำได้ไม่เสียเวลา
+# สั่งตรงเหมือน BUILD_JOBS: ไม่ผูกกับแผน เพราะ variants/autofx ไม่ใช่ขั้นในไปป์ไลน์
+QUICK_JOBS = {
+    "quick":    ["scan", "thumbs", "listen", "silence", "variants", "autofx"],
+    "quick_ai": ["scan", "thumbs", "listen", "silence", "ai_trim", "variants", "autofx"],
+    # เปลี่ยนสไตล์/ค่าตัดแล้วตัด 6 แบบใหม่โดยไม่ถอดเสียงซ้ำ
+    "recut":    ["silence", "variants", "autofx"],
 }
 # ปุ่ม "รัน Phase นี้" — รันทุกขั้นใน Phase เดียว โดยไม่แตะ Phase อื่น
 #
@@ -479,8 +495,12 @@ def build_state(ctx):
     # สิ่งที่กำลังดูอยู่ไม่ใช่ลำดับล่าสุด ไม่งั้นคนดูของเก่าแล้วนึกว่าแก้ไม่ติด
     out_m = int(ctx.out.stat().st_mtime) if ctx.out.exists() else 0
     edl_m = int(ctx.edl.stat().st_mtime) if ctx.edl.exists() else 0
+    from . import variants
     return {
         "project": ctx.get("project.name", "untitled"),
+        # แบบที่ active อยู่ ("" = โปรเจกต์ธรรมดาที่ไม่เคยตัดหลายแบบ)
+        "variant": variants.load_index(ctx)["active"],
+        "autofx_style": str(ctx.get("autofx.style", "") or ""),
         "out": str(ctx.out),
         "out_exists": ctx.out.exists(),
         "out_size": round(ctx.out.stat().st_size / 1e9, 2) if ctx.out.exists() else 0,
@@ -1425,6 +1445,23 @@ def make_handler(ctx, job):
                 from . import caption as capmod
                 return self._range_file(capmod.out_path(ctx))
 
+            if p == "/api/variants":
+                from . import variants
+                return self._json(variants.view(ctx))
+
+            if p == "/api/autofx":
+                from . import autofx
+                return self._json(autofx.status(ctx))
+
+            if p.startswith("/variant/"):
+                # ไฟล์ตัวอย่างของแบบหนึ่ง (.vcut/variants/<id>/out.mp4) — การ์ด 6 แบบ
+                # ในหน้า 3 ขั้นกดเล่นได้ก่อนเลือก
+                from . import variants
+                vid = p[len("/variant/"):].split("/")[0]
+                if vid not in variants.BY_ID:
+                    return self._send(404, b"not found", "text/plain")
+                return self._range_file(variants.dir_of(ctx, vid) / variants.OUT)
+
             if p == "/api/gc":
                 # ถามก่อนลบ — ไม่แตะไฟล์ (ดู cleanup.preview)
                 from . import cleanup
@@ -1497,6 +1534,20 @@ def make_handler(ctx, job):
                     LIVE_LISTS.pop(old, None)
                 return self._json({"token": token, "count": len(files),
                                    "keyint": live_keyint(ctx)})
+
+            if p == "/api/variants/activate":
+                # สลับชุดไฟล์ (edl · render · pool · fx · captions) ระหว่างงานวิ่ง
+                # = ขั้นที่กำลังทำอ่านไฟล์คนละชุดกัน — กันไว้เหมือน reset
+                if job.running:
+                    return self._json({"error": "มีงานกำลังรันอยู่ — รอให้เสร็จก่อน"}, 409)
+                from . import variants
+                vid = str(payload.get("id") or "")
+                if vid not in variants.BY_ID:
+                    return self._json({"error": f"ไม่รู้จักแบบ '{vid}'"}, 400)
+                try:
+                    return self._json({"ok": True, "variants": variants.activate(ctx, vid)})
+                except SystemExit as e:
+                    return self._json({"error": str(e)}, 400)
 
             if p == "/api/undo":
                 prev = ctx.work / "edl.prev.json"
@@ -1740,7 +1791,8 @@ def make_handler(ctx, job):
             if p == "/api/job":
                 step = payload.get("step")
                 if step not in JOB_STEPS and step not in PHASE_JOBS \
-                        and step not in PREPARE_JOBS and step not in BUILD_JOBS:
+                        and step not in PREPARE_JOBS and step not in BUILD_JOBS \
+                        and step not in QUICK_JOBS:
                     return self._json({"error": f"ไม่รู้จักงาน '{step}'"}, 400)
                 if job.running:
                     return self._json({"error": "มีงานกำลังรันอยู่"}, 409)
@@ -1765,6 +1817,9 @@ def make_handler(ctx, job):
                 elif step in BUILD_JOBS:
                     # สั่งตรงตามที่ปุ่มเขียนไว้เสมอ (ดูเหตุผลเต็มที่ BUILD_JOBS)
                     todo = list(BUILD_JOBS[step])
+                elif step in QUICK_JOBS:
+                    todo = list(QUICK_JOBS[step])
+                    forceable = False
                 elif step in PREPARE_JOBS:
                     # เติมเฉพาะขั้นที่ "แผนบอกให้รัน" และ "ยังไม่มีของ/ของเก่าแล้ว"
                     # — ขั้นที่ทำไว้แล้วและค่ายังไม่เปลี่ยนจะถูกข้าม ไม่ทำซ้ำฟรี ๆ

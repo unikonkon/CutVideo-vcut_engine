@@ -29,8 +29,13 @@ def wanted_segments(ctx):
     ผิด → ไฟล์จริงไม่อยู่ในรายการ "ยังใช้อยู่" แล้ว gc ลบชิ้นที่ยังต้องใช้ทิ้ง
     (วัดกับโปรเจกต์จริง: 174 จาก 208 ชิ้นคิด gain ออกมาไม่ตรงกับที่ render ใช้)
     """
+    from . import variants
     rman = read_json(ctx.work / "render.json", {}) or {}
     listed = {s["file"] for s in rman.get("segments", [])}
+    # แบบอื่น ๆ ที่ตัดไว้ (variants) ใช้ cache ชุดเดียวกัน — ลบชิ้นของแบบที่ไม่ได้
+    # active อยู่ทิ้ง แล้วสลับกลับมาต้อง render ใหม่ทั้งแบบ ซึ่งคือสิ่งที่ variants
+    # มีไว้เพื่อเลี่ยงตั้งแต่แรก
+    listed |= variants.listed_segments(ctx)
     edl = read_json(ctx.edl)
     if not edl:
         return listed
@@ -45,6 +50,7 @@ def wanted_segments(ctx):
         I, TP = render.seg_loud(seg, loud)
         gain, _ = render.compute_gain(I, TP, float(seg["target_lufs"]), a)
         keep.add(f"{render.seg_key(seg, ctx, gain)}.mov")
+    keep |= variants.listed_segments(ctx)
     return keep | listed if unknown else keep
 
 
