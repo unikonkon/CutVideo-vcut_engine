@@ -254,6 +254,16 @@ export default function Editor() {
   //   live     สายเดียวจาก /live/ (ffmpeg ต่อให้สด · ลื่นไม่มีรอยต่อ · Chromium เท่านั้น)
   //   segments เล่น /seg/<ชิ้น> ทีละชิ้นแล้วต่อเอง (ทุกเบราว์เซอร์ · เลื่อนในชิ้นได้จริง)
   const playModeRef = useRef<"live" | "segments">("live");
+  // โหมดร่าง — เล่น *ทุกช็อต* ตามไทม์ไลน์ ช็อตที่มีไฟล์ตัดใช้ไฟล์ตัด ช็อตที่ยัง
+  // ไม่ตัด (เพิ่งซอย/ยืด/วางใหม่ · seg = null) เล่นจากไฟล์ต้นฉบับผ่าน /clip/ ที่
+  // วินาที start แล้วหยุดที่ end  โหมดปกติข้ามช็อตพวกนั้นเงียบ ๆ ทำให้หัวเล่นกับ
+  // ภาพหลุดกัน  ภาพจากต้นฉบับยังไม่ผ่านฟิลเตอร์ (หมุน · แนวตั้ง · โทน · ความเร็ว)
+  // จึงเป็นแค่ร่างไว้ดูจังหวะการตัด ไม่ใช่ผลจริง  state ไว้วาดปุ่ม · ref ไว้ให้ตัวจับ
+  // event อ่านค่าล่าสุดโดยไม่ต้องผูก deps
+  const [draftPlay, setDraftPlay] = useState(false);
+  const draftRef = useRef(false);
+  const draftIdx = useRef(0);        // อยู่ช็อตที่เท่าไรของ shots (โหมดร่าง)
+  const draftAuto = useRef(false);   // รอบล่าสุดสั่งให้เล่นต่อไหม — ใช้ตอนข้ามช็อตที่เล่นไม่ได้
   const segRef = useRef(0);          // อยู่ชิ้นที่เท่าไรของ rendered (โหมด segments)
   const segLoad = useRef(0);         // รอบโหลดล่าสุด — กันคำสั่งเก่าที่ยังค้างมาสั่งทับ
   const prefetchRef = useRef<HTMLVideoElement | null>(null);
@@ -701,9 +711,15 @@ export default function Editor() {
    *  (เวลาในสตรีมนับจากชิ้นที่ตั้งต้น ต้องบวกกลับเป็นเวลารวมของหนัง) */
   const elapsed = useCallback(() => {
     const v = videoRef.current;
-    if (!v || !v.src || modeRef.current !== "timeline" || !rendered.length) {
-      return null;
+    if (!v || !v.src || modeRef.current !== "timeline") return null;
+    // โหมดร่าง: เวลาในไฟล์ต้นฉบับต้องหัก start ของช็อตออกก่อน (ไฟล์ตัดเริ่มที่ 0)
+    if (draftRef.current) {
+      const s = shots[draftIdx.current];
+      if (!s) return null;
+      const from = s.seg ? 0 : s.start;
+      return Math.min(offsets[draftIdx.current] + Math.max(0, v.currentTime - from), total);
     }
+    if (!rendered.length) return null;
     // โหมดทีละชิ้น: currentTime คือเวลาในชิ้นนั้นตรง ๆ ไม่ต้องไล่หักความยาว
     if (playModeRef.current === "segments") {
       const r = rendered[segRef.current];
@@ -718,7 +734,7 @@ export default function Editor() {
       t -= rendered[j].dur;
     }
     return null;
-  }, [rendered, offsets, total]);
+  }, [rendered, offsets, total, shots]);
 
   /** อุ่นชิ้นถัดไปไว้ในแคชของเบราว์เซอร์ ระหว่างที่ชิ้นปัจจุบันยังเล่นอยู่
    *
@@ -790,12 +806,122 @@ export default function Editor() {
     [rendered, offsets, total, prefetchNext],
   );
 
+  /** ช็อตที่เวลา tl บนไทม์ไลน์ตกอยู่ (ไม่สนว่าตัดแล้วหรือยัง) */
+  const shotAt = useCallback(
+    (tl: number) => {
+      for (let i = 0; i < shots.length; i++) {
+        if (tl < offsets[i] + shots[i].dur) return i;
+      }
+      return Math.max(0, shots.length - 1);
+    },
+    [shots, offsets],
+  );
+
+  /** ไฟล์และช่วงที่ต้องเล่นของช็อตหนึ่งในโหมดร่าง — ไฟล์ตัดถ้ามี ไม่งั้นต้นฉบับ */
+  const draftSrc = (s: Shot) =>
+    s.seg
+      ? { src: segUrl(s.seg), from: 0, to: s.dur }
+      : { src: clipUrl(s.name), from: s.start, to: s.end };
+
+  /** เล่นช็อตที่ k ของ shots โดยเริ่มที่วินาที at ในช็อตนั้น (โหมดร่าง)
+   *
+   *  ท่าเดียวกับ playSegment แต่ตำแหน่งในไฟล์ต้องบวก start ของช็อต และปลายช็อต
+   *  ไม่ใช่ปลายไฟล์ — ตัววิ่งหัวเล่น (tick) เป็นคนดูว่าถึง end แล้วพาไปช็อตถัดไป */
+  const playDraft = useCallback(
+    (k: number, at: number, autoplay: boolean) => {
+      const v = videoRef.current;
+      const s = shots[k];
+      if (!v || !s) return;
+      draftIdx.current = k;
+      draftAuto.current = autoplay;
+      const it = draftSrc(s);
+      const start = it.from + Math.max(0, Math.min(at, Math.max(0, s.dur - 0.05)));
+      const mine = ++segLoad.current;
+      const begin = () => {
+        if (segLoad.current !== mine) return;
+        if (Math.abs(v.currentTime - start) > 0.01) {
+          try {
+            v.currentTime = start;
+          } catch {
+            /* ยังไม่พร้อมให้ขยับ — ปล่อยเล่นจากหัวไฟล์ ดีกว่าค้าง */
+          }
+        }
+        if (autoplay) {
+          v.play()
+            .then(() => setPlaying(true))
+            .catch(() => setPlaying(false));
+        }
+        // อุ่นไฟล์ของช็อตถัดไป — ต้นฉบับไฟล์ใหญ่ รอยต่อจะได้ไม่ค้างนาน
+        const n = shots[k + 1];
+        if (n) {
+          const nx = draftSrc(n).src;
+          let el = prefetchRef.current;
+          if (!el) {
+            el = document.createElement("video");
+            el.preload = "auto";
+            el.muted = true;
+            prefetchRef.current = el;
+          }
+          if (!el.src.endsWith(nx)) el.src = nx;
+        }
+      };
+      setPlayhead(Math.min(offsets[k] + (start - it.from), total));
+      if (v.src.endsWith(it.src) && v.readyState >= 1) {
+        begin();
+        return;
+      }
+      const onMeta = () => {
+        v.removeEventListener("loadedmetadata", onMeta);
+        begin();
+      };
+      v.addEventListener("loadedmetadata", onMeta);
+      v.src = it.src;
+      v.load();
+    },
+    [shots, offsets, total],
+  );
+
+  /** ช็อตปัจจุบันจบแล้ว (โหมดร่าง) → ช็อตถัดไป หรือหยุดที่ท้ายเรื่อง */
+  const advanceDraft = useCallback(() => {
+    const next = draftIdx.current + 1;
+    if (next >= shots.length) {
+      videoRef.current?.pause();
+      setPlaying(false);
+      setPlayhead(total);
+      return;
+    }
+    // "เล่นต่อไหม" ดูจากสถานะจริง — กดเล่นต่อผ่าน toggle ไม่ผ่าน playDraft ธง
+    // draftAuto จึงค้างค่าเก่าได้ (เก็บไว้เป็นตัวสำรองตอน play() ถูกปฏิเสธจน playing
+    // ยังไม่ทันเป็น true)
+    playDraft(next, 0, playingRef.current || draftAuto.current);
+  }, [shots.length, total, playDraft]);
+
+  const setDraftMode = useCallback((on: boolean) => {
+    draftRef.current = on;
+    setDraftPlay(on);
+  }, []);
+
   /** พาตัวเล่นไปยืนที่เวลานั้นจริง ๆ — autoplay=false ใช้ตอนหยุดอยู่ (โชว์เฟรมนั้น
    *  ค้างไว้) เพื่อให้กดเล่นแล้วเล่นต่อจากตรงนั้นได้ทันทีโดยไม่ต้องโหลดซ้ำ */
   const goTo = useCallback(
     async (tl: number, autoplay: boolean) => {
       const v = videoRef.current;
       if (!v) return;
+      // หัวเล่นตกบนช็อตที่ยังไม่มีไฟล์ตัด = สลับไปโหมดร่างให้เอง — ทั้งตอนกดเล่นและ
+      // ตอนคลิก/ลากไปหยุดตรงนั้น เพราะโหมดปกติจะพาหัวเล่นกระโดดไปช็อตที่ตัดแล้ว
+      // ถัดไปทันที (locate) ทำให้ไม่มีทาง "กดเล่นบนช็อตนี้" ได้เลย  กดปุ่มบน
+      // ไทม์ไลน์กลับเป็นไฟล์ตัดได้
+      const k = shotAt(tl);
+      if (!draftRef.current && shots[k] && !shots[k].seg) {
+        setDraftMode(true);
+        flash("ช็อตนี้ยังไม่มีไฟล์ตัด — สลับไปเล่นจากต้นฉบับให้แล้ว (ภาพดิบ ยังไม่ผ่านฟิลเตอร์)");
+      }
+      if (draftRef.current) {
+        if (!shots.length) return;
+        modeRef.current = "timeline";
+        playDraft(k, Math.max(0, tl - offsets[k]), autoplay);
+        return;
+      }
       if (!rendered.length) {
         if (autoplay) flash("ยังไม่มีชิ้นที่ตัดแล้ว — กด Export เพื่อ render ก่อน");
         return;
@@ -833,10 +959,21 @@ export default function Editor() {
         flash(e instanceof Error ? e.message : "เล่นไม่ได้");
       }
     },
-    [rendered, locate, offsets, total, flash, playSegment],
+    [rendered, locate, offsets, total, flash, playSegment, shots, shotAt, playDraft, setDraftMode],
   );
 
   const play = useCallback((t: number) => goTo(t, true), [goTo]);
+
+  /** ปุ่มบนไทม์ไลน์ — สลับโหมดแล้วพาตัวเล่นไปยืนที่เส้นแดงด้วยวิธีใหม่ทันที */
+  const toggleDraft = useCallback(
+    (on: boolean) => {
+      setDraftMode(on);
+      if (modeRef.current === "timeline" || on) {
+        goTo(playheadRef.current, playingRef.current);
+      }
+    },
+    [setDraftMode, goTo],
+  );
 
   const toggle = useCallback(() => {
     const v = videoRef.current;
@@ -845,6 +982,13 @@ export default function Editor() {
     if (playing) {
       v.pause();
       setPlaying(false);
+      return;
+    }
+    // ช็อตใต้เส้นแดงเพิ่งถูกแก้จนไม่มีไฟล์ตัด (ยืด/ซอยตอนหยุดอยู่) — ตัวเล่นยังถือ
+    // ไฟล์ตัดเก่าไว้ ถ้าเล่นต่อเฉย ๆ จะได้ภาพเก่า ต้องเข้า goTo ให้มันสลับโหมดก่อน
+    const k = shotAt(playhead);
+    if (!draftRef.current && shots[k] && !shots[k].seg) {
+      play(playhead);
       return;
     }
     // เล่นต่อจากที่ค้างไว้ได้เฉพาะตอนตัวเล่น "ยืนตรงเส้นแดง" อยู่แล้ว — ถ้าเพิ่ง
@@ -857,7 +1001,7 @@ export default function Editor() {
     } else {
       play(playhead);
     }
-  }, [playing, playhead, play, elapsed]);
+  }, [playing, playhead, play, elapsed, shots, shotAt]);
 
   // หัวเล่นวิ่งตามวิดีโอ
   useEffect(() => {
@@ -866,6 +1010,18 @@ export default function Editor() {
     const tick = () => {
       const at = elapsed();
       if (at != null) setPlayhead(at);
+      // โหมดร่าง: ปลายช็อตอยู่กลางไฟล์ต้นฉบับ "ended" ไม่ยิง — ต้องดู currentTime เอง
+      // (readyState < 1 = เพิ่งสั่งโหลดไฟล์ถัดไป currentTime ยังเป็นของเก่า ห้ามนับ)
+      if (draftRef.current) {
+        const v = videoRef.current;
+        const s = shots[draftIdx.current];
+        if (v && s && v.readyState >= 1) {
+          const to = s.seg ? s.dur : s.end;
+          if (v.ended || v.currentTime >= to - 0.03) advanceDraft();
+        }
+        raf = requestAnimationFrame(tick);
+        return;
+      }
       // โหมดทีละชิ้น: ปลายชิ้นไม่ใช่ปลายเรื่อง — ปล่อยให้ตัวจับ "ended" พาไปชิ้นถัดไป
       if (videoRef.current?.ended && playModeRef.current !== "segments") {
         setPlaying(false);
@@ -875,7 +1031,7 @@ export default function Editor() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [playing, elapsed]);
+  }, [playing, elapsed, shots, advanceDraft]);
 
   // ตัวจับ event อ่านสองค่านี้จาก ref ไม่ใช่ closure — จะได้ไม่ต้องถอด/ใส่ listener
   // ใหม่ทุกครั้งที่หัวเล่นขยับ (วินาทีละหลายสิบครั้ง)
@@ -910,6 +1066,14 @@ export default function Editor() {
 
     const onError = () => {
       const code = v.error?.code ?? 0;
+      // โหมดร่าง: ต้นฉบับบางไฟล์ (HEVC) เบราว์เซอร์เล่นไม่ได้ — บอกแล้วข้ามไปช็อตถัดไป
+      // ไม่ใช่จอดำค้าง
+      if (draftRef.current && modeRef.current === "timeline") {
+        const s = shots[draftIdx.current];
+        flash(`เบราว์เซอร์เล่นต้นฉบับของ ${s?.name ?? "ช็อตนี้"} ไม่ได้ — ข้ามช็อตนี้ (ตัดก่อนถึงจะดูได้)`);
+        advanceDraft();
+        return;
+      }
       // สตรีมสดเล่นไม่ได้ = เบราว์เซอร์นี้ไม่รับ chunked ที่ไม่มี Range → ถอยไปทีละชิ้น
       // แล้วเล่นต่อจากจุดเดิมทันที ผู้ใช้เห็นแค่สะดุดครั้งเดียว ไม่ใช่จอดำค้าง
       if (
@@ -931,6 +1095,10 @@ export default function Editor() {
     };
 
     const onEnded = () => {
+      if (draftRef.current && modeRef.current === "timeline") {
+        advanceDraft();
+        return;
+      }
       if (modeRef.current !== "timeline" || playModeRef.current !== "segments") {
         setPlaying(false);
         return;
@@ -950,7 +1118,7 @@ export default function Editor() {
       v.removeEventListener("error", onError);
       v.removeEventListener("ended", onEnded);
     };
-  }, [rendered, total, locate, playSegment, flash]);
+  }, [rendered, total, locate, playSegment, flash, shots, advanceDraft]);
 
   const seek = useCallback(
     (t: number) => {
@@ -2692,6 +2860,9 @@ export default function Editor() {
           onSplit={split}
           onDuplicate={duplicate}
           onTrim={patchShot}
+          draftPlay={draftPlay}
+          needRender={needRender}
+          onDraftPlay={toggleDraft}
           layers={layers}
           vis={vis}
           onVis={(k) => setVis((v) => ({ ...v, [k]: !v[k] }))}

@@ -10,6 +10,7 @@ import {
   EyeOff,
   Magnet,
   Mic,
+  MonitorPlay,
   MoveLeft,
   MoveRight,
   Music,
@@ -264,6 +265,9 @@ export default function Timeline({
   onSplit,
   onDuplicate,
   onTrim,
+  draftPlay,
+  needRender,
+  onDraftPlay,
   layers,
   vis,
   onVis,
@@ -298,6 +302,11 @@ export default function Timeline({
   onDuplicate: (i: number) => void;
   /** ลากขอบช็อตวิดีโอ — ส่งช่วงใหม่ในคลิปต้นฉบับ (page ทำ patchShot: คิด dur · ติดธงตัดใหม่ · เข้าประวัติ) */
   onTrim: (i: number, patch: { start: number; end: number }) => void;
+  /** โหมดเล่นตัวอย่าง — true = เล่นจากต้นฉบับ (ร่าง) ช็อตที่ยังไม่ตัดก็เล่นได้ */
+  draftPlay: boolean;
+  /** จำนวนช็อตที่ยังไม่มีไฟล์ตัด — ปุ่มโหมดเล่นใช้เตือนว่าโหมดปกติจะข้ามกี่ชิ้น */
+  needRender: number;
+  onDraftPlay: (on: boolean) => void;
   layers: Record<LayerKind, LayerBlock[]>;
   vis: Record<LayerKind, boolean>;
   onVis: (k: LayerKind) => void;
@@ -790,6 +799,33 @@ export default function Timeline({
         <div className="mx-auto flex items-center gap-2 rounded-full bg-panel-2 px-3 py-1 text-[11.5px] text-muted">
           {shots.length} ช็อต · {dur(total)}
         </div>
+
+        {/* โหมดเล่นตัวอย่าง — ไฟล์ตัด (ผลจริง แต่ข้ามช็อตที่ยังไม่ตัด) หรือ ต้นฉบับ
+            (ร่าง เล่นได้ทุกช็อตหลังซอย/ยืด/วางใหม่ แต่ภาพยังไม่ผ่านฟิลเตอร์)
+            page สลับให้เองเมื่อกดเล่นบนช็อตที่ยังไม่ตัด ปุ่มนี้ไว้กดกลับหรือเปิดเอง */}
+        <button
+          onClick={() => onDraftPlay(!draftPlay)}
+          title={
+            draftPlay
+              ? "กำลังเล่นจากต้นฉบับ (ร่าง) — ช็อตที่ยังไม่ตัดเล่นได้ แต่ภาพยังไม่ผ่านฟิลเตอร์ของเอนจิน\nกดเพื่อกลับไปเล่นจากไฟล์ตัด"
+              : `เล่นจากไฟล์ตัด — ช็อตที่ยังไม่ตัดจะถูกข้าม${
+                  needRender > 0 ? ` (ตอนนี้ ${needRender} ชิ้น)` : ""
+                }\nกดเพื่อเล่นจากต้นฉบับ (ร่าง) ให้ดูได้ทุกช็อต`
+          }
+          className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] ${
+            draftPlay
+              ? "bg-accent/20 text-accent"
+              : needRender > 0
+                ? "bg-panel-2 text-warn hover:text-ink"
+                : "bg-panel-2 text-muted hover:text-ink"
+          }`}
+        >
+          <MonitorPlay size={12} />
+          {draftPlay ? "เล่น: ต้นฉบับ" : "เล่น: ไฟล์ตัด"}
+          {!draftPlay && needRender > 0 && (
+            <span className="rounded-full bg-warn/20 px-1.5 text-[10px]">{needRender}</span>
+          )}
+        </button>
 
         <button className="rounded-md p-2 text-accent" title="ดูดติดขอบ (เปิดเสมอ)">
           <Magnet size={14} />
