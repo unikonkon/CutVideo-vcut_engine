@@ -160,7 +160,7 @@ def cues(ctx, data=None, man=None):
     for k, ov in enumerate(data["overlays"]):
         oid = ov.get("id") or f"ov{k}"
         a = have.get(ov["file"])
-        spans = fxtext.shape_spans(man, ov["name"], ov["at"], ov["dur"])
+        spans = fxtext.item_spans(man, ov["name"], ov["at"], ov["dur"])
         row = {**ov, "id": oid, "kind": kind_of(ov["file"]),
                "src_w": (a or {}).get("w", 0), "src_h": (a or {}).get("h", 0),
                "missing": not a}

@@ -408,7 +408,7 @@ export default function Editor() {
   }, []);
 
   const saveCaps = useCallback(async () => {
-    if (!capDraft || !capData) return;
+    if (!capDraft || !capData) return true;
     setCapSaving(true);
     try {
       const r = await api2.saveCaptions({
@@ -429,8 +429,10 @@ export default function Editor() {
       });
       setCapDirty(false);
       flash("บันทึก captions.json แล้ว — มีผลตอนสร้างไฟล์แบบมีข้อความ");
+      return true;
     } catch (e) {
       flash(e instanceof Error ? e.message : "บันทึกซับไม่สำเร็จ");
+      return false;
     } finally {
       setCapSaving(false);
     }
@@ -446,7 +448,7 @@ export default function Editor() {
   );
 
   const saveFx = useCallback(async () => {
-    if (!fxDraft) return;
+    if (!fxDraft) return true;
     setFxSaving(true);
     try {
       // ส่ง journey เฉพาะเมื่อแผนที่ถูกแก้ในหน้านี้จริง — เอนจิน (fx.merge) ทับ
@@ -475,8 +477,10 @@ export default function Editor() {
       });
       setFxDirty(false);
       flash("บันทึก fx.json แล้ว — มีผลตอนสร้างไฟล์แบบมีเอฟเฟกต์");
+      return true;
     } catch (e) {
       flash(e instanceof Error ? e.message : "บันทึก fx ไม่สำเร็จ");
+      return false;
     } finally {
       setFxSaving(false);
     }
@@ -2507,8 +2511,10 @@ export default function Editor() {
       );
       await refresh();
       flash("บันทึก edl.json แล้ว (ของเดิมสำรองไว้ที่ edl.prev.json)");
+      return true;
     } catch (e) {
       flash(e instanceof Error ? e.message : "บันทึกไม่สำเร็จ");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -2529,6 +2535,23 @@ export default function Editor() {
     if (fxDirty) saveFx();
     if (capDirty) saveCaps();
   }, [dirty, fxDirty, capDirty, save, saveFx, saveCaps, flash]);
+
+  // ปุ่ม Export — บันทึกของที่ค้างให้ครบ *ก่อน* สั่งเอนจิน
+  //
+  // เอนจินอ่านจากดิสก์เท่านั้น (edl.json · fx.json · captions.json) ส่วนที่แก้ค้าง
+  // อยู่แค่ในเบราว์เซอร์  กด Export ตอนมีของค้างจึงได้ไฟล์ของ *รอบที่บันทึกไว้
+  // ก่อนหน้า* ไม่ใช่ที่เห็นบนจอ แล้วคนดูไฟล์จะเข้าใจว่าเอนจินตัดผิด  บันทึกไม่ผ่าน
+  // ตัวไหน = ไม่สร้าง (ข้อความ error ของตัวบันทึกขึ้นไปแล้ว) ดีกว่าสร้างไฟล์ที่รู้
+  // อยู่แล้วว่าไม่ตรง
+  const exportJob = useCallback(
+    async (step: string) => {
+      if (dirty && !(await save())) return;
+      if (fxDirty && !(await saveFx())) return;
+      if (capDirty && !(await saveCaps())) return;
+      await runJob(step);
+    },
+    [dirty, fxDirty, capDirty, save, saveFx, saveCaps, runJob],
+  );
 
   // ── คีย์ลัด ──
   useEffect(() => {
@@ -2669,7 +2692,7 @@ export default function Editor() {
         onSaveFx={saveFx}
         onRevertFx={loadFx}
         job={job}
-        onRun={runJob}
+        onRun={exportJob}
         onStop={() => api.stopJob()}
         outExists={!!proj?.out_exists}
         outStale={!!proj?.out_stale}

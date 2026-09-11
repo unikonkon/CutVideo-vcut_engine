@@ -111,9 +111,9 @@ def cues(ctx, fxdata=None, man=None):
                "count": str(t.get("count", "") or ""),
                "count_from": float(t.get("count_from", 0.0) or 0.0),
                "count_to": float(t.get("count_to", 0.0) or 0.0)}
-        spans = shape_spans(man, t.get("name", ""), t.get("at", 0), t.get("dur", 3))
+        spans = item_spans(man, t.get("name", ""), t.get("at", 0), t.get("dur", 3))
         if not spans:
-            # ชิ้นกำพร้า — ช่วงที่มันเกาะอยู่ถูกตัดออกจากหนังไปแล้ว ส่งต่อให้
+            # ชิ้นกำพร้า — จุดที่มันเกาะอยู่ถูกตัดออกจากหนังไปแล้ว ส่งต่อให้
             # หน้าเว็บบอกคนเขียนได้ ตัวเขียนไฟล์ข้ามมันอยู่แล้ว
             out.append({**row, "a": None, "b": None, "orphan": True})
             continue
@@ -499,7 +499,10 @@ def path_of(kind, size, thick):
 
 
 def shape_spans(man, name, at, dur):
-    """ช่วง [at, at+dur] ของคลิปนี้ ไปโผล่ตรงไหนของหนังบ้าง (ขั้น 5)
+    """ช่วง [at, at+dur] *ของคลิป* ไปโผล่ตรงไหนของหนังบ้าง — ตัดให้พอดีกับชิ้นที่ใช้
+
+    ใช้กับของที่เป็นของคลิปจริง ๆ (ซับจากบทพูด): คำที่พูดในคลิปนี้ต้องหายไปพร้อม
+    ท่อนที่ถูกตัดออก  ของที่คนวางเองบนไทม์ไลน์ใช้ item_spans แทน (ดูเหตุผลที่นั่น)
 
     คลิปเดียวอาจถูกหยิบมาใช้หลายท่อน ชิ้นเดียวจึงโผล่ได้หลายที่ — คืนเป็นรายการ
     """
@@ -520,6 +523,39 @@ def shape_spans(man, name, at, dur):
     return out
 
 
+def item_spans(man, name, at, dur):
+    """ของที่คนวางเอง (ข้อความ · สติกเกอร์ · รูปทรง): คลิปบอกแค่ *จุดเริ่ม*
+    ความยาวนับเป็นวินาทีในหนัง — ข้ามรอยตัดไปช็อตถัดไปได้
+
+    หน้าเว็บวาดบล็อกของพวกนี้ยาวเต็ม dur จากจุดที่วาง (layers.textBlocks) และคน
+    ตั้ง dur โดยดูจากบล็อกนั้น  เดิมชั้นนี้ใช้ shape_spans ซึ่งตัดให้จบพร้อมช็อตที่
+    เกาะอยู่ — วัดจริงกับหนังภูสอยดาว: ข้อความ 49 ชิ้น ถูกตัดสั้น 10 ชิ้น และ 4 ชิ้น
+    หายทั้งชิ้นเพราะวางไว้ใกล้ท้ายช็อตจนเศษที่เหลือสั้นกว่า 0.2 วิ  ทั้งที่บนจอเห็น
+    ยาวครบทุกชิ้น  กฎเวลาต้องเป็นชุดเดียวกับที่หน้าเว็บวาด ไม่งั้นไฟล์ไม่มีวันตรง
+    กับที่ตัด (ท่าเดียวกับหมุดแผนที่ — ดู journey.cues)
+
+    จุดเริ่มอยู่ในหลายท่อนของคลิปเดียวกัน (ช็อตซ้ำ) ก็โผล่ทุกท่อน  จุดเริ่มไม่อยู่
+    ในท่อนไหนเลย = กำพร้า (คืนว่าง)  เกณฑ์ "อยู่ในท่อน" ใช้ตัวเดียวกับ clipToTl ของ
+    หน้าเว็บ: start - 0.001 ≤ at < start + dur
+    """
+    out = []
+    total = float(man.get("total") or 0)
+    for s in man["segments"]:
+        if s["name"] != name:
+            continue
+        lo = float(s["start"])
+        if not (lo - 0.001 <= float(at) < lo + float(s["dur"])):
+            continue
+        sp = float(s.get("speed") or 1.0) or 1.0
+        a = float(s["at"]) + max(0.0, float(at) - lo) / sp
+        b = a + float(dur)
+        if total > 0:
+            b = min(b, total)
+        if b - a >= 0.05:
+            out.append((round(a, 3), round(b, 3)))
+    return out
+
+
 def shape_cues(ctx, fxdata=None, man=None):
     """รูปทรงทุกชิ้นพร้อมเวลาในหนัง — หน้าเว็บกับตัวเขียน ASS ใช้ตัวนี้ตัวเดียว"""
     fxdata = fxdata if fxdata is not None else fx.load(ctx)
@@ -532,7 +568,7 @@ def shape_cues(ctx, fxdata=None, man=None):
         # คำนวณรูปเอง วันหนึ่งลูกศรในพรีวิวจะคนละทรงกับในไฟล์ แล้วคนจะเชื่อ
         # พรีวิวจนกว่าจะ render เสร็จ
         path = path_of(sh["kind"], sh["size"], sh["thick"])
-        spans = shape_spans(man, sh["name"], sh["at"], sh["dur"])
+        spans = item_spans(man, sh["name"], sh["at"], sh["dur"])
         if not spans:
             # เหมือนกล่องข้อความกำพร้าของขั้น 4 — ไม่ error แต่ต้องบอกให้รู้
             out.append({**sh, "id": sid, "path": path,
